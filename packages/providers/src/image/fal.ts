@@ -37,10 +37,16 @@ export class FalImageProvider implements ImageProvider {
   async generateImage(input: GenerateImageInput): Promise<ImageResult> {
     if (!this.isAvailable()) throw new ProviderUnavailableError(this.name);
 
-    const body: Record<string, unknown> = { prompt: input.prompt, ...input.extra };
-    if (input.width && input.height) {
-      body.image_size = { width: input.width, height: input.height };
-    }
+    // `image_size` is derived only when BOTH dimensions are given (use != null
+    // so a literal 0 isn't silently dropped). `extra` is spread last so callers
+    // can override any mapped field (prompt, image_size).
+    const body: Record<string, unknown> = {
+      prompt: input.prompt,
+      ...(input.width != null && input.height != null
+        ? { image_size: { width: input.width, height: input.height } }
+        : {}),
+      ...input.extra,
+    };
 
     const res = await this.fetchFn(`https://fal.run/${this.model}`, {
       method: 'POST',

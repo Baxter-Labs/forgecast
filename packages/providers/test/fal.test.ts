@@ -59,4 +59,24 @@ describe('FalImageProvider', () => {
       /response missing image url/,
     );
   });
+
+  it('passes extra params through, and extra takes precedence over mapped fields', async () => {
+    const fetchFn = vi.fn(async (..._args: Parameters<typeof fetch>) =>
+      jsonResponse({ images: [{ url: 'https://cdn.fal/o.png' }] }),
+    );
+    const p = new FalImageProvider({ apiKey: 'k-test', fetchFn });
+
+    await p.generateImage({
+      prompt: 'a fox',
+      width: 512,
+      height: 512,
+      extra: { num_inference_steps: 8, image_size: 'square_hd' },
+    });
+
+    const init = fetchFn.mock.calls[0]![1];
+    const sentBody = JSON.parse((init as RequestInit).body as string);
+    expect(sentBody.num_inference_steps).toBe(8);
+    // extra.image_size overrides the width/height-derived value:
+    expect(sentBody.image_size).toBe('square_hd');
+  });
 });

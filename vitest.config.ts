@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['**/test/**/*.test.ts', 'test/**/*.test.ts'],
+    // Tests live inside packages (which are type-checked by `pnpm typecheck`).
+    // Avoid a root-level `test/` glob so no test escapes the strict tsc gate.
+    include: ['{packages,apps,workers}/*/test/**/*.test.ts'],
   },
 });

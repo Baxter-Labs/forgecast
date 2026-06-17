@@ -2,7 +2,11 @@ export interface GenerateImageInput {
   prompt: string;
   width?: number;
   height?: number;
-  /** Provider-specific extra parameters passed through verbatim. */
+  /**
+   * Provider-specific extra parameters, passed through verbatim. Spread last by
+   * adapters, so a key here takes precedence over mapped fields (e.g. an
+   * `image_size` in `extra` overrides the one derived from `width`/`height`).
+   */
   extra?: Record<string, unknown>;
 }
 

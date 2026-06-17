@@ -26,6 +26,7 @@ export interface Job {
   provider: string;
   params: Record<string, unknown>;
   status: JobStatus;
+  /** Fraction complete, 0..1 (0 = not started, 1 = done). */
   progress: number;
   resultAssetId?: string;
   error?: string;
