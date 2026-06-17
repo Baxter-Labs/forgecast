@@ -2,3 +2,5 @@ export * from './types';
 export * from './job';
 export * from './providers';
 export * from './factories';
+export * from './repos';
+export * from './storage';
