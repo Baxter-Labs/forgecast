@@ -1,0 +1,16 @@
+Forgecast
+Copyright (c) 2026 Baxter Labs — MIT License
+
+This product will integrate the following third-party components in later
+milestones; their notices will be added here when their code or services are
+incorporated:
+
+- MoneyPrinterTurbo — Copyright (c) harry0703 — MIT License
+  https://github.com/harry0703/MoneyPrinterTurbo
+- Open-Generative-AI — Copyright (c) Anil-matcha — MIT License
+  https://github.com/Anil-matcha/Open-Generative-AI
+- VibeVoice — Copyright (c) Microsoft — MIT License (research-only usage advisory)
+  https://github.com/microsoft/VibeVoice
+
+Runtime content obtained through configured providers (e.g. Pexels, Pixabay)
+is governed by those services' own terms, not this license.
