@@ -23,7 +23,9 @@ describe('FalImageProvider', () => {
   });
 
   it('posts the prompt and returns the first image url', async () => {
-    const fetchFn = vi.fn(async () =>
+    // Type the mock's params as fetch's params so mock.calls is a typed tuple
+    // ([input, init?]) under strict tsc (noUncheckedIndexedAccess + strict).
+    const fetchFn = vi.fn(async (..._args: Parameters<typeof fetch>) =>
       jsonResponse({ images: [{ url: 'https://cdn.fal/out.png', width: 1024, height: 1024 }] }),
     );
     const p = new FalImageProvider({ apiKey: 'k-test', model: 'fal-ai/flux/schnell', fetchFn });
