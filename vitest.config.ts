@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@forgecast/core': `${root}packages/core/src/index.ts`,
       '@forgecast/providers': `${root}packages/providers/src/index.ts`,
+      '@forgecast/store': `${root}packages/store/src/index.ts`,
     },
   },
   test: {

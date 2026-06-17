@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": { "@forgecast/core": ["../core/src/index.ts"] }
+  },
+  "include": ["src", "test"]
+}
