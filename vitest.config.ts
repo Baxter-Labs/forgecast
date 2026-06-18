@@ -9,6 +9,7 @@ export default defineConfig({
       '@forgecast/core': `${root}packages/core/src/index.ts`,
       '@forgecast/providers': `${root}packages/providers/src/index.ts`,
       '@forgecast/store': `${root}packages/store/src/index.ts`,
+      '@forgecast/jobs': `${root}packages/jobs/src/index.ts`,
     },
   },
   test: {

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@forgecast/core": ["../core/src/index.ts"],
+      "@forgecast/providers": ["../providers/src/index.ts"],
+      "@forgecast/store": ["../store/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

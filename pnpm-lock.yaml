@@ -24,7 +24,33 @@ importers:
         specifier: ^5.5.4
         version: 5.9.3
 
+  packages/jobs:
+    dependencies:
+      '@forgecast/core':
+        specifier: workspace:*
+        version: link:../core
+      '@forgecast/providers':
+        specifier: workspace:*
+        version: link:../providers
+    devDependencies:
+      '@forgecast/store':
+        specifier: workspace:*
+        version: link:../store
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
   packages/providers:
+    dependencies:
+      '@forgecast/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
+  packages/store:
     dependencies:
       '@forgecast/core':
         specifier: workspace:*

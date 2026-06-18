@@ -1,0 +1,17 @@
+{
+  "name": "@forgecast/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@forgecast/core": "workspace:*",
+    "@forgecast/providers": "workspace:*"
+  },
+  "devDependencies": {
+    "@forgecast/store": "workspace:*",
+    "typescript": "^5.5.4"
+  }
+}
