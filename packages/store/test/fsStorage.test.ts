@@ -23,6 +23,18 @@ describe('FilesystemStorage', () => {
     }
   });
 
+  it('infers video/mp4 content type for .mp4 files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-fs-'));
+    try {
+      const s = new FilesystemStorage({ root: dir });
+      await s.put('something.mp4', new Uint8Array([0, 1, 2]), 'video/mp4');
+      const got = await s.get('something.mp4');
+      expect(got?.contentType).toBe('video/mp4');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects keys containing ".."', async () => {
     const s = new FilesystemStorage({ root: '/tmp/forgecast-test' });
     await expect(s.get('../escape.png')).rejects.toThrowError(/invalid storage key/i);

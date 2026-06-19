@@ -66,3 +66,25 @@ export async function getAssetBytes(
   if (!asset) return null;
   return services.storage.get(asset.storageKey);
 }
+
+export async function generateShortVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.videoWorker.isAvailable()) {
+    return { status: 503, body: { error: 'short-video worker not configured (set FORGECAST_VIDEO_WORKER_URL)' } };
+  }
+  const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown };
+  const subject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
+  if (subject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'short_video', provider: 'moneyprinter', params: { subject } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  // Long-running: run in the background (works in the persistent self-hosted Node server);
+  // the client polls GET /api/jobs/:id for completion.
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}

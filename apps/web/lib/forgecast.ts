@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -7,8 +7,8 @@ import {
   openStore,
   FilesystemStorage,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler } from '@forgecast/core';
 import { randomId, nowIso } from './ids';
 
 export interface Services {
@@ -19,6 +19,7 @@ export interface Services {
   storage: StorageDriver;
   runner: JobRunner;
   ids: { randomId: () => string; nowIso: () => string };
+  videoWorker: ShortVideoWorker;
 }
 
 export interface BuildServicesOptions {
@@ -64,9 +65,16 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     clock: nowIso,
     fetchFn: opts.fetchFn,
   });
-  const runner = new JobRunner(jobs, [imageHandler]);
+  const videoWorker = new MoneyPrinterWorker();
+  const handlers: JobHandler[] = [imageHandler];
+  if (videoWorker.isAvailable()) {
+    handlers.push(
+      new ShortVideoJobHandler({ worker: videoWorker, storage, assets, idGen: randomId, clock: nowIso }),
+    );
+  }
+  const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, projects, assets, jobs, storage, runner, ids: { randomId, nowIso } };
+  return { imageRegistry, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker };
 }
 
 /** Process-wide singleton (in-memory store persists for the server's lifetime). */
