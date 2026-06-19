@@ -1,0 +1,24 @@
+# MoneyPrinterTurbo short-video worker for Forgecast.
+#
+# Forgecast does NOT vendor MoneyPrinter — it runs as a separate worker behind its
+# HTTP API. Clone MoneyPrinter into ./moneyprinter and add a config.toml with your
+# provider keys (see README.md), then from this directory:  docker compose up
+#
+# Forgecast connects to it via:  FORGECAST_VIDEO_WORKER_URL=http://localhost:8080
+
+services:
+  moneyprinter-api:
+    build:
+      context: ./moneyprinter
+      dockerfile: Dockerfile
+      args:
+        # Their Dockerfile defaults to China mirrors; use upstream Debian mirrors elsewhere.
+        DOCKER_BUILD_MIRROR: default
+    container_name: forgecast-shorts-worker
+    command: ["python3", "main.py"] # FastAPI (uvicorn app.asgi:app) on :8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./moneyprinter:/MoneyPrinterTurbo
+      - ./config.toml:/MoneyPrinterTurbo/config.toml
+    restart: unless-stopped
