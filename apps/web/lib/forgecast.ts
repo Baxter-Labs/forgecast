@@ -4,6 +4,8 @@ import {
   InMemoryAssetRepo,
   InMemoryJobRepo,
   InMemoryStorage,
+  openStore,
+  FilesystemStorage,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver } from '@forgecast/core';
@@ -33,10 +35,26 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const imageRegistry = new ImageProviderRegistry();
   imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
 
-  const projects = new InMemoryProjectRepo();
-  const assets = new InMemoryAssetRepo();
-  const jobs = new InMemoryJobRepo();
-  const storage = new InMemoryStorage({ baseUrl: process.env.FORGECAST_BASE_URL ?? 'memory://forgecast' });
+  const dbPath = process.env.FORGECAST_DB;
+  const dataDir = process.env.FORGECAST_DATA_DIR;
+
+  let projects: ProjectRepo;
+  let assets: AssetRepo;
+  let jobs: JobRepo;
+  if (dbPath) {
+    const store = openStore(dbPath);
+    projects = store.projects;
+    assets = store.assets;
+    jobs = store.jobs;
+  } else {
+    projects = new InMemoryProjectRepo();
+    assets = new InMemoryAssetRepo();
+    jobs = new InMemoryJobRepo();
+  }
+
+  const storage: StorageDriver = dataDir
+    ? new FilesystemStorage({ root: dataDir, baseUrl: process.env.FORGECAST_BASE_URL })
+    : new InMemoryStorage({ baseUrl: process.env.FORGECAST_BASE_URL ?? 'memory://forgecast' });
 
   const imageHandler = new ImageJobHandler({
     registry: imageRegistry,
