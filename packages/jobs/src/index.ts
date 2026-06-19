@@ -1,2 +1,3 @@
 export * from './runner';
 export * from './handlers/image';
+export * from './handlers/shortVideo';
