@@ -6,3 +6,4 @@ export * from './repos';
 export * from './storage';
 export * from './jobengine';
 export * from './video';
+export * from './publish';
