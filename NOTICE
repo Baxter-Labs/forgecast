@@ -9,6 +9,8 @@ incorporated:
   https://github.com/harry0703/MoneyPrinterTurbo
 - Open-Generative-AI — Copyright (c) Anil-matcha — MIT License
   https://github.com/Anil-matcha/Open-Generative-AI
+  (model catalog metadata vendored at packages/catalog/data/openmodels-t2i.json;
+   no generation code used)
 - VibeVoice — Copyright (c) Microsoft — MIT License (research-only usage advisory)
   https://github.com/microsoft/VibeVoice
 
