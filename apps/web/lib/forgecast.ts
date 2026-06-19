@@ -21,6 +21,8 @@ export interface Services {
 
 export interface BuildServicesOptions {
   falKey?: string;
+  /** Injectable fetch for the image handler's download step (tests). */
+  fetchFn?: typeof fetch;
 }
 
 let cached: Services | undefined;
@@ -42,6 +44,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     assets,
     idGen: randomId,
     clock: nowIso,
+    fetchFn: opts.fetchFn,
   });
   const runner = new JobRunner(jobs, [imageHandler]);
 
