@@ -249,6 +249,41 @@ server.registerTool(
   },
 );
 
+// 8. forgecast_publish_asset
+server.registerTool(
+  'forgecast_publish_asset',
+  {
+    title: 'Publish Asset',
+    description:
+      'Publishes a generated asset\'s media and caption to social platforms via the configured publisher ' +
+      '(default: omnisocials).\n\n' +
+      'Args:\n' +
+      '  asset_id (string): ID of the asset to publish.\n' +
+      '  content (string): Caption or body text for the post.\n' +
+      '  channels (string[], optional): Social channels to target (e.g. ["instagram", "twitter"]).\n' +
+      '  publisher (string, optional): Publisher name to use. Defaults to "omnisocials".\n\n' +
+      'Returns: `{ published: { postId, status } }`\n\n' +
+      'Requirements: The publisher must be configured on the app (set OMNISOCIALS_API_KEY for omnisocials). ' +
+      'The app must also be publicly reachable (set FORGECAST_BASE_URL) so the publisher can fetch the media.\n\n' +
+      'Error guidance: A 503 means no publisher is configured — set OMNISOCIALS_API_KEY on the Forgecast server. ' +
+      'A 404 means the asset does not exist.',
+    inputSchema: z.object({
+      asset_id: z.string(),
+      content: z.string().min(1),
+      channels: z.array(z.string()).optional(),
+      publisher: z.string().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ asset_id, content, channels, publisher }) => {
+    try {
+      return ok(await client.publishAsset(asset_id, { content, channels, publisher }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────

@@ -58,4 +58,17 @@ describe('SpineClient', () => {
     const c = new SpineClient({ baseUrl: 'http://api/' });
     expect(c.assetUrl('x')).toBe('http://api/api/assets/x/raw');
   });
+
+  it('publishes an asset and returns the post id', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ published: { postId: 'post_1', status: 'publishing' } }),
+    );
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn });
+    const r = await c.publishAsset('a1', { content: 'hi', channels: ['instagram'] });
+    expect(r.published.postId).toBe('post_1');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api/api/assets/a1/publish');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ content: 'hi', channels: ['instagram'] });
+  });
 });

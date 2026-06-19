@@ -71,4 +71,9 @@ export class SpineClient {
   }
   getJob(jobId: string): Promise<{ job: Job }> { return this.req(`/api/jobs/${jobId}`); }
   listAssets(projectId: string): Promise<{ assets: Asset[] }> { return this.req(`/api/projects/${projectId}/assets`); }
+  publishAsset(assetId: string, input: { content: string; channels?: string[]; publisher?: string }): Promise<{ published: { postId: string; status: string } }> {
+    return this.req(`/api/assets/${assetId}/publish`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
 }
