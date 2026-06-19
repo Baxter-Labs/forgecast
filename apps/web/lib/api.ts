@@ -57,3 +57,12 @@ export async function listAssets(services: Services, projectId: string): Promise
   if (!project) return { status: 404, body: { error: 'project not found' } };
   return { status: 200, body: { assets: await services.assets.listByProject(projectId) } };
 }
+
+export async function getAssetBytes(
+  services: Services,
+  assetId: string,
+): Promise<{ data: Uint8Array; contentType: string } | null> {
+  const asset = await services.assets.get(assetId);
+  if (!asset) return null;
+  return services.storage.get(asset.storageKey);
+}

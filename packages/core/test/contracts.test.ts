@@ -22,6 +22,9 @@ class FakeStorage implements StorageDriver {
   async put(key: string, _data: Uint8Array, _contentType: string) {
     return { key, url: `mem://${key}` };
   }
+  async get(key: string) {
+    return key === 'img/1.png' ? { data: new Uint8Array([1, 2, 3]), contentType: 'image/png' } : null;
+  }
   url(key: string) {
     return `mem://${key}`;
   }

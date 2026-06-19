@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ImageProvider } from '@forgecast/core';
 import { buildServices } from '../lib/forgecast';
-import { createProject, listProjects, generateImage, getJob, listAssets } from '../lib/api';
+import { createProject, listProjects, generateImage, getJob, listAssets, getAssetBytes } from '../lib/api';
 
 function fakeProvider(): ImageProvider {
   return {
@@ -75,5 +75,21 @@ describe('api: generate', () => {
   it('404 for an unknown job', async () => {
     const r = await getJob(services(), 'nope');
     expect(r.status).toBe(404);
+  });
+});
+
+describe('api: asset bytes', () => {
+  it('returns stored bytes for a generated asset, null for unknown', async () => {
+    const svc = services();
+    const created = await createProject(svc, { name: 'P' });
+    const projectId = (created.body as { project: { id: string } }).project.id;
+    const gen = await generateImage(svc, projectId, { prompt: 'a fox' });
+    const assetId = (gen.body as { asset: { id: string } }).asset.id;
+
+    const bytes = await getAssetBytes(svc, assetId);
+    expect(bytes?.contentType).toBe('image/png');
+    expect(bytes?.data.length).toBeGreaterThan(0);
+
+    expect(await getAssetBytes(svc, 'nope')).toBeNull();
   });
 });
