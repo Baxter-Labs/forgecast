@@ -6,6 +6,8 @@
 
 **A self-hosted, open-source platform to generate images, video, and voice — and broadcast them everywhere.**
 
+[![CI](https://github.com/eshwarpk/forgecast/actions/workflows/ci.yml/badge.svg)](https://github.com/eshwarpk/forgecast/actions/workflows/ci.yml)
+
 `MIT licensed` · `runs on any laptop (no GPU)` · `provider-agnostic` · `agent-native`
 
 </div>
