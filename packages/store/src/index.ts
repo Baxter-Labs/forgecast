@@ -2,3 +2,7 @@ export * from './memory/projectRepo';
 export * from './memory/assetRepo';
 export * from './memory/jobRepo';
 export * from './memory/storage';
+export * from './sqlite/projectRepo';
+export * from './sqlite/assetRepo';
+export * from './sqlite/jobRepo';
+export * from './sqlite/store';
