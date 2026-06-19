@@ -6,5 +6,6 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     providers: { image: svc.imageRegistry.available() },
+    publishers: svc.publishers.available(),
   });
 }

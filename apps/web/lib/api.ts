@@ -88,3 +88,30 @@ export async function generateShortVideo(services: Services, projectId: string, 
   void services.runner.run(job.id).catch(() => {});
   return { status: 202, body: { job } };
 }
+
+export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
+  const asset = await services.assets.get(assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+
+  const fields = (input ?? {}) as { content?: unknown; channels?: unknown; publisher?: unknown };
+  if (typeof fields.content !== 'string' || fields.content.trim().length === 0) {
+    return { status: 400, body: { error: 'content (caption) is required' } };
+  }
+  const publisherName = typeof fields.publisher === 'string' && fields.publisher.length > 0 ? fields.publisher : 'omnisocials';
+  const available = services.publishers.available();
+  if (!available.includes(publisherName)) {
+    return { status: 503, body: { error: `publisher "${publisherName}" not configured`, availablePublishers: available } };
+  }
+  const channels = Array.isArray(fields.channels)
+    ? fields.channels.filter((c): c is string => typeof c === 'string')
+    : undefined;
+  const base = process.env.FORGECAST_BASE_URL;
+  const mediaUrls = base ? [`${base.replace(/\/$/, '')}/api/assets/${assetId}/raw`] : undefined;
+
+  try {
+    const result = await services.publishers.get(publisherName).publish({ content: fields.content, channels, mediaUrls });
+    return { status: 200, body: { published: result } };
+  } catch (e) {
+    return { status: 502, body: { error: `publish failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+}

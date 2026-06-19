@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PublisherRegistry, OmnisocialsPublisher } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -13,6 +13,7 @@ import { randomId, nowIso } from './ids';
 
 export interface Services {
   imageRegistry: ImageProviderRegistry;
+  publishers: PublisherRegistry;
   projects: ProjectRepo;
   assets: AssetRepo;
   jobs: JobRepo;
@@ -35,6 +36,9 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const imageRegistry = new ImageProviderRegistry();
   imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
+
+  const publishers = new PublisherRegistry();
+  publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
 
   const dbPath = process.env.FORGECAST_DB;
   const dataDir = process.env.FORGECAST_DATA_DIR;
@@ -74,7 +78,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   }
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker };
 }
 
 /** Process-wide singleton (in-memory store persists for the server's lifetime). */
