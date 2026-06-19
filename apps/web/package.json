@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@forgecast/catalog": "workspace:*",
     "@forgecast/core": "workspace:*",
     "@forgecast/jobs": "workspace:*",
     "@forgecast/providers": "workspace:*",

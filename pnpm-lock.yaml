@@ -23,6 +23,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.5.0
         version: 1.5.0(@types/react@19.2.17)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@forgecast/catalog':
+        specifier: workspace:*
+        version: link:../../packages/catalog
       '@forgecast/core':
         specifier: workspace:*
         version: link:../../packages/core
