@@ -10,6 +10,7 @@ export default defineConfig({
       '@forgecast/providers': `${root}packages/providers/src/index.ts`,
       '@forgecast/store': `${root}packages/store/src/index.ts`,
       '@forgecast/jobs': `${root}packages/jobs/src/index.ts`,
+      '@forgecast/catalog': `${root}packages/catalog/src/index.ts`,
     },
   },
   test: {
