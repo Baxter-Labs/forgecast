@@ -1,6 +1,6 @@
 'use client';
-import { useState, useCallback, useMemo } from 'react';
-import { imageModels } from '@forgecast/catalog';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { imageModels, videoModels } from '@forgecast/catalog';
 import { useForgecast } from '@/lib/use-forgecast';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
@@ -93,14 +93,20 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
+  const [videoModel, setVideoModel] = useState(videoModels[0]?.id ?? '');
   const [ratio, setRatio] = useState('1:1');
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
+  const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
     typeof window !== 'undefined' ? loadCampaigns() : [],
   );
   const [view, setView] = useState<View>('history');
+  // Tracks the most recently created campaign so async video jobs can be
+  // appended to it once they resolve (agent campaigns fire onCampaignExecuted
+  // before video jobs start, so the ref is always set by the time they finish).
+  const latestCampaignIdRef = useRef<string | null>(null);
 
   // ── Derive maps ─────────────────────────────────────────────────────────────
   const assetById = useMemo(
@@ -110,8 +116,9 @@ export function Studio() {
 
   // ── Campaign handlers ────────────────────────────────────────────────────────
   const addCampaign = useCallback((c: { brief: string; platforms: string[]; plan: ContentPlan; assetIds: string[] }) => {
+    const id = uid();
     const entry: StoredCampaign = {
-      id: uid(),
+      id,
       brief: c.brief,
       platforms: c.platforms,
       plan: c.plan,
@@ -123,7 +130,21 @@ export function Studio() {
       localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(next));
       return next;
     });
+    latestCampaignIdRef.current = id;
     setView('history');
+  }, []);
+
+  const appendVideoAssets = useCallback((campaignId: string, newAssetIds: string[]) => {
+    if (!newAssetIds.length) return;
+    setCampaigns((prev) => {
+      const next = prev.map((c) =>
+        c.id === campaignId
+          ? { ...c, assetIds: [...new Set([...c.assetIds, ...newAssetIds])] }
+          : c,
+      );
+      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(next));
+      return next;
+    });
   }, []);
 
   const removeCampaign = useCallback((id: string) => {
@@ -134,15 +155,39 @@ export function Studio() {
     });
   }, []);
 
+  // ── Manual campaign creation (from ForgePanel "+" button) ───────────────────
+  const createManualCampaign = useCallback((name: string) => {
+    const id = uid();
+    const entry: StoredCampaign = {
+      id,
+      brief: name,
+      platforms: [],
+      plan: { concept: name, assets: [], posts: [] },
+      assetIds: [],
+      createdAt: new Date().toISOString(),
+    };
+    setCampaigns((prev) => {
+      const next = [entry, ...prev];
+      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(next));
+      return next;
+    });
+    setActiveCampaignId(id);
+    setView('history');
+  }, []);
+
   // ── Forge handler ────────────────────────────────────────────────────────────
   function handleForge() {
+    if (!activeCampaignId) return;
+    const attach = (assetId: string | null | undefined) => {
+      if (assetId) appendVideoAssets(activeCampaignId, [assetId]);
+    };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
-      void generateImage({ prompt, model, width, height });
+      void generateImage({ prompt, model, width, height }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio });
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel }).then(attach);
     } else {
-      void generateMontage({ assetIds: selectedAssetIds, aspectRatio: ratio });
+      void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
   }
 
@@ -160,14 +205,19 @@ export function Studio() {
             setPrompt={setPrompt}
             model={model}
             setModel={setModel}
+            videoModel={videoModel}
+            setVideoModel={setVideoModel}
             ratio={ratio}
             setRatio={setRatio}
             onForge={handleForge}
             forging={status === 'forging'}
             availability={availability}
-            assets={assets}
-            selectedAssetIds={selectedAssetIds}
-            setSelectedAssetIds={setSelectedAssetIds}
+            montagePrompts={montagePrompts}
+            setMontagePrompts={setMontagePrompts}
+            campaigns={campaigns}
+            activeCampaignId={activeCampaignId}
+            setActiveCampaignId={setActiveCampaignId}
+            onCreateCampaign={createManualCampaign}
           />
         </section>
 
@@ -176,7 +226,13 @@ export function Studio() {
           <AgentChat
             agentPlan={agentPlan}
             agentExecute={agentExecute}
-            onExecuted={(result) => { void refreshAssets(); void awaitAgentJobs(result); }}
+            onExecuted={(result) => {
+              void refreshAssets();
+              void awaitAgentJobs(result).then((videoAssetIds) => {
+                const campId = latestCampaignIdRef.current;
+                if (campId) appendVideoAssets(campId, videoAssetIds);
+              });
+            }}
             onCampaignExecuted={addCampaign}
           />
           <JobStatus status={status} error={error} />

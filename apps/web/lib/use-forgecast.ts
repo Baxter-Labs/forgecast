@@ -34,8 +34,8 @@ function normalizeAsset(a: RawAsset): StudioAsset {
 }
 
 interface GenerateImageArgs { prompt: string; model?: string; width?: number; height?: number }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string }
-interface GenerateMontageArgs { assetIds: string[]; aspectRatio?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string }
+interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_TRIES = 120;
@@ -87,16 +87,16 @@ export function useForgecast() {
     setAssets(((a.assets ?? []) as RawAsset[]).map(normalizeAsset).reverse());
   }, [projectId]);
 
-  // Poll a job until terminal; refresh assets on success. Returns the terminal status.
-  const pollJob = useCallback(async (jobId: string): Promise<'done' | 'error'> => {
+  // Poll a job until terminal; refresh assets on success.
+  const pollJob = useCallback(async (jobId: string): Promise<{ outcome: 'done' | 'error'; assetId?: string }> => {
     for (let i = 0; i < POLL_MAX_TRIES; i++) {
       await new Promise((res) => setTimeout(res, POLL_INTERVAL_MS));
       const job = await fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((b) => b.job).catch(() => null);
-      if (job?.status === 'done') { await refreshAssets(); return 'done'; }
-      if (job?.status === 'error') { setError(job.error ?? 'Generation failed'); return 'error'; }
+      if (job?.status === 'done') { await refreshAssets(); return { outcome: 'done', assetId: job.resultAssetId }; }
+      if (job?.status === 'error') { setError(job.error ?? 'Generation failed'); return { outcome: 'error' }; }
     }
     setError('Timed out waiting for the forge.');
-    return 'error';
+    return { outcome: 'error' };
   }, [refreshAssets]);
 
   // Read a JSON {error} body from a non-2xx response so the UI can show WHY.
@@ -105,69 +105,127 @@ export function useForgecast() {
     return body?.error ?? fallback;
   }
 
-  const generateImage = useCallback(async (args: GenerateImageArgs) => {
-    if (!projectId) return;
+  const generateImage = useCallback(async (args: GenerateImageArgs): Promise<string | null> => {
+    if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/generate`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) { setError(body?.error ?? 'Generation failed'); setStatus('error'); return; }
+      if (!res.ok) { setError(body?.error ?? 'Generation failed'); setStatus('error'); return null; }
       if (body.job?.status === 'done' && body.asset) {
         setAssets((prev) => [normalizeAsset(body.asset), ...prev]); setStatus('idle');
+        return (body.asset as { id?: string }).id ?? null;
       } else {
-        setError(body.job?.error ?? 'Generation failed'); setStatus('error');
+        setError(body.job?.error ?? 'Generation failed'); setStatus('error'); return null;
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error');
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio }: GenerateVideoArgs) => {
-    if (!projectId) return;
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model }: GenerateVideoArgs): Promise<string | null> => {
+    if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, aspectRatio }),
+        body: JSON.stringify({ prompt, aspectRatio, model }),
       });
-      if (res.status !== 202) { setError(await readError(res, 'Failed to start clip')); setStatus('error'); return; }
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start clip')); setStatus('error'); return null; }
       const { job } = await res.json();
-      const terminal = await pollJob(job.id);
-      setStatus(terminal === 'done' ? 'idle' : 'error');
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error');
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
     }
   }, [projectId, pollJob]);
 
-  const generateMontage = useCallback(async ({ assetIds, aspectRatio }: GenerateMontageArgs) => {
-    if (!projectId) return;
+  const generateMontage = useCallback(async ({ prompts, aspectRatio, model }: GenerateMontageArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    const validPrompts = prompts.filter((p) => p.trim());
+    if (validPrompts.length < 2) { setError('Add at least 2 video prompts to build a montage'); setStatus('error'); return null; }
     setStatus('forging'); setError(null);
     try {
-      const res = await fetch(`/api/projects/${projectId}/generate-montage`, {
+      // 1. Submit all video clip jobs in parallel.
+      const jobIds = await Promise.all(validPrompts.map(async (prompt) => {
+        const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt, aspectRatio, model }),
+        });
+        if (res.status !== 202) throw new Error(await readError(res, 'Failed to start clip'));
+        const { job } = await res.json();
+        return job.id as string;
+      }));
+
+      // 2. Poll all clip jobs to completion.
+      const clipResults = await Promise.all(jobIds.map((id) => pollJob(id)));
+      const assetIds = clipResults.flatMap((r) => (r.assetId ? [r.assetId] : []));
+      if (clipResults.some((r) => r.outcome === 'error') || assetIds.length < 2) {
+        setError('One or more video clips failed — cannot stitch montage'); setStatus('error'); return null;
+      }
+
+      // 3. Stitch the completed clips into a montage.
+      const montageRes = await fetch(`/api/projects/${projectId}/generate-montage`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ assetIds, aspectRatio }),
       });
-      if (res.status !== 202) { setError(await readError(res, 'Failed to start montage')); setStatus('error'); return; }
-      const { job } = await res.json();
-      const terminal = await pollJob(job.id);
-      setStatus(terminal === 'done' ? 'idle' : 'error');
+      if (montageRes.status !== 202) { setError(await readError(montageRes, 'Failed to start montage')); setStatus('error'); return null; }
+      const { job: montageJob } = await montageRes.json();
+      const { outcome, assetId } = await pollJob(montageJob.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error');
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
     }
   }, [projectId, pollJob]);
 
-  // After an agent run, the image assets are already saved (synchronous), but
-  // Pixverse video + Remotion montage render in the background. Poll those jobs
-  // to completion so the finished assets pop into the gallery automatically.
-  const awaitAgentJobs = useCallback(async (result: { videoJobIds?: string[]; montageJobId?: string }) => {
-    const ids = [...(result.videoJobIds ?? []), ...(result.montageJobId ? [result.montageJobId] : [])].filter(Boolean);
-    if (ids.length === 0) return;
+  // After an agent run, video jobs and montage clip jobs render in the background.
+  // Poll both tracks in parallel; once montage clips are done, stitch them.
+  const awaitAgentJobs = useCallback(async (result: {
+    videoJobIds?: string[];
+    montageJobIds?: string[];
+    montageJobId?: string;
+    pendingMontage?: { aspectRatio?: string };
+  }): Promise<string[]> => {
+    const videoIds = [...(result.videoJobIds ?? []), ...(result.montageJobId ? [result.montageJobId] : [])].filter(Boolean);
+    const clipIds = (result.montageJobIds ?? []).filter(Boolean);
+    if (videoIds.length === 0 && clipIds.length === 0) return [];
     setStatus('forging'); setError(null);
-    const outcomes = await Promise.all(ids.map((id) => pollJob(id))); // each refreshes the gallery on completion
-    setStatus(outcomes.some((o) => o === 'error') ? 'error' : 'idle');
-  }, [pollJob]);
+
+    let allAssetIds: string[] = [];
+
+    // Poll regular video assets and montage clips concurrently.
+    const [videoResults, clipResults] = await Promise.all([
+      videoIds.length > 0 ? Promise.all(videoIds.map((id) => pollJob(id))) : Promise.resolve([]),
+      clipIds.length > 0 ? Promise.all(clipIds.map((id) => pollJob(id))) : Promise.resolve([]),
+    ]);
+
+    allAssetIds = videoResults.flatMap((r) => (r.assetId ? [r.assetId] : []));
+    if (videoResults.some((r) => r.outcome === 'error')) { setStatus('error'); return allAssetIds; }
+
+    // Stitch the montage clips once they've all completed.
+    if (result.pendingMontage && clipIds.length >= 2 && projectId) {
+      const clipAssetIds = clipResults.flatMap((r) => (r.assetId ? [r.assetId] : []));
+      if (clipAssetIds.length >= 2) {
+        const res = await fetch(`/api/projects/${projectId}/generate-montage`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ assetIds: clipAssetIds, aspectRatio: result.pendingMontage.aspectRatio ?? '9:16' }),
+        });
+        if (res.ok) {
+          const { job } = await res.json() as { job: { id: string } };
+          const { outcome, assetId } = await pollJob(job.id);
+          if (assetId) allAssetIds = [...allAssetIds, assetId];
+          if (outcome === 'error') { setStatus('error'); return allAssetIds; }
+        }
+      }
+    }
+
+    setStatus('idle');
+    return allAssetIds;
+  }, [pollJob, projectId]);
 
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {

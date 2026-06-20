@@ -73,6 +73,14 @@ body::before {
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 
+@keyframes forge-done {
+  0%   { opacity: 0; transform: scaleX(0.97); filter: brightness(1.8); }
+  12%  { opacity: 1; transform: scaleX(1);    filter: brightness(1.4); }
+  60%  { opacity: 1; transform: scaleX(1);    filter: brightness(1); }
+  100% { opacity: 0; transform: scaleX(1);    filter: brightness(1); }
+}
+.forge-done { animation: forge-done 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+
 /* Accessibility */
 :focus-visible {
   outline: 2px solid var(--ember-2);

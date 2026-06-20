@@ -52,8 +52,10 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
     const execResult = res.result as ExecutionResult;
     setResult(execResult);
     setPhase('done');
-    onExecuted(execResult);
+    // Campaign must be created before onExecuted starts background job polling,
+    // so Studio can attach the resolved video asset IDs to the right entry.
     onCampaignExecuted({ brief, platforms, plan, assetIds: execResult.assetIds ?? [] });
+    onExecuted(execResult);
   }
 
   const offline = phase === 'error' && error != null && isAgentOffline(error);
@@ -195,6 +197,30 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
                         {a.kind}
                       </span>
                       <span className="font-mono text-[11px] text-[var(--forge-muted)] leading-relaxed">{a.prompt}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Montage plan */}
+              {plan.montage && plan.montage.scenes.length >= 2 && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)]">
+                    Montage · {plan.montage.scenes.length} clips → stitched video
+                  </p>
+                  {plan.montage.scenes.map((scene, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 rounded-md px-2.5 py-1.5 border"
+                      style={{ borderColor: 'var(--ember-2)', background: 'rgba(255,122,26,0.04)' }}
+                    >
+                      <span
+                        className="font-mono text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 rounded shrink-0 mt-px"
+                        style={{ color: 'var(--ember-1)', border: '1px solid var(--ember-2)' }}
+                      >
+                        clip {i + 1}
+                      </span>
+                      <span className="font-mono text-[11px] text-[var(--forge-muted)] leading-relaxed">{scene.prompt}</span>
                     </div>
                   ))}
                 </div>

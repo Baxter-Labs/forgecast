@@ -9,18 +9,27 @@ export interface PlatformPost {
   caption: string;
 }
 
-/** Optional directive: after generating the plan's assets, stitch them into one longer-form montage video. */
-export interface MontagePlan {
-  /** Aspect ratio for the stitched montage (defaults to 9:16 downstream). */
+/** Three unique video clips that get generated and stitched into one montage video. */
+export interface MontageScene {
+  prompt: string;
   aspectRatio?: string;
+}
+
+/** A montage: 3 unique video clips generated from their own prompts and then stitched together. */
+export interface MontagePlan {
+  aspectRatio?: string;
+  /** The 3 unique clip prompts. Must have at least 2. */
+  scenes: MontageScene[];
 }
 
 export interface ContentPlan {
   concept: string;
   trendingNotes?: string;
+  /** Standalone images and videos that appear individually in the gallery. */
   assets: ContentPlanItem[];
   posts: PlatformPost[];
-  /** When present, the generated image assets are stitched into a single montage video. */
+  /** When present, 3 unique video clips are generated from the scenes and stitched into a montage.
+   *  The montage is separate from the assets list — scenes are NOT repeated in assets. */
   montage?: MontagePlan;
 }
 
@@ -30,6 +39,10 @@ export interface ExecutionResult {
   videoJobIds: string[];
   /** Job id of the montage render, when the plan requested one and assets were available. */
   montageJobId?: string;
+  /** Async job IDs for the montage clip videos (each one is a separate video clip). */
+  montageJobIds?: string[];
+  /** When montage clips were queued, signal the frontend to stitch them once polling completes. */
+  pendingMontage?: { aspectRatio?: string };
   published: { postId: string; status: string } | null;
 }
 
@@ -48,6 +61,5 @@ export interface ForgecastActions {
   ensureProject(name: string): Promise<string>;
   generateImage(projectId: string, prompt: string, aspectRatio?: string): Promise<{ assetId: string | null }>;
   generateVideo(projectId: string, prompt: string, aspectRatio?: string): Promise<{ jobId: string }>;
-  generateMontage(projectId: string, assetIds: string[], aspectRatio?: string): Promise<{ jobId: string }>;
   publish(assetId: string, content: string, channels?: string[]): Promise<{ postId: string; status: string }>;
 }

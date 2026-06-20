@@ -44,16 +44,24 @@ export class ContentAgent {
         if (assetId) assetIds.push(assetId);
       } else {
         const { jobId } = await this.deps.forgecast.generateVideo(projectId, item.prompt, item.aspectRatio);
-        videoJobIds.push(jobId);
+        if (jobId) videoJobIds.push(jobId);
       }
     }
 
-    // Optional: stitch the generated image scenes into one longer-form montage video.
-    let montageJobId: string | undefined;
-    if (plan.montage && assetIds.length > 0) {
-      const { jobId } = await this.deps.forgecast.generateMontage(projectId, assetIds, plan.montage.aspectRatio);
-      montageJobId = jobId || undefined;
+    // Montage: generate 3 unique clip videos (separate from the regular assets),
+    // then signal the frontend to stitch them once all clips have finished polling.
+    const montageJobIds: string[] = [];
+    if (plan.montage && plan.montage.scenes.length >= 2) {
+      for (const scene of plan.montage.scenes) {
+        const { jobId } = await this.deps.forgecast.generateVideo(
+          projectId, scene.prompt, scene.aspectRatio ?? plan.montage.aspectRatio,
+        );
+        if (jobId) montageJobIds.push(jobId);
+      }
     }
+    const pendingMontage: ExecutionResult['pendingMontage'] = montageJobIds.length >= 2
+      ? { aspectRatio: plan.montage?.aspectRatio }
+      : undefined;
 
     let published: ExecutionResult['published'] = null;
     if (opts.publish && assetIds.length > 0 && plan.posts.length > 0) {
@@ -62,6 +70,6 @@ export class ContentAgent {
       published = await this.deps.forgecast.publish(assetIds[0]!, caption, channels);
     }
 
-    return { projectId, assetIds, videoJobIds, montageJobId, published };
+    return { projectId, assetIds, videoJobIds, montageJobIds, pendingMontage, published };
   }
 }

@@ -40,13 +40,29 @@ describe('parsePlan', () => {
     expect(plan.posts).toHaveLength(1);
   });
 
-  it('parses an optional montage directive with an aspect ratio', () => {
-    const plan = parsePlan(JSON.stringify({ ...planJson, montage: { aspectRatio: '16:9' } }));
-    expect(plan.montage).toEqual({ aspectRatio: '16:9' });
+  it('parses a montage directive with scenes', () => {
+    const scenes = [
+      { prompt: 'clip a', aspectRatio: '9:16' },
+      { prompt: 'clip b', aspectRatio: '9:16' },
+      { prompt: 'clip c', aspectRatio: '9:16' },
+    ];
+    const plan = parsePlan(JSON.stringify({ ...planJson, montage: { aspectRatio: '9:16', scenes } }));
+    expect(plan.montage).toEqual({ aspectRatio: '9:16', scenes });
   });
 
-  it('keeps an empty montage object (requested, default ratio) and drops malformed/absent montage', () => {
-    expect(parsePlan(JSON.stringify({ ...planJson, montage: {} })).montage).toEqual({});
+  it('requires at least 2 valid scenes; drops malformed/absent montage', () => {
+    // No scenes → undefined
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: { aspectRatio: '9:16' } })).montage).toBeUndefined();
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: {} })).montage).toBeUndefined();
+    // 1 scene → undefined (need at least 2)
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: { scenes: [{ prompt: 'a' }] } })).montage).toBeUndefined();
+    // 2 valid scenes → ok
+    const two = parsePlan(JSON.stringify({ ...planJson, montage: { scenes: [{ prompt: 'a' }, { prompt: 'b' }] } }));
+    expect(two.montage?.scenes).toHaveLength(2);
+    // Scenes with missing prompts are dropped
+    const mixed = parsePlan(JSON.stringify({ ...planJson, montage: { scenes: [{ prompt: 'a' }, {}, { prompt: 'c' }] } }));
+    expect(mixed.montage?.scenes).toHaveLength(2);
+    // Non-object montage → undefined
     expect(parsePlan(JSON.stringify({ ...planJson, montage: 'yes' })).montage).toBeUndefined();
     expect(parsePlan(JSON.stringify({ ...planJson, montage: ['x'] })).montage).toBeUndefined();
     expect(parsePlan(JSON.stringify(planJson)).montage).toBeUndefined();

@@ -1,8 +1,10 @@
 'use client';
-import type { CatalogModel } from '@forgecast/catalog';
-import { imageModels } from '@forgecast/catalog';
-import type { StudioAsset, Availability } from '@/lib/use-forgecast';
+import { useState } from 'react';
+import type { CatalogModel, VideoModel } from '@forgecast/catalog';
+import { imageModels, videoModels } from '@forgecast/catalog';
+import type { Availability } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
+import type { StoredCampaign } from './CampaignPanel';
 
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
@@ -16,14 +18,19 @@ interface ForgePanelProps {
   setPrompt: (v: string) => void;
   model: string;
   setModel: (v: string) => void;
+  videoModel: string;
+  setVideoModel: (v: string) => void;
   ratio: string;
   setRatio: (v: string) => void;
   onForge: () => void;
   forging: boolean;
   availability: Availability;
-  assets: StudioAsset[];
-  selectedAssetIds: string[];
-  setSelectedAssetIds: (ids: string[] | ((p: string[]) => string[])) => void;
+  montagePrompts: string[];
+  setMontagePrompts: (prompts: string[]) => void;
+  campaigns: StoredCampaign[];
+  activeCampaignId: string | null;
+  setActiveCampaignId: (id: string | null) => void;
+  onCreateCampaign: (name: string) => void;
 }
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
@@ -41,6 +48,9 @@ function FieldHeading({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
+
+const SELECT_CLASS = 'w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] text-sm px-3 py-2.5 outline-none appearance-none cursor-pointer focus:border-[var(--ember-2)] transition-colors';
+const SELECT_ARROW = { backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b5e54' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat' as const, backgroundPosition: 'right 12px center' };
 
 const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'image', label: 'Image' },
@@ -79,10 +89,43 @@ function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string
   );
 }
 
+function VideoModelSelect({ videoModel, setVideoModel }: { videoModel: string; setVideoModel: (v: string) => void }) {
+  const selected = videoModels.find((m) => m.id === videoModel) ?? videoModels[0];
+  return (
+    <div>
+      <FieldLabel htmlFor="forge-video-model">Model</FieldLabel>
+      <div className="relative">
+        <select
+          id="forge-video-model"
+          value={videoModel}
+          onChange={(e) => setVideoModel(e.target.value)}
+          className={SELECT_CLASS}
+          style={SELECT_ARROW}
+        >
+          {videoModels.map((m: VideoModel) => (
+            <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
+        <span className="text-[var(--ember-1)] opacity-70">{selected?.id ?? videoModel}</span>
+        <span className="text-[var(--forge-faint)]"> · fal.ai</span>
+      </p>
+    </div>
+  );
+}
+
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, ratio, setRatio, onForge, forging,
-  availability, assets, selectedAssetIds, setSelectedAssetIds,
+  mode, setMode, prompt, setPrompt, model, setModel, videoModel, setVideoModel,
+  ratio, setRatio, onForge, forging, availability,
+  montagePrompts, setMontagePrompts,
+  campaigns, activeCampaignId, setActiveCampaignId, onCreateCampaign,
 }: ForgePanelProps) {
+  const [newCampaignMode, setNewCampaignMode] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState('');
+
   const selectedModel: CatalogModel | undefined = imageModels.find((m) => m.id === model);
   const imageRatios = (selectedModel?.aspectRatios?.length ?? 0) > 0
     ? (selectedModel?.aspectRatios ?? FALLBACK_RATIOS)
@@ -90,34 +133,123 @@ export function ForgePanel({
 
   function segmentAvailable(id: ForgeMode): boolean {
     if (id === 'video') return availability.video;
-    if (id === 'montage') return availability.montage;
+    if (id === 'montage') return availability.video && availability.montage;
     return true;
   }
 
   const missingHint = mode === 'video' && !availability.video
-    ? 'video offline · set PIXVERSE_API_KEY'
-    : mode === 'montage' && !availability.montage
-      ? 'montage offline · set MONTAGE_WORKER_URL'
-      : null;
+    ? 'video offline · set FAL_KEY_VIDEO'
+    : mode === 'montage' && !availability.video
+      ? 'montage offline · set FAL_KEY_VIDEO (clips required)'
+      : mode === 'montage' && !availability.montage
+        ? 'montage offline · set MONTAGE_WORKER_URL'
+        : null;
+
+  const hasCampaign = !!activeCampaignId;
 
   const canForge =
     !forging &&
+    hasCampaign &&
     (mode === 'image'
       ? prompt.trim().length > 0
       : mode === 'video'
         ? prompt.trim().length > 0 && availability.video
-        : selectedAssetIds.length > 0 && availability.montage);
+        : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
-    mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
-      : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
-        : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
+    !hasCampaign ? '⚒ SELECT A CAMPAIGN FIRST'
+      : mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
+        : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
+          : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
   const forgeAction =
     mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : 'Forge image';
 
+  function submitNewCampaign() {
+    const name = newCampaignName.trim();
+    if (!name) return;
+    onCreateCampaign(name);
+    setNewCampaignName('');
+    setNewCampaignMode(false);
+  }
+
+  const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
+
   return (
     <div className="panel p-5 flex flex-col gap-6">
+      {/* CAMPAIGN SELECTOR */}
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">Campaign</p>
+        {newCampaignMode ? (
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={newCampaignName}
+              onChange={(e) => setNewCampaignName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitNewCampaign(); if (e.key === 'Escape') setNewCampaignMode(false); }}
+              placeholder="Campaign name…"
+              className="flex-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--ember-2)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm px-3 py-2 outline-none"
+            />
+            <button
+              type="button"
+              onClick={submitNewCampaign}
+              className="font-mono text-xs px-3 py-2 rounded-lg border"
+              style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)', background: 'rgba(255,122,26,0.08)' }}
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewCampaignMode(false)}
+              className="font-mono text-xs px-3 py-2 rounded-lg border"
+              style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <select
+                value={activeCampaignId ?? ''}
+                onChange={(e) => setActiveCampaignId(e.target.value || null)}
+                className={SELECT_CLASS}
+                style={SELECT_ARROW}
+              >
+                <option value="" style={{ background: '#221b16', color: '#6b5e54' }}>
+                  {campaigns.length === 0 ? '— no campaigns yet —' : '— select campaign —'}
+                </option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                    {c.brief.length > 0 ? (c.brief.length > 40 ? c.brief.slice(0, 40) + '…' : c.brief) : `Campaign ${c.id.slice(0, 6)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              title="New campaign"
+              onClick={() => setNewCampaignMode(true)}
+              className="w-9 h-9 flex-shrink-0 rounded-lg border font-mono text-lg flex items-center justify-center transition-all"
+              style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+            >
+              +
+            </button>
+          </div>
+        )}
+        {activeCampaign && (
+          <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-1.5 truncate">
+            <span className="text-[var(--ember-1)] opacity-70">→</span> {activeCampaign.brief || `Campaign ${activeCampaign.id.slice(0, 6)}`}
+          </p>
+        )}
+        {!hasCampaign && !newCampaignMode && (
+          <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-1.5">
+            select or create a campaign to enable generation
+          </p>
+        )}
+      </div>
+
       {/* MODE TOGGLE */}
       <div>
         <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
@@ -176,8 +308,8 @@ export function ForgePanel({
               id="forge-model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] text-sm px-3 py-2.5 outline-none appearance-none cursor-pointer focus:border-[var(--ember-2)] transition-colors"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b5e54' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+              className={SELECT_CLASS}
+              style={SELECT_ARROW}
             >
               {imageModels.map((m) => (
                 <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
@@ -212,8 +344,9 @@ export function ForgePanel({
               rows={6}
               className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)]"
             />
-            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">fal · text → video</p>
           </div>
+
+          <VideoModelSelect videoModel={videoModel} setVideoModel={setVideoModel} />
 
           <div>
             <FieldHeading>Ratio</FieldHeading>
@@ -226,10 +359,11 @@ export function ForgePanel({
       {mode === 'montage' && (
         <>
           <MontageBuilder
-            assets={assets}
-            selectedAssetIds={selectedAssetIds}
-            setSelectedAssetIds={setSelectedAssetIds}
+            prompts={montagePrompts}
+            setPrompts={setMontagePrompts}
           />
+
+          <VideoModelSelect videoModel={videoModel} setVideoModel={setVideoModel} />
 
           <div>
             <FieldHeading>Ratio</FieldHeading>
@@ -237,7 +371,7 @@ export function ForgePanel({
           </div>
 
           <p className="font-mono text-[10px] text-[var(--forge-faint)]">
-            stitches selected assets into a longer-form video (Remotion)
+            generates 3 video clips and stitches them into a montage (Remotion)
           </p>
         </>
       )}

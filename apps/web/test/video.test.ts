@@ -3,9 +3,12 @@ import { buildServices } from '../lib/forgecast';
 import { createProject, generateShortVideo, generateVideo } from '../lib/api';
 
 const saved = process.env.FORGECAST_VIDEO_WORKER_URL;
+const savedVideoKey = process.env.FAL_KEY_VIDEO;
 afterEach(() => {
   if (saved === undefined) delete process.env.FORGECAST_VIDEO_WORKER_URL;
   else process.env.FORGECAST_VIDEO_WORKER_URL = saved;
+  if (savedVideoKey === undefined) delete process.env.FAL_KEY_VIDEO;
+  else process.env.FAL_KEY_VIDEO = savedVideoKey;
 });
 
 async function projectId() {
@@ -41,13 +44,8 @@ describe('api: short video', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Generate video (generate-clip) — fal-preferred, Pixverse fallback
+// Generate video — fal.ai via FAL_KEY_VIDEO
 // ──────────────────────────────────────────────────────────────────────────────
-
-const savedPixverse = process.env.PIXVERSE_API_KEY;
-afterEach(() => {
-  if (savedPixverse === undefined) delete process.env.PIXVERSE_API_KEY; else process.env.PIXVERSE_API_KEY = savedPixverse;
-});
 
 async function project(svc: ReturnType<typeof buildServices>) {
   const created = await createProject(svc, { name: 'P' });
@@ -55,16 +53,15 @@ async function project(svc: ReturnType<typeof buildServices>) {
 }
 
 describe('api: generate video', () => {
-  it('503 when neither fal nor pixverse is configured', async () => {
-    delete process.env.PIXVERSE_API_KEY;
-    const svc = buildServices({ falKey: undefined }); // no FAL_KEY, no PIXVERSE_API_KEY
+  it('503 when FAL_KEY_VIDEO is not set', async () => {
+    delete process.env.FAL_KEY_VIDEO;
+    const svc = buildServices({ falVideoKey: undefined });
     const pid = await project(svc);
     expect((await generateVideo(svc, pid, { prompt: 'x' })).status).toBe(503);
   });
 
-  it('uses fal for video when FAL_KEY is set (no Pixverse credits needed)', async () => {
-    delete process.env.PIXVERSE_API_KEY;
-    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+  it('queues a video job via fal when FAL_KEY_VIDEO is set', async () => {
+    const svc = buildServices({ falVideoKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const pid = await project(svc);
     const r = await generateVideo(svc, pid, { prompt: 'a fox', aspectRatio: '9:16' });
     expect(r.status).toBe(202);
@@ -74,17 +71,8 @@ describe('api: generate video', () => {
   });
 
   it('400 without a prompt', async () => {
-    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+    const svc = buildServices({ falVideoKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const pid = await project(svc);
     expect((await generateVideo(svc, pid, {})).status).toBe(400);
-  });
-
-  it('falls back to Pixverse when only PIXVERSE_API_KEY is set', async () => {
-    process.env.PIXVERSE_API_KEY = 'k';
-    const svc = buildServices({ falKey: undefined, fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
-    const pid = await project(svc);
-    const r = await generateVideo(svc, pid, { prompt: 'a fox' });
-    expect(r.status).toBe(202);
-    expect((r.body as { job: { provider: string } }).job.provider).toBe('pixverse');
   });
 });

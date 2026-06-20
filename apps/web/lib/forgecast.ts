@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -31,6 +31,8 @@ export interface Services {
 
 export interface BuildServicesOptions {
   falKey?: string;
+  /** fal.ai key for video generation. Falls back to FAL_KEY_VIDEO env. */
+  falVideoKey?: string;
   /** SQLite path for durable metadata. Falls back to FORGECAST_DB env, then in-memory. */
   db?: string;
   /** Filesystem root for durable asset bytes. Falls back to FORGECAST_DATA_DIR env, then in-memory. */
@@ -65,6 +67,7 @@ function resolveStorage(profile: string, dataDir: string | undefined): StorageDr
 
 export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falKey = 'falKey' in opts ? opts.falKey : process.env.FAL_KEY;
+  const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
   imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
@@ -110,11 +113,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     fetchFn: opts.fetchFn,
   });
   const videoWorker = new MoneyPrinterWorker();
-  // Prefer fal for video (reuses FAL_KEY — no separate Pixverse credits needed);
-  // fall back to Pixverse only if its key is set instead.
-  const videoProvider: VideoProvider = falKey
-    ? new FalVideoProvider({ apiKey: falKey, fetchFn: opts.fetchFn })
-    : new PixverseVideoProvider({ fetchFn: opts.fetchFn });
+  const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
   const handlers: JobHandler[] = [imageHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(

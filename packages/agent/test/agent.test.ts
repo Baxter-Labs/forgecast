@@ -11,6 +11,29 @@ const samplePlan: ContentPlan = {
   posts: [{ platform: 'instagram', caption: 'Drop 🌱' }, { platform: 'linkedin', caption: 'Reimagined.' }],
 };
 
+const montagePlan: ContentPlan = {
+  concept: 'reel',
+  assets: [],
+  posts: [],
+  montage: {
+    aspectRatio: '9:16',
+    scenes: [
+      { prompt: 'clip a', aspectRatio: '9:16' },
+      { prompt: 'clip b', aspectRatio: '9:16' },
+      { prompt: 'clip c', aspectRatio: '9:16' },
+    ],
+  },
+};
+
+function makeForgecast(): ForgecastActions {
+  return {
+    ensureProject: vi.fn(async () => 'p1'),
+    generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
+    generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
+    publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
+  };
+}
+
 describe('ContentAgent.plan', () => {
   it('gathers trends per platform and returns a parsed plan', async () => {
     const llm: LlmClient = { complete: vi.fn(async () => '```json\n' + JSON.stringify(samplePlan) + '\n```') };
@@ -21,7 +44,6 @@ describe('ContentAgent.plan', () => {
     const plan = await agent.plan('eco sneaker launch', ['instagram', 'linkedin']);
     expect(plan.concept).toBe('Eco sneaker teaser');
     expect((trends.trending as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(2);
-    // trending notes were passed into the llm user prompt
     const firstCall = (llm.complete as ReturnType<typeof vi.fn>).mock.calls[0] as [{ system: string; user: string }];
     const userArg = firstCall[0].user;
     expect(userArg).toContain('trend for instagram');
@@ -37,13 +59,7 @@ describe('ContentAgent.plan', () => {
 describe('ContentAgent.execute', () => {
   it('creates a project, generates assets, and publishes', async () => {
     const llm = { complete: vi.fn() } as unknown as LlmClient;
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'p1'),
-      generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
-      publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
-    };
+    const forgecast = makeForgecast();
     const agent = new ContentAgent({ llm, forgecast });
 
     const result = await agent.execute(samplePlan, { publish: true });
@@ -56,27 +72,16 @@ describe('ContentAgent.execute', () => {
   });
 
   it('skips publish when publish=false or no assets', async () => {
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'p1'),
-      generateImage: vi.fn(async () => ({ assetId: null })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'jm' })),
-      publish: vi.fn(async () => ({ postId: 'x', status: 's' })),
-    };
+    const forgecast = makeForgecast();
+    (forgecast.generateImage as ReturnType<typeof vi.fn>).mockResolvedValue({ assetId: null });
     const agent = new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast });
     const r = await agent.execute({ concept: 'c', assets: [{ kind: 'image', prompt: 'p' }], posts: [{ platform: 'instagram', caption: 'hi' }] }, { publish: false });
     expect(r.published).toBeNull();
     expect(forgecast.publish).not.toHaveBeenCalled();
   });
 
-  it('reuses an existing project (no new project) when projectId is provided', async () => {
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'NEW-PROJECT'),
-      generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
-      publish: vi.fn(async () => ({ postId: 'p', status: 's' })),
-    };
+  it('reuses an existing project when projectId is provided', async () => {
+    const forgecast = makeForgecast();
     const plan: ContentPlan = { concept: 'c', assets: [{ kind: 'image', prompt: 'a' }], posts: [] };
     const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(plan, { projectId: 'EXISTING' });
     expect(forgecast.ensureProject).not.toHaveBeenCalled();
@@ -84,49 +89,24 @@ describe('ContentAgent.execute', () => {
     expect(r.projectId).toBe('EXISTING');
   });
 
-  it('skips montage when the plan has no montage directive', async () => {
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'p1'),
-      generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
-      publish: vi.fn(async () => ({ postId: 'p', status: 's' })),
-    };
+  it('queues montage clip jobs separately when the plan includes a montage', async () => {
+    const forgecast = makeForgecast();
+    const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(montagePlan);
+    // Montage clips are queued via generateVideo (3 times, once per scene)
+    expect(forgecast.generateVideo).toHaveBeenCalledTimes(3);
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip a', '9:16');
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip b', '9:16');
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip c', '9:16');
+    // Job IDs end up in montageJobIds, not videoJobIds
+    expect(r.montageJobIds).toHaveLength(3);
+    expect(r.videoJobIds).toHaveLength(0);
+    expect(r.pendingMontage).toEqual({ aspectRatio: '9:16' });
+  });
+
+  it('does not set pendingMontage when the plan has no montage', async () => {
+    const forgecast = makeForgecast();
     const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(samplePlan);
-    expect(forgecast.generateMontage).not.toHaveBeenCalled();
-    expect(r.montageJobId).toBeUndefined();
-  });
-
-  it('stitches the generated image assets into a montage when the plan requests one', async () => {
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'p1'),
-      generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
-      publish: vi.fn(async () => ({ postId: 'p', status: 's' })),
-    };
-    const plan: ContentPlan = {
-      concept: 'reel',
-      assets: [{ kind: 'image', prompt: 'a' }, { kind: 'image', prompt: 'b' }],
-      posts: [],
-      montage: { aspectRatio: '9:16' },
-    };
-    const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(plan);
-    expect(forgecast.generateMontage).toHaveBeenCalledWith('p1', ['a-img', 'a-img'], '9:16');
-    expect(r.montageJobId).toBe('j-mtg');
-  });
-
-  it('skips montage when requested but no image assets were produced', async () => {
-    const forgecast: ForgecastActions = {
-      ensureProject: vi.fn(async () => 'p1'),
-      generateImage: vi.fn(async () => ({ assetId: null })),
-      generateVideo: vi.fn(async () => ({ jobId: 'j' })),
-      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
-      publish: vi.fn(async () => ({ postId: 'p', status: 's' })),
-    };
-    const plan: ContentPlan = { concept: 'c', assets: [{ kind: 'image', prompt: 'a' }], posts: [], montage: {} };
-    const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(plan);
-    expect(forgecast.generateMontage).not.toHaveBeenCalled();
-    expect(r.montageJobId).toBeUndefined();
+    expect(r.pendingMontage).toBeUndefined();
+    expect(r.montageJobIds ?? []).toHaveLength(0);
   });
 });

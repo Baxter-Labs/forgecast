@@ -3,13 +3,24 @@ import type { ContentPlan, ContentPlanItem, MontagePlan, PlatformPost } from './
 export const PLAN_SYSTEM_PROMPT = `You are Forgecast's content planning agent. Given a creative brief and target platforms (plus optional trending notes), produce a concrete, on-trend content plan.
 Respond with ONLY a JSON object (no prose) of the shape:
 {
-  "concept": string,                       // the core creative idea, one sentence
-  "trendingNotes": string,                 // how you applied current trends
+  "concept": string,
+  "trendingNotes": string,
   "assets": [ { "kind": "image"|"video", "prompt": string, "aspectRatio"?: string } ],
-  "posts":  [ { "platform": string, "caption": string } ],  // one per target platform, tuned to it
-  "montage"?: { "aspectRatio"?: string }   // OPTIONAL — include ONLY when the brief wants a single longer-form video stitched from multiple shots (a montage, reel, teaser, slideshow, or "X-second video"); then plan SEVERAL image scenes (3+) as the montage's source frames
+  "posts":  [ { "platform": string, "caption": string } ],
+  "montage"?: {
+    "aspectRatio"?: string,
+    "scenes": [
+      { "prompt": string, "aspectRatio"?: string },
+      { "prompt": string, "aspectRatio"?: string },
+      { "prompt": string, "aspectRatio"?: string }
+    ]
+  }
 }
-Keep prompts vivid and specific. Prefer 9:16 for short-form video. Make captions native to each platform. When you include a "montage", the generated image assets become its sequential scenes — so order the assets as the video should play.`;
+
+Rules:
+- "assets" = standalone images or videos that appear individually in the gallery (for social posts, hero shots, single clips).
+- "montage" = a separate production: EXACTLY 3 unique video clip prompts that are generated independently and then stitched into one longer-form video. Include a montage whenever it would add clear value — product teasers, brand reels, event recaps, launch sequences — even if not explicitly requested. The montage scenes must NOT be repeated in "assets".
+- Prefer 9:16 for short-form video. Make captions native to each platform. Keep prompts vivid and specific.`;
 
 export function buildPlanUserPrompt(brief: string, platforms: string[], trendingNotes?: string): string {
   const lines = [`Brief: ${brief}`, `Target platforms: ${platforms.join(', ') || 'instagram'}`];
@@ -37,8 +48,17 @@ function isPost(v: unknown): v is PlatformPost {
 }
 function parseMontage(v: unknown): MontagePlan | undefined {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
-  const o = v as { aspectRatio?: unknown };
-  return typeof o.aspectRatio === 'string' ? { aspectRatio: o.aspectRatio } : {};
+  const o = v as { aspectRatio?: unknown; scenes?: unknown };
+  const scenes = Array.isArray(o.scenes)
+    ? (o.scenes as unknown[]).flatMap((s) => {
+        const sc = s as Partial<{ prompt: string; aspectRatio: string }>;
+        return typeof sc?.prompt === 'string' && sc.prompt.trim()
+          ? [{ prompt: sc.prompt, ...(typeof sc.aspectRatio === 'string' ? { aspectRatio: sc.aspectRatio } : {}) }]
+          : [];
+      })
+    : [];
+  if (scenes.length < 2) return undefined;
+  return { ...(typeof o.aspectRatio === 'string' ? { aspectRatio: o.aspectRatio } : {}), scenes };
 }
 
 export function parsePlan(raw: string): ContentPlan {
