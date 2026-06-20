@@ -7,6 +7,7 @@ interface AgentChatProps {
   agentPlan: (brief: string, platforms: string[]) => Promise<{ plan?: unknown; error?: string }>;
   agentExecute: (plan: unknown, opts?: { projectName?: string; publish?: boolean }) => Promise<{ result?: unknown; error?: string }>;
   onExecuted: (result: ExecutionResult) => void;
+  onCampaignExecuted: (c: { brief: string; platforms: string[]; plan: ContentPlan; assetIds: string[] }) => void;
 }
 
 type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error';
@@ -18,7 +19,7 @@ function isAgentOffline(err: string): boolean {
   return e.includes('openai') || e.includes('agent');
 }
 
-export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProps) {
+export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecuted }: AgentChatProps) {
   const [open, setOpen] = useState(true);
   const [brief, setBrief] = useState('');
   const [platforms, setPlatforms] = useState<string[]>(['instagram']);
@@ -52,6 +53,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
     setResult(execResult);
     setPhase('done');
     onExecuted(execResult);
+    onCampaignExecuted({ brief, platforms, plan, assetIds: execResult.assetIds ?? [] });
   }
 
   const offline = phase === 'error' && error != null && isAgentOffline(error);

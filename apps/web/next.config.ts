@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // render. Keeping it external lets it be require()'d at runtime with the real
   // path so spawn() finds the bundled ffmpeg binary.
   serverExternalPackages: ["ffmpeg-static"],
+  allowedDevOrigins: ["192.168.93.189"],
 };
 
 export default nextConfig;
