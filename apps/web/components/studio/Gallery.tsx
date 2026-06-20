@@ -6,6 +6,7 @@ import { EmptyState } from './EmptyState';
 
 interface GalleryProps {
   assets: StudioAsset[];
+  onPublish?: (asset: StudioAsset) => void;
 }
 
 type Filter = 'all' | 'image' | 'video';
@@ -16,7 +17,7 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'video', label: 'Videos' },
 ];
 
-export function Gallery({ assets }: GalleryProps) {
+export function Gallery({ assets, onPublish }: GalleryProps) {
   const [filter, setFilter] = useState<Filter>('all');
 
   const counts = {
@@ -76,7 +77,7 @@ export function Gallery({ assets }: GalleryProps) {
         <div role="list" className="grid grid-cols-2 xl:grid-cols-3 gap-4">
           {visible.map((asset, i) => (
             <div role="listitem" key={asset.id}>
-              <AssetCard asset={asset} index={i} />
+              <AssetCard asset={asset} index={i} onPublish={onPublish} />
             </div>
           ))}
         </div>

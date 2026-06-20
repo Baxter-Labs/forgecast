@@ -43,6 +43,7 @@ const POLL_MAX_TRIES = 120;
 export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
+  const [publishers, setPublishers] = useState<string[]>([]);
   const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
@@ -60,7 +61,9 @@ export function useForgecast() {
       const image: string[] = health?.providers?.image ?? [];
       const video: string[] = health?.providers?.video ?? [];
       const montage: string[] = health?.providers?.montage ?? [];
+      const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
+      setPublishers(pubs);
       setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0 });
 
       await refreshPro();
@@ -169,6 +172,22 @@ export function useForgecast() {
     setStatus(outcomes.some((o) => o === 'error') ? 'error' : 'idle');
   }, [pollJob]);
 
+  const publishAsset = useCallback(async (assetId: string, content: string, channels?: string[], publisher?: string): Promise<{ postId?: string; status?: string; error?: string }> => {
+    try {
+      const body: Record<string, unknown> = { content };
+      if (channels && channels.length > 0) body.channels = channels;
+      if (publisher) body.publisher = publisher;
+      const res = await fetch(`/api/assets/${assetId}/publish`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Publish failed (${res.status})` };
+      return data?.published ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -195,9 +214,10 @@ export function useForgecast() {
   }, [projectId]);
 
   return {
-    projectId, providers, availability, pro, refreshPro,
+    projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
+    publishAsset,
     agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
   };
 }
