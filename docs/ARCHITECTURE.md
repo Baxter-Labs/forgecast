@@ -121,13 +121,15 @@ The OSS core stays **cloud-agnostic**; clouds are opt-in profiles, never a requi
 
 | Layer | `local` (default) | `baxter-cloud` (optional) |
 |---|---|---|
-| Storage | MinIO (S3-compatible) | Cloudflare **R2** (zero egress) |
+| Storage | MinIO (S3-compatible) | Cloudflare **R2** (zero egress) ✅ |
 | AI generation | BYO keys (fal, Edge TTS, …) | GCP **Vertex AI** (Imagen/Veo/Gemini/Cloud TTS) |
 | Heavy/local-model workers | local | GCP **GPU** (Cloud Run / GKE) |
 | Data | Postgres + Redis (containers) | Cloud SQL + Memorystore |
 | Exposure | localhost | Cloudflare **Tunnel** |
 
 Because storage is S3-compatible, providers are interfaces, and workers are containerized HTTP services, switching profiles is **configuration, not a rewrite**.
+
+**Selecting a profile.** The composition root (`apps/web/lib/forgecast.ts`) reads `FORGECAST_PROFILE` (`local` default, or `baxter-cloud`). Under `baxter-cloud`, asset bytes are stored in Cloudflare R2 via `R2Storage` (`packages/store`, an S3-compatible `StorageDriver` that signs requests with AWS SigV4 — no SDK dependency), configured by `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (+ optional `R2_PUBLIC_BASE_URL` for CDN serving, `R2_ENDPOINT` override). If R2 is unconfigured it falls back to local storage with a warning. The GCP (Vertex/GPU/Cloud SQL) and Cloudflare Tunnel layers remain on the M1.5 roadmap.
 
 ---
 

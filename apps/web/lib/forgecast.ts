@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -6,6 +6,8 @@ import {
   InMemoryStorage,
   openStore,
   FilesystemStorage,
+  R2Storage,
+  r2OptionsFromEnv,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, MontageWorker } from '@forgecast/core';
@@ -29,18 +31,43 @@ export interface Services {
 
 export interface BuildServicesOptions {
   falKey?: string;
+  /** fal.ai key for video generation. Falls back to FAL_KEY_VIDEO env. */
+  falVideoKey?: string;
   /** SQLite path for durable metadata. Falls back to FORGECAST_DB env, then in-memory. */
   db?: string;
   /** Filesystem root for durable asset bytes. Falls back to FORGECAST_DATA_DIR env, then in-memory. */
   dataDir?: string;
+  /** Deployment profile. Falls back to FORGECAST_PROFILE env, then 'local'. 'baxter-cloud' stores asset bytes in Cloudflare R2. */
+  profile?: string;
   /** Injectable fetch for the image handler's download step (tests). */
   fetchFn?: typeof fetch;
 }
 
 let cached: Services | undefined;
 
+/**
+ * Selects the asset-bytes store for the active deployment profile.
+ * - `baxter-cloud`: Cloudflare R2 (S3-compatible, zero egress) from the R2_* env
+ *   vars; falls back to local storage with a warning if R2 is not configured.
+ * - `local` (default): filesystem when FORGECAST_DATA_DIR is set, else in-memory.
+ */
+function resolveStorage(profile: string, dataDir: string | undefined): StorageDriver {
+  if (profile === 'baxter-cloud') {
+    const r2 = r2OptionsFromEnv();
+    if (r2) return new R2Storage({ ...r2, publicBaseUrl: r2.publicBaseUrl ?? process.env.FORGECAST_BASE_URL });
+    console.warn(
+      "[forgecast] Profile 'baxter-cloud' selected but R2 is not configured. Set R2_ACCOUNT_ID, R2_BUCKET, " +
+        'R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. Falling back to local storage.',
+    );
+  }
+  return dataDir
+    ? new FilesystemStorage({ root: dataDir, baseUrl: process.env.FORGECAST_BASE_URL })
+    : new InMemoryStorage({ baseUrl: process.env.FORGECAST_BASE_URL ?? 'memory://forgecast' });
+}
+
 export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falKey = 'falKey' in opts ? opts.falKey : process.env.FAL_KEY;
+  const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
   imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
@@ -78,9 +105,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = new InMemoryJobRepo();
   }
 
-  const storage: StorageDriver = dataDir
-    ? new FilesystemStorage({ root: dataDir, baseUrl: process.env.FORGECAST_BASE_URL })
-    : new InMemoryStorage({ baseUrl: process.env.FORGECAST_BASE_URL ?? 'memory://forgecast' });
+  const storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
 
   const imageHandler = new ImageJobHandler({
     registry: imageRegistry,
@@ -91,11 +116,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     fetchFn: opts.fetchFn,
   });
   const videoWorker = new MoneyPrinterWorker();
-  // Prefer fal for video (reuses FAL_KEY — no separate Pixverse credits needed);
-  // fall back to Pixverse only if its key is set instead.
-  const videoProvider: VideoProvider = falKey
-    ? new FalVideoProvider({ apiKey: falKey, fetchFn: opts.fetchFn })
-    : new PixverseVideoProvider({ fetchFn: opts.fetchFn });
+  const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
   const handlers: JobHandler[] = [imageHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(

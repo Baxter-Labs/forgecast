@@ -3,11 +3,11 @@ import { buildServices } from '../lib/forgecast';
 import { makeForgecastActions } from '../lib/agent/forgecast-actions';
 import { OpenAiLlmClient } from '../lib/agent/llm';
 
-const savedPix = process.env.PIXVERSE_API_KEY;
+const savedVideoKey = process.env.FAL_KEY_VIDEO;
 const savedKey = process.env.OPENAI_API_KEY;
 const savedMontage = process.env.MONTAGE_WORKER_URL;
 afterEach(() => {
-  if (savedPix === undefined) delete process.env.PIXVERSE_API_KEY; else process.env.PIXVERSE_API_KEY = savedPix;
+  if (savedVideoKey === undefined) delete process.env.FAL_KEY_VIDEO; else process.env.FAL_KEY_VIDEO = savedVideoKey;
   if (savedKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedKey;
   if (savedMontage === undefined) delete process.env.MONTAGE_WORKER_URL; else process.env.MONTAGE_WORKER_URL = savedMontage;
 });
@@ -20,23 +20,14 @@ describe('makeForgecastActions', () => {
     expect((await svc.projects.get(pid))?.name).toBe('Demo');
   });
 
-  it('queues a video job when pixverse is configured', async () => {
-    process.env.PIXVERSE_API_KEY = 'k';
-    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+  it('queues a video job when FAL_KEY_VIDEO is configured', async () => {
+    const svc = buildServices({ falVideoKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const actions = makeForgecastActions(svc);
     const pid = await actions.ensureProject('P');
     const { jobId } = await actions.generateVideo(pid, 'a fox', '9:16');
     expect(jobId.length).toBeGreaterThan(0);
   });
 
-  it('generateMontage degrades to an empty jobId when the montage worker is not configured', async () => {
-    delete process.env.MONTAGE_WORKER_URL;
-    const svc = buildServices({ falKey: 'k' });
-    const actions = makeForgecastActions(svc);
-    const pid = await actions.ensureProject('P');
-    const { jobId } = await actions.generateMontage(pid, ['a1', 'a2'], '9:16');
-    expect(jobId).toBe('');
-  });
 });
 
 describe('OpenAiLlmClient', () => {

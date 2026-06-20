@@ -94,7 +94,7 @@ export async function generateVideo(services: Services, projectId: string, input
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   if (!services.videoProvider.isAvailable()) {
-    return { status: 503, body: { error: 'video provider not configured (set PIXVERSE_API_KEY)' } };
+    return { status: 503, body: { error: 'video provider not configured (set FAL_KEY_VIDEO)' } };
   }
   const fields = (input ?? {}) as { prompt?: unknown; aspectRatio?: unknown; duration?: unknown; quality?: unknown; model?: unknown };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {

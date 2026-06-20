@@ -148,7 +148,7 @@ Without a `FAL_KEY`, the Studio runs fine and shows a clear "set FAL_KEY" state 
 | Milestone | What it delivers | Status |
 |---|---|---|
 | **M1 · Creation Studio** | Image + short-video generation, projects/library, provider adapters, MCP-ready | 🚧 image path done; video + MCP next |
-| **M1.5 · Cloud profiles** | Cloudflare R2 + GCP Vertex/GPU deployment profile (optional, on credits) | ⬜ |
+| **M1.5 · Cloud profiles** | Cloudflare R2 + GCP Vertex/GPU deployment profile (optional, on credits) | 🚧 R2 storage (`baxter-cloud`) done; GCP + Tunnel next |
 | **M2 · Distribution** | Cross-platform posting — Instagram/Meta, LinkedIn, YouTube + agent skills | ⬜ |
 | **M3 · Agent** | "Describe it → it makes it," orchestrating the MCP tools | ⬜ |
 | **M4 · Montage** | Longer-form video (Remotion + pipeline) | ⬜ |
