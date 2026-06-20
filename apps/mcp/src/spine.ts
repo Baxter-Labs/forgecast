@@ -74,6 +74,11 @@ export class SpineClient {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
+  generateMontage(projectId: string, input: { assetIds?: string[]; aspectRatio?: string; spec?: unknown }): Promise<{ job: { id: string; kind: string; status: string } }> {
+    return this.req(`/api/projects/${projectId}/generate-montage`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
   getJob(jobId: string): Promise<{ job: Job }> { return this.req(`/api/jobs/${jobId}`); }
   listAssets(projectId: string): Promise<{ assets: Asset[] }> { return this.req(`/api/projects/${projectId}/assets`); }
   publishAsset(assetId: string, input: { content: string; channels?: string[]; publisher?: string }): Promise<{ published: { postId: string; status: string } }> {

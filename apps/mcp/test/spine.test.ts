@@ -86,4 +86,19 @@ describe('SpineClient', () => {
     expect((init as RequestInit).method).toBe('POST');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ prompt: 'a fox', aspectRatio: '9:16' });
   });
+
+  it('generates a montage and returns the queued job', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ job: { id: 'jm', kind: 'montage', status: 'queued' } }, 202),
+    );
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn });
+    const r = await c.generateMontage('p1', { assetIds: ['a1', 'a2'], aspectRatio: '9:16' });
+    expect(r.job.id).toBe('jm');
+    expect(r.job.kind).toBe('montage');
+    expect(r.job.status).toBe('queued');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api/api/projects/p1/generate-montage');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ assetIds: ['a1', 'a2'], aspectRatio: '9:16' });
+  });
 });

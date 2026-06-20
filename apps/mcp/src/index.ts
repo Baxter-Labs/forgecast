@@ -291,7 +291,45 @@ server.registerTool(
   },
 );
 
-// 9. forgecast_publish_asset
+// 9. forgecast_generate_montage
+server.registerTool(
+  'forgecast_generate_montage',
+  {
+    title: 'Generate Video Montage (Remotion)',
+    description:
+      'Stitches a project\'s generated assets into a longer-form video montage using Remotion. ' +
+      'This is ASYNC — it immediately returns a queued job. ' +
+      'Poll `forgecast_get_job` with the returned job ID to track progress.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of an existing project (obtain from forgecast_list_projects).\n' +
+      '  asset_ids (string[], min 1): IDs of the project assets to stitch together, in order.\n' +
+      '  aspect_ratio (string, optional): Aspect ratio of the output video (e.g. "9:16", "16:9", "1:1"). Defaults to "9:16".\n\n' +
+      'Returns: `{ job: { id, kind, status } }` where status is "queued".\n\n' +
+      'Example: `forgecast_generate_montage({ project_id: "p_xyz", asset_ids: ["a_1", "a_2", "a_3"], aspect_ratio: "9:16" })`\n' +
+      '→ `{ "job": { "id": "j_abc", "kind": "montage", "status": "queued" } }`\n' +
+      'Then poll: `forgecast_get_job({ job_id: "j_abc" })` until status = "done".\n\n' +
+      'Error guidance: A 503 means MONTAGE_WORKER_URL or FORGECAST_BASE_URL is not configured on the Forgecast app — ' +
+      'both environment variables must be set. A 404 means the project does not exist. ' +
+      'A 400 means no valid asset IDs were provided.',
+    inputSchema: z
+      .object({
+        project_id: z.string(),
+        asset_ids: z.array(z.string()).min(1),
+        aspect_ratio: z.string().optional(),
+      })
+      .strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_ids, aspect_ratio }) => {
+    try {
+      return ok(await client.generateMontage(project_id, { assetIds: asset_ids, aspectRatio: aspect_ratio }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 10. forgecast_publish_asset
 server.registerTool(
   'forgecast_publish_asset',
   {
