@@ -8,3 +8,4 @@ export * from './jobengine';
 export * from './video';
 export * from './publish';
 export * from './videogen';
+export * from './montage';

@@ -1,5 +1,5 @@
 export type AssetType = 'image' | 'video' | 'audio';
-export type JobKind = 'image' | 'short_video' | 'video';
+export type JobKind = 'image' | 'short_video' | 'video' | 'montage';
 export type JobStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface Project {
