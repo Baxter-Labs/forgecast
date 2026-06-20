@@ -6,7 +6,7 @@ import type { ContentPlan, ExecutionResult } from '@forgecast/agent';
 interface AgentChatProps {
   agentPlan: (brief: string, platforms: string[]) => Promise<{ plan?: unknown; error?: string }>;
   agentExecute: (plan: unknown, opts?: { projectName?: string; publish?: boolean }) => Promise<{ result?: unknown; error?: string }>;
-  onExecuted: () => void;
+  onExecuted: (result: ExecutionResult) => void;
 }
 
 type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error';
@@ -48,9 +48,10 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
     if (res.error || !res.result) {
       setError(res.error ?? 'Execution failed'); setPhase('error'); return;
     }
-    setResult(res.result as ExecutionResult);
+    const execResult = res.result as ExecutionResult;
+    setResult(execResult);
     setPhase('done');
-    onExecuted();
+    onExecuted(execResult);
   }
 
   const offline = phase === 'error' && error != null && isAgentOffline(error);
@@ -243,6 +244,11 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
                     {result.montageJobId ? ' · montage ⚒' : ''}
                     {' · '}published {result.published ? '✓' : '—'}
                   </p>
+                  {(result.videoJobIds.length > 0 || result.montageJobId) && (
+                    <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-1.5 forging">
+                      rendering video — appears in the gallery when ready…
+                    </p>
+                  )}
                 </div>
               )}
             </div>

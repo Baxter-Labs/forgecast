@@ -23,7 +23,7 @@ export function Studio() {
   const {
     providers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
-    agentPlan, agentExecute, refreshAssets,
+    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
   } = useForgecast();
 
   const [mode, setMode] = useState<ForgeMode>('image');
@@ -77,7 +77,7 @@ export function Studio() {
           <AgentChat
             agentPlan={agentPlan}
             agentExecute={agentExecute}
-            onExecuted={() => void refreshAssets()}
+            onExecuted={(result) => { void refreshAssets(); void awaitAgentJobs(result); }}
           />
           <JobStatus status={status} error={error} />
           <Gallery assets={assets} />

@@ -158,6 +158,17 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  // After an agent run, the image assets are already saved (synchronous), but
+  // Pixverse video + Remotion montage render in the background. Poll those jobs
+  // to completion so the finished assets pop into the gallery automatically.
+  const awaitAgentJobs = useCallback(async (result: { videoJobIds?: string[]; montageJobId?: string }) => {
+    const ids = [...(result.videoJobIds ?? []), ...(result.montageJobId ? [result.montageJobId] : [])].filter(Boolean);
+    if (ids.length === 0) return;
+    setStatus('forging'); setError(null);
+    const outcomes = await Promise.all(ids.map((id) => pollJob(id))); // each refreshes the gallery on completion
+    setStatus(outcomes.some((o) => o === 'error') ? 'error' : 'idle');
+  }, [pollJob]);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -187,6 +198,6 @@ export function useForgecast() {
     projectId, providers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
-    agentPlan, agentExecute, refreshAssets,
+    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
   };
 }
