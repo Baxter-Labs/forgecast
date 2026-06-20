@@ -19,7 +19,13 @@ export function makeForgecastActions(services: Services): ForgecastActions {
     async generateImage(projectId, prompt, aspectRatio) {
       const dim = aspectRatio ? RATIO_TO_DIM[aspectRatio] : undefined;
       const r = await generateImage(services, projectId, { prompt, ...(dim ?? {}) });
-      const asset = (r.body as { asset?: { id: string } | null }).asset;
+      const body = r.body as { asset?: { id: string } | null; job?: { status?: string; error?: string }; error?: string };
+      const asset = body.asset;
+      if (!asset) {
+        // Surface why generation produced no asset (e.g. an invalid FAL key → 401),
+        // instead of silently reporting "0 assets" to the agent.
+        console.error(`[forgecast] image generation produced no asset: ${body.job?.error ?? body.error ?? `status ${r.status}`}`);
+      }
       return { assetId: asset?.id ?? null };
     },
     async generateVideo(projectId, prompt, aspectRatio) {
