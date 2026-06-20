@@ -69,6 +69,11 @@ export class SpineClient {
   generateShortVideo(projectId: string, subject: string): Promise<{ job: Job }> {
     return this.req(`/api/projects/${projectId}/generate-video`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject }) });
   }
+  generateVideo(projectId: string, input: { prompt: string; aspectRatio?: string; duration?: number; quality?: string; model?: string }): Promise<{ job: { id: string; kind: string; status: string } }> {
+    return this.req(`/api/projects/${projectId}/generate-clip`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
   getJob(jobId: string): Promise<{ job: Job }> { return this.req(`/api/jobs/${jobId}`); }
   listAssets(projectId: string): Promise<{ assets: Asset[] }> { return this.req(`/api/projects/${projectId}/assets`); }
   publishAsset(assetId: string, input: { content: string; channels?: string[]; publisher?: string }): Promise<{ published: { postId: string; status: string } }> {

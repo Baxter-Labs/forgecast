@@ -71,4 +71,19 @@ describe('SpineClient', () => {
     expect((init as RequestInit).method).toBe('POST');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ content: 'hi', channels: ['instagram'] });
   });
+
+  it('generates a video clip and returns the queued job', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ job: { id: 'jv', kind: 'video', status: 'queued' } }, 202),
+    );
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn });
+    const r = await c.generateVideo('p1', { prompt: 'a fox', aspectRatio: '9:16' });
+    expect(r.job.id).toBe('jv');
+    expect(r.job.kind).toBe('video');
+    expect(r.job.status).toBe('queued');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api/api/projects/p1/generate-clip');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ prompt: 'a fox', aspectRatio: '9:16' });
+  });
 });
