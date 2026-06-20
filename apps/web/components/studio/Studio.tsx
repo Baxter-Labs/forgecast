@@ -35,7 +35,6 @@ function loadCampaigns(): StoredCampaign[] {
   return [];
 }
 
-
 // ─── Dimension helper ─────────────────────────────────────────────────────────
 function ratioToDimensions(ratio: string): { width: number; height: number } {
   const map: Record<string, { width: number; height: number }> = {

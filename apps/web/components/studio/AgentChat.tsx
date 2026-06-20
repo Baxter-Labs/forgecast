@@ -170,96 +170,78 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
               {/* Trending notes */}
               {plan.trendingNotes && (
                 <div
-                  className="rounded-lg px-3 py-2 border"
+                  className="rounded-lg px-3 py-2.5 border"
                   style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
                 >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--ember-1)] opacity-80 mb-1">Trend</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-1">Trend</p>
                   <p className="text-xs italic text-[var(--forge-muted)] leading-relaxed">{plan.trendingNotes}</p>
                 </div>
               )}
 
-              {/* Assets */}
+              {/* Asset list */}
               {plan.assets.length > 0 && (
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">Assets</p>
-                  <div className="flex flex-col gap-1.5">
-                    {plan.assets.map((a, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2 rounded-md px-2.5 py-1.5 border"
-                        style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+                <div className="flex flex-col gap-1.5">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)]">Assets</p>
+                  {plan.assets.map((a, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 rounded-md px-2.5 py-1.5 border"
+                      style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+                    >
+                      <span
+                        className="font-mono text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 rounded shrink-0 mt-px"
+                        style={{ color: 'var(--ember-1)', border: '1px solid var(--ember-2)' }}
                       >
-                        <span
-                          className="font-mono text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 rounded shrink-0"
-                          style={{ color: 'var(--ember-1)', border: '1px solid var(--ember-2)' }}
-                        >
-                          {a.kind}
-                        </span>
-                        <span className="font-mono text-[11px] text-[var(--forge-muted)] truncate">{a.prompt}</span>
-                      </div>
-                    ))}
-                  </div>
+                        {a.kind}
+                      </span>
+                      <span className="font-mono text-[11px] text-[var(--forge-muted)] leading-relaxed">{a.prompt}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* Posts */}
+              {/* Post captions */}
               {plan.posts.length > 0 && (
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">Captions</p>
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    {plan.posts.map((post, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg px-3 py-2 border"
-                        style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
-                      >
-                        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ember-1)] opacity-80 mb-1">{post.platform}</p>
-                        <p className="text-xs text-[var(--forge-text)] leading-relaxed">{post.caption}</p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {plan.posts.map((post, i) => (
+                    <div
+                      key={i}
+                      className="rounded-lg px-3 py-2.5 border"
+                      style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+                    >
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ember-1)] opacity-80 mb-1.5">{post.platform}</p>
+                      <p className="text-xs text-[var(--forge-text)] leading-relaxed">{post.caption}</p>
+                    </div>
+                  ))}
                 </div>
               )}
 
               {/* EXECUTE button */}
-              {phase !== 'done' && (
+              {phase === 'planned' && (
                 <button
                   type="button"
                   onClick={runExecute}
-                  disabled={phase === 'executing'}
-                  className={`btn-forge rounded-lg py-2.5 px-5 text-xs self-start ${phase === 'executing' ? 'forging' : ''}`}
+                  className="btn-forge rounded-lg py-2.5 px-5 text-xs self-start"
                 >
-                  {phase === 'executing' ? '⚒ EXECUTING…' : 'APPROVE & EXECUTE ⚒'}
+                  EXECUTE →
                 </button>
               )}
 
+              {/* Executing heatbar */}
               {phase === 'executing' && (
                 <div className="flex items-center gap-3">
                   <div className="heatbar h-2 flex-1">
-                    <span className="forging" style={{ width: '64%' }} />
+                    <span className="forging" style={{ width: '72%' }} />
                   </div>
-                  <p className="font-mono text-xs text-[var(--ember-1)] shrink-0 forging">EXECUTING…</p>
+                  <p className="font-mono text-xs text-[var(--ember-1)] shrink-0 forging">FORGING…</p>
                 </div>
               )}
 
-              {/* Result */}
+              {/* Done */}
               {phase === 'done' && result && (
-                <div
-                  className="rounded-lg px-3 py-2.5 border rise"
-                  style={{ borderColor: 'var(--ember-2)', background: 'rgba(255,122,26,0.06)' }}
-                >
-                  <p className="font-mono text-xs text-[var(--ember-1)]">
-                    forged {result.assetIds.length} asset{result.assetIds.length === 1 ? '' : 's'}
-                    {' · '}{result.videoJobIds.length} video job{result.videoJobIds.length === 1 ? '' : 's'}
-                    {result.montageJobId ? ' · montage ⚒' : ''}
-                    {' · '}published {result.published ? '✓' : '—'}
-                  </p>
-                  {(result.videoJobIds.length > 0 || result.montageJobId) && (
-                    <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-1.5 forging">
-                      rendering video — appears in the gallery when ready…
-                    </p>
-                  )}
-                </div>
+                <p className="font-mono text-xs text-[var(--forge-muted)]">
+                  ✓ {result.assetIds?.length ?? 0} asset{(result.assetIds?.length ?? 0) !== 1 ? 's' : ''} forged — check the gallery.
+                </p>
               )}
             </div>
           )}
