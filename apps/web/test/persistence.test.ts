@@ -19,7 +19,16 @@ describe('buildServices persistence wiring', () => {
 
   it('defaults to in-memory when no env is set', () => {
     delete process.env.FORGECAST_DB;
+    delete process.env.FORGECAST_DATA_DIR;
     const svc = buildServices({ falKey: 'k' });
     expect(svc.projects.constructor.name).toBe('InMemoryProjectRepo');
+  });
+
+  it('uses durable sqlite + filesystem storage when db/dataDir opts are passed (how getServices runs the app)', () => {
+    delete process.env.FORGECAST_DB;
+    delete process.env.FORGECAST_DATA_DIR;
+    const svc = buildServices({ falKey: 'k', db: ':memory:', dataDir: '/tmp/forgecast-test-objects' });
+    expect(svc.projects.constructor.name).toBe('SqliteProjectRepo');
+    expect(svc.storage.constructor.name).toBe('FilesystemStorage');
   });
 });

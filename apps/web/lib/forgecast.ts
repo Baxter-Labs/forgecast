@@ -27,6 +27,10 @@ export interface Services {
 
 export interface BuildServicesOptions {
   falKey?: string;
+  /** SQLite path for durable metadata. Falls back to FORGECAST_DB env, then in-memory. */
+  db?: string;
+  /** Filesystem root for durable asset bytes. Falls back to FORGECAST_DATA_DIR env, then in-memory. */
+  dataDir?: string;
   /** Injectable fetch for the image handler's download step (tests). */
   fetchFn?: typeof fetch;
 }
@@ -42,8 +46,18 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const publishers = new PublisherRegistry();
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
 
-  const dbPath = process.env.FORGECAST_DB;
-  const dataDir = process.env.FORGECAST_DATA_DIR;
+  const dbPath = opts.db ?? process.env.FORGECAST_DB;
+  const dataDir = opts.dataDir ?? process.env.FORGECAST_DATA_DIR;
+
+  // Durable persistence needs BOTH: the DB holds asset metadata, the data dir holds
+  // the bytes. Setting only one splits them (records without files, or vice versa) —
+  // assets break on restart. Warn loudly rather than fail silently.
+  if (Boolean(dbPath) !== Boolean(dataDir)) {
+    console.warn(
+      '[forgecast] Partial persistence config: set BOTH FORGECAST_DB and FORGECAST_DATA_DIR for durable assets, or neither for ephemeral in-memory. ' +
+        `Currently FORGECAST_DB=${dbPath ? 'set' : 'unset'}, FORGECAST_DATA_DIR=${dataDir ? 'set' : 'unset'}.`,
+    );
+  }
 
   let projects: ProjectRepo;
   let assets: AssetRepo;
@@ -91,8 +105,18 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker };
 }
 
-/** Process-wide singleton (in-memory store persists for the server's lifetime). */
+/**
+ * Process-wide singleton for the running app. Defaults to DURABLE persistence in
+ * the working directory (./.forgecast) so generated assets survive restarts and
+ * land on disk — overridable via FORGECAST_DB / FORGECAST_DATA_DIR (e.g. a mounted
+ * volume in production). Tests call buildServices() directly and stay in-memory.
+ */
 export function getServices(): Services {
-  if (!cached) cached = buildServices();
+  if (!cached) {
+    cached = buildServices({
+      db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
+      dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
+    });
+  }
   return cached;
 }
