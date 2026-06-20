@@ -12,3 +12,7 @@ apps/web/.forgecast/
 # Short-video worker: the cloned MoneyPrinter source + its keyed config (not vendored)
 workers/shorts/moneyprinter/
 workers/shorts/config.toml
+
+# Montage render worker: standalone service (not a pnpm workspace member)
+workers/montage/out/
+workers/montage/.remotion/

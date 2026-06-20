@@ -56,6 +56,9 @@ export default defineConfig({
     environment: 'node',
     // Tests live inside packages (which are type-checked by `pnpm typecheck`).
     // Avoid a root-level `test/` glob so no test escapes the strict tsc gate.
+    // workers/montage is a standalone service (excluded from the pnpm workspace)
+    // and runs its own `vitest run` — exclude it from the monorepo sweep.
     include: ['{packages,apps,workers}/*/test/**/*.test.ts'],
+    exclude: ['workers/montage/**'],
   },
 });

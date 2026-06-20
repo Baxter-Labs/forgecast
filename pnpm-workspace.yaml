@@ -2,6 +2,7 @@ packages:
   - packages/*
   - apps/*
   - workers/*
+  - "!workers/montage"
 allowBuilds:
   esbuild: true
   sharp: true
