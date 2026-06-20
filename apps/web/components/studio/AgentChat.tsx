@@ -240,6 +240,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
                   <p className="font-mono text-xs text-[var(--ember-1)]">
                     forged {result.assetIds.length} asset{result.assetIds.length === 1 ? '' : 's'}
                     {' · '}{result.videoJobIds.length} video job{result.videoJobIds.length === 1 ? '' : 's'}
+                    {result.montageJobId ? ' · montage ⚒' : ''}
                     {' · '}published {result.published ? '✓' : '—'}
                   </p>
                 </div>

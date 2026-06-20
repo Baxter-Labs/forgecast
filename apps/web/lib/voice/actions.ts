@@ -17,6 +17,7 @@ export function makeVoiceActions(services: Services): VoiceActions {
       const parts = [`I planned "${plan.concept}".`];
       if (result.assetIds.length) parts.push(`Generated ${result.assetIds.length} image asset${result.assetIds.length > 1 ? 's' : ''}.`);
       if (result.videoJobIds.length) parts.push(`Started ${result.videoJobIds.length} video render${result.videoJobIds.length > 1 ? 's' : ''}.`);
+      if (result.montageJobId) parts.push('Stitched them into a montage video, now rendering.');
       if (result.published) parts.push(`Posted to ${plan.posts.map((p) => p.platform).join(', ')}.`);
       else if (publish) parts.push('Publishing was requested but a publisher is not configured.');
       return parts.join(' ');

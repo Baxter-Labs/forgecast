@@ -5,9 +5,11 @@ import { OpenAiLlmClient } from '../lib/agent/llm';
 
 const savedPix = process.env.PIXVERSE_API_KEY;
 const savedKey = process.env.OPENAI_API_KEY;
+const savedMontage = process.env.MONTAGE_WORKER_URL;
 afterEach(() => {
   if (savedPix === undefined) delete process.env.PIXVERSE_API_KEY; else process.env.PIXVERSE_API_KEY = savedPix;
   if (savedKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedKey;
+  if (savedMontage === undefined) delete process.env.MONTAGE_WORKER_URL; else process.env.MONTAGE_WORKER_URL = savedMontage;
 });
 
 describe('makeForgecastActions', () => {
@@ -25,6 +27,15 @@ describe('makeForgecastActions', () => {
     const pid = await actions.ensureProject('P');
     const { jobId } = await actions.generateVideo(pid, 'a fox', '9:16');
     expect(jobId.length).toBeGreaterThan(0);
+  });
+
+  it('generateMontage degrades to an empty jobId when the montage worker is not configured', async () => {
+    delete process.env.MONTAGE_WORKER_URL;
+    const svc = buildServices({ falKey: 'k' });
+    const actions = makeForgecastActions(svc);
+    const pid = await actions.ensureProject('P');
+    const { jobId } = await actions.generateMontage(pid, ['a1', 'a2'], '9:16');
+    expect(jobId).toBe('');
   });
 });
 
