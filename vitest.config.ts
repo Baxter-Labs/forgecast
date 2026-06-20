@@ -49,6 +49,7 @@ export default defineConfig({
       '@forgecast/store': `${root}packages/store/src/index.ts`,
       '@forgecast/jobs': `${root}packages/jobs/src/index.ts`,
       '@forgecast/catalog': `${root}packages/catalog/src/index.ts`,
+      '@forgecast/agent': `${root}packages/agent/src/index.ts`,
     },
   },
   test: {
