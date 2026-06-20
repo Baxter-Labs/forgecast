@@ -1,4 +1,4 @@
-import type { ContentPlan, ContentPlanItem, PlatformPost } from './types';
+import type { ContentPlan, ContentPlanItem, MontagePlan, PlatformPost } from './types';
 
 export const PLAN_SYSTEM_PROMPT = `You are Forgecast's content planning agent. Given a creative brief and target platforms (plus optional trending notes), produce a concrete, on-trend content plan.
 Respond with ONLY a JSON object (no prose) of the shape:
@@ -6,9 +6,10 @@ Respond with ONLY a JSON object (no prose) of the shape:
   "concept": string,                       // the core creative idea, one sentence
   "trendingNotes": string,                 // how you applied current trends
   "assets": [ { "kind": "image"|"video", "prompt": string, "aspectRatio"?: string } ],
-  "posts":  [ { "platform": string, "caption": string } ]   // one per target platform, tuned to it
+  "posts":  [ { "platform": string, "caption": string } ],  // one per target platform, tuned to it
+  "montage"?: { "aspectRatio"?: string }   // OPTIONAL — include ONLY when the brief wants a single longer-form video stitched from multiple shots (a montage, reel, teaser, slideshow, or "X-second video"); then plan SEVERAL image scenes (3+) as the montage's source frames
 }
-Keep prompts vivid and specific. Prefer 9:16 for short-form video. Make captions native to each platform.`;
+Keep prompts vivid and specific. Prefer 9:16 for short-form video. Make captions native to each platform. When you include a "montage", the generated image assets become its sequential scenes — so order the assets as the video should play.`;
 
 export function buildPlanUserPrompt(brief: string, platforms: string[], trendingNotes?: string): string {
   const lines = [`Brief: ${brief}`, `Target platforms: ${platforms.join(', ') || 'instagram'}`];
@@ -34,6 +35,11 @@ function isPost(v: unknown): v is PlatformPost {
   const o = v as Partial<PlatformPost>;
   return typeof o?.platform === 'string' && o.platform.length > 0 && typeof o?.caption === 'string';
 }
+function parseMontage(v: unknown): MontagePlan | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as { aspectRatio?: unknown };
+  return typeof o.aspectRatio === 'string' ? { aspectRatio: o.aspectRatio } : {};
+}
 
 export function parsePlan(raw: string): ContentPlan {
   let obj: Partial<ContentPlan> = {};
@@ -43,5 +49,6 @@ export function parsePlan(raw: string): ContentPlan {
     trendingNotes: typeof obj.trendingNotes === 'string' ? obj.trendingNotes : undefined,
     assets: Array.isArray(obj.assets) ? obj.assets.filter(isItem) : [],
     posts: Array.isArray(obj.posts) ? obj.posts.filter(isPost) : [],
+    montage: parseMontage(obj.montage),
   };
 }

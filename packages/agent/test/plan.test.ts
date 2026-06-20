@@ -39,4 +39,16 @@ describe('parsePlan', () => {
     expect(plan.assets).toHaveLength(1);
     expect(plan.posts).toHaveLength(1);
   });
+
+  it('parses an optional montage directive with an aspect ratio', () => {
+    const plan = parsePlan(JSON.stringify({ ...planJson, montage: { aspectRatio: '16:9' } }));
+    expect(plan.montage).toEqual({ aspectRatio: '16:9' });
+  });
+
+  it('keeps an empty montage object (requested, default ratio) and drops malformed/absent montage', () => {
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: {} })).montage).toEqual({});
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: 'yes' })).montage).toBeUndefined();
+    expect(parsePlan(JSON.stringify({ ...planJson, montage: ['x'] })).montage).toBeUndefined();
+    expect(parsePlan(JSON.stringify(planJson)).montage).toBeUndefined();
+  });
 });
