@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
@@ -32,6 +34,12 @@ const SCHEMA: string[] = [
 ];
 
 export function openDatabase(path: string): DatabaseSync {
+  // SQLite won't create missing parent directories — it just fails with
+  // "unable to open database file". Create them for file-backed DBs so durable
+  // persistence works out of the box. ':memory:' and special URIs have no dir.
+  if (path !== ':memory:' && !path.startsWith('file:')) {
+    mkdirSync(dirname(path), { recursive: true });
+  }
   const db = new DatabaseSync(path);
   for (const statement of SCHEMA) {
     db.prepare(statement).run();

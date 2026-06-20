@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { newProject, newAsset, newJob } from '@forgecast/core';
 import { openStore } from '../src/index';
 
@@ -39,6 +39,20 @@ describe('SQLite store (durable file)', () => {
       b.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('creates missing parent directories for a fresh db path', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'fc-sqlite-mkdir-'));
+    const path = join(base, 'nested', 'deeper', 'forgecast.db'); // parents do NOT exist yet
+    try {
+      const s = openStore(path); // must not throw "unable to open database file"
+      await s.projects.create(newProject({ name: 'Fresh' }, { id: 'p1', now: 'T1' }));
+      expect((await s.projects.get('p1'))?.name).toBe('Fresh');
+      s.close();
+      expect(existsSync(path)).toBe(true);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
     }
   });
 });
