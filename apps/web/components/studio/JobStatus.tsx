@@ -8,8 +8,8 @@ export function JobStatus({ status, error }: JobStatusProps) {
 
   if (status === 'forging') {
     return (
-      <div className="flex items-center gap-3 mb-4">
-        <div className="heatbar h-2 flex-1">
+      <div role="status" aria-live="polite" className="flex items-center gap-3 mb-4">
+        <div aria-hidden="true" className="heatbar h-2 flex-1">
           <span
             className="forging"
             style={{ width: '42%', transition: 'width 0.4s ease' }}
@@ -23,6 +23,8 @@ export function JobStatus({ status, error }: JobStatusProps) {
   // error
   return (
     <div
+      role="status"
+      aria-live="polite"
       className="panel p-4 mb-4"
       style={{ borderColor: 'rgba(229, 51, 27, 0.4)' }}
     >

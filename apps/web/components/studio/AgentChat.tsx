@@ -60,7 +60,9 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
     <div className="panel p-5 mb-6">
       {/* Header row */}
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="w-full flex items-center justify-between"
       >
         <div className="flex items-center gap-2.5">
@@ -85,7 +87,9 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
         <div className="mt-4 flex flex-col gap-4">
           {/* Brief */}
           <div>
+            <label htmlFor="agent-brief" className="sr-only">Creative brief</label>
             <textarea
+              id="agent-brief"
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
               placeholder="Make a 15s teaser for an eco-friendly sneaker drop…"
@@ -96,13 +100,15 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
           </div>
 
           {/* Platform chips */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Target platforms" className="flex flex-wrap items-center gap-2">
             {PLATFORMS.map((p) => {
               const on = platforms.includes(p);
               return (
                 <button
                   key={p}
+                  type="button"
                   onClick={() => togglePlatform(p)}
+                  aria-pressed={on}
                   className="font-mono text-[11px] px-2.5 py-1 rounded-full border transition-all lowercase"
                   style={on ? {
                     borderColor: 'var(--ember-2)',
@@ -123,6 +129,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
 
           {/* PLAN button */}
           <button
+            type="button"
             onClick={runPlan}
             disabled={!brief.trim() || phase === 'planning' || phase === 'executing'}
             className={`btn-forge rounded-lg py-2.5 px-5 text-xs self-start ${phase === 'planning' ? 'forging' : ''}`}
@@ -215,6 +222,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted }: AgentChatProp
               {/* EXECUTE button */}
               {phase !== 'done' && (
                 <button
+                  type="button"
                   onClick={runExecute}
                   disabled={phase === 'executing'}
                   className={`btn-forge rounded-lg py-2.5 px-5 text-xs self-start ${phase === 'executing' ? 'forging' : ''}`}

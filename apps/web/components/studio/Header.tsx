@@ -59,10 +59,14 @@ export function Header({ providers, pro }: HeaderProps) {
 
         {/* Provider chip + Pro */}
         <div className="flex items-center gap-2.5">
-          <div className="font-mono text-xs flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--forge-border)] bg-[var(--forge-surface-2)]">
+          <div
+            className="font-mono text-xs flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--forge-border)] bg-[var(--forge-surface-2)]"
+            aria-label={hasFal ? 'Image provider: fal connected' : 'No image provider key configured'}
+          >
             {hasFal ? (
               <>
                 <span
+                  aria-hidden="true"
                   className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{ background: 'var(--molten)', boxShadow: '0 0 6px var(--ember-glow)' }}
                 />
@@ -70,7 +74,7 @@ export function Header({ providers, pro }: HeaderProps) {
               </>
             ) : (
               <>
-                <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-[var(--forge-faint)]" />
+                <span aria-hidden="true" className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 border border-[var(--forge-faint)]" />
                 <span className="text-[var(--forge-faint)]">no key</span>
               </>
             )}
@@ -78,6 +82,7 @@ export function Header({ providers, pro }: HeaderProps) {
 
           {pro ? (
             <span
+              aria-label="Pro plan active"
               className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] px-2.5 py-1.5 rounded-full"
               style={{ background: 'var(--molten)', color: '#1a0c03', boxShadow: '0 0 0 1px rgba(255,194,75,0.4), 0 6px 20px -6px var(--ember-glow)' }}
             >
@@ -89,8 +94,10 @@ export function Header({ providers, pro }: HeaderProps) {
                 <span className="font-mono text-[10px] text-[var(--forge-faint)]">{billingNote}</span>
               )}
               <button
+                type="button"
                 onClick={goPro}
                 disabled={busy}
+                aria-label="Upgrade to Pro"
                 className="font-mono text-[11px] uppercase tracking-[0.12em] px-2.5 py-1.5 rounded-full border transition-all"
                 style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)', background: 'transparent' }}
               >
