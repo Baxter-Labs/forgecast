@@ -89,6 +89,29 @@ export async function generateShortVideo(services: Services, projectId: string, 
   return { status: 202, body: { job } };
 }
 
+export async function generateVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.videoProvider.isAvailable()) {
+    return { status: 503, body: { error: 'video provider not configured (set PIXVERSE_API_KEY)' } };
+  }
+  const fields = (input ?? {}) as { prompt?: unknown; aspectRatio?: unknown; duration?: unknown; quality?: unknown; model?: unknown };
+  if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
+    return { status: 400, body: { error: 'prompt is required' } };
+  }
+  const params: Record<string, unknown> = { prompt: fields.prompt };
+  if (typeof fields.aspectRatio === 'string') params.aspectRatio = fields.aspectRatio;
+  if (typeof fields.duration === 'number') params.duration = fields.duration;
+  if (typeof fields.quality === 'string') params.quality = fields.quality;
+  if (typeof fields.model === 'string') params.model = fields.model;
+
+  const job = await services.jobs.create(
+    newJob({ projectId, kind: 'video', provider: 'pixverse', params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}
+
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };

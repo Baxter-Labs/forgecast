@@ -5,7 +5,7 @@ export async function GET() {
   const svc = getServices();
   return NextResponse.json({
     ok: true,
-    providers: { image: svc.imageRegistry.available() },
+    providers: { image: svc.imageRegistry.available(), video: svc.videoProvider.isAvailable() ? ['pixverse'] : [] },
     publishers: svc.publishers.available(),
   });
 }
