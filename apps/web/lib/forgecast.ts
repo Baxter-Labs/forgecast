@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, PublisherRegistry, OmnisocialsPublisher } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -7,8 +7,8 @@ import {
   openStore,
   FilesystemStorage,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, MontageWorker } from '@forgecast/core';
 import { randomId, nowIso } from './ids';
 
 export interface Services {
@@ -22,6 +22,7 @@ export interface Services {
   ids: { randomId: () => string; nowIso: () => string };
   videoWorker: ShortVideoWorker;
   videoProvider: VideoProvider;
+  montageWorker: MontageWorker;
 }
 
 export interface BuildServicesOptions {
@@ -81,9 +82,13 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   if (videoProvider.isAvailable()) {
     handlers.push(new VideoJobHandler({ provider: videoProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
+  const montageWorker = new RemotionMontageWorker({ fetchFn: opts.fetchFn });
+  if (montageWorker.isAvailable()) {
+    handlers.push(new MontageJobHandler({ worker: montageWorker, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
+  }
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker };
 }
 
 /** Process-wide singleton (in-memory store persists for the server's lifetime). */

@@ -1,4 +1,5 @@
 import { newProject, newJob } from '@forgecast/core';
+import type { MontageSpec } from '@forgecast/core';
 import type { Services } from './forgecast';
 
 export interface ApiResult {
@@ -107,6 +108,43 @@ export async function generateVideo(services: Services, projectId: string, input
 
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'video', provider: 'pixverse', params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}
+
+async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string): Promise<MontageSpec | null> {
+  const scenes = [];
+  for (const id of assetIds) {
+    const asset = await services.assets.get(id);
+    if (!asset) continue;
+    scenes.push({ url: `${base.replace(/\/$/, '')}/api/assets/${id}/raw`, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec: 4 });
+  }
+  return scenes.length > 0 ? { scenes, aspectRatio } : null;
+}
+
+export async function generateMontage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.montageWorker.isAvailable()) {
+    return { status: 503, body: { error: 'montage worker not configured (set MONTAGE_WORKER_URL)' } };
+  }
+  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown };
+  const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
+
+  let spec = fields.spec;
+  if (!spec && Array.isArray(fields.assetIds)) {
+    const base = process.env.FORGECAST_BASE_URL;
+    if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the montage worker can fetch your media' } };
+    const ids = fields.assetIds.filter((x): x is string => typeof x === 'string');
+    spec = (await buildSpecFromAssets(services, ids, aspectRatio, base)) ?? undefined;
+  }
+  if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length === 0) {
+    return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };
+  }
+
+  const job = await services.jobs.create(
+    newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
   void services.runner.run(job.id).catch(() => {});
   return { status: 202, body: { job } };
