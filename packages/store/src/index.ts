@@ -7,3 +7,4 @@ export * from './sqlite/assetRepo';
 export * from './sqlite/jobRepo';
 export * from './sqlite/store';
 export * from './fs/storage';
+export * from './r2/storage';
