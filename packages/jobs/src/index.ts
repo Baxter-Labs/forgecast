@@ -3,3 +3,4 @@ export * from './handlers/image';
 export * from './handlers/shortVideo';
 export * from './handlers/video';
 export * from './handlers/montage';
+export * from './handlers/localMontage';
