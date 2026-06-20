@@ -32,10 +32,6 @@ export function Studio() {
   const [ratio, setRatio] = useState('1:1');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
 
-  function toggleAsset(id: string) {
-    setSelectedAssetIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
   function handleForge() {
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
@@ -51,9 +47,9 @@ export function Studio() {
     <div className="max-w-[1400px] mx-auto px-6 py-6 flex flex-col gap-6">
       <Header providers={providers} pro={pro} />
 
-      <div className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
+      <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
         {/* Left: Forge panel */}
-        <div className="rise" style={{ animationDelay: '80ms' }}>
+        <section aria-label="Create" className="rise" style={{ animationDelay: '80ms' }}>
           <ForgePanel
             mode={mode}
             setMode={setMode}
@@ -68,9 +64,9 @@ export function Studio() {
             availability={availability}
             assets={assets}
             selectedAssetIds={selectedAssetIds}
-            toggleAsset={toggleAsset}
+            setSelectedAssetIds={setSelectedAssetIds}
           />
-        </div>
+        </section>
 
         {/* Right: Agent + Status + Gallery */}
         <div className="rise flex flex-col" style={{ animationDelay: '160ms' }}>
@@ -82,7 +78,7 @@ export function Studio() {
           <JobStatus status={status} error={error} />
           <Gallery assets={assets} />
         </div>
-      </div>
+      </main>
     </div>
   );
 }

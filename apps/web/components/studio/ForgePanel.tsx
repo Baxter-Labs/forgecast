@@ -1,6 +1,8 @@
+'use client';
 import type { CatalogModel } from '@forgecast/catalog';
 import { imageModels } from '@forgecast/catalog';
 import type { StudioAsset, Availability } from '@/lib/use-forgecast';
+import { MontageBuilder } from './MontageBuilder';
 
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
@@ -21,10 +23,18 @@ interface ForgePanelProps {
   availability: Availability;
   assets: StudioAsset[];
   selectedAssetIds: string[];
-  toggleAsset: (id: string) => void;
+  setSelectedAssetIds: (ids: string[] | ((p: string[]) => string[])) => void;
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="block font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">
+      {children}
+    </label>
+  );
+}
+
+function FieldHeading({ children }: { children: React.ReactNode }) {
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">
       {children}
@@ -46,7 +56,9 @@ function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string
         return (
           <button
             key={r}
+            type="button"
             onClick={() => setRatio(r)}
+            aria-pressed={selected}
             className="font-mono text-xs px-3 py-1.5 rounded border transition-all"
             style={selected ? {
               borderColor: 'var(--ember-2)',
@@ -69,7 +81,7 @@ function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string
 
 export function ForgePanel({
   mode, setMode, prompt, setPrompt, model, setModel, ratio, setRatio, onForge, forging,
-  availability, assets, selectedAssetIds, toggleAsset,
+  availability, assets, selectedAssetIds, setSelectedAssetIds,
 }: ForgePanelProps) {
   const selectedModel: CatalogModel | undefined = imageModels.find((m) => m.id === model);
   const imageRatios = (selectedModel?.aspectRatios?.length ?? 0) > 0
@@ -101,6 +113,9 @@ export function ForgePanel({
       : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
         : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
+  const forgeAction =
+    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : 'Forge image';
+
   return (
     <div className="panel p-5 flex flex-col gap-6">
       {/* MODE TOGGLE */}
@@ -112,6 +127,7 @@ export function ForgePanel({
             return (
               <button
                 key={seg.id}
+                type="button"
                 onClick={() => { if (available) setMode(seg.id); }}
                 disabled={!available}
                 aria-pressed={active}
@@ -143,8 +159,9 @@ export function ForgePanel({
       {mode === 'image' && (
         <>
           <div>
-            <FieldLabel>Prompt</FieldLabel>
+            <FieldLabel htmlFor="forge-prompt">Prompt</FieldLabel>
             <textarea
+              id="forge-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A lone anvil glowing in a dark smithy, embers rising into black air…"
@@ -154,8 +171,9 @@ export function ForgePanel({
           </div>
 
           <div>
-            <FieldLabel>Model</FieldLabel>
+            <FieldLabel htmlFor="forge-model">Model</FieldLabel>
             <select
+              id="forge-model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className="w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] text-sm px-3 py-2.5 outline-none appearance-none cursor-pointer focus:border-[var(--ember-2)] transition-colors"
@@ -175,7 +193,7 @@ export function ForgePanel({
           </div>
 
           <div>
-            <FieldLabel>Ratio</FieldLabel>
+            <FieldHeading>Ratio</FieldHeading>
             <RatioRow ratios={imageRatios} ratio={ratio} setRatio={setRatio} />
           </div>
         </>
@@ -185,8 +203,9 @@ export function ForgePanel({
       {mode === 'video' && (
         <>
           <div>
-            <FieldLabel>Prompt</FieldLabel>
+            <FieldLabel htmlFor="forge-video-prompt">Prompt</FieldLabel>
             <textarea
+              id="forge-video-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Sparks cascading off molten steel as a hammer strikes, slow motion, cinematic…"
@@ -197,7 +216,7 @@ export function ForgePanel({
           </div>
 
           <div>
-            <FieldLabel>Ratio</FieldLabel>
+            <FieldHeading>Ratio</FieldHeading>
             <RatioRow ratios={VIDEO_RATIOS} ratio={ratio} setRatio={setRatio} />
           </div>
         </>
@@ -206,45 +225,14 @@ export function ForgePanel({
       {/* MONTAGE MODE */}
       {mode === 'montage' && (
         <>
-          <div>
-            <FieldLabel>Scenes</FieldLabel>
-            {assets.length === 0 ? (
-              <p className="font-mono text-xs text-[var(--forge-faint)] py-6 text-center">
-                generate some assets first
-              </p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2 max-h-[180px] overflow-y-auto pr-1">
-                {assets.map((a) => {
-                  const selected = selectedAssetIds.includes(a.id);
-                  return (
-                    <button
-                      key={a.id}
-                      onClick={() => toggleAsset(a.id)}
-                      className="relative aspect-square rounded-md overflow-hidden border transition-all"
-                      style={{
-                        borderColor: selected ? 'var(--ember-2)' : 'var(--forge-border)',
-                        boxShadow: selected ? '0 0 0 2px var(--ember-glow), 0 0 10px var(--ember-glow)' : 'none',
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/assets/${a.id}/raw`}
-                        alt={a.params.prompt ?? ''}
-                        className="w-full h-full object-cover block bg-black"
-                        loading="lazy"
-                      />
-                      {a.type === 'video' && (
-                        <span className="absolute bottom-0.5 left-0.5 text-[10px] leading-none text-[var(--ember-1)]" style={{ textShadow: '0 0 4px #000' }}>▶</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <MontageBuilder
+            assets={assets}
+            selectedAssetIds={selectedAssetIds}
+            setSelectedAssetIds={setSelectedAssetIds}
+          />
 
           <div>
-            <FieldLabel>Ratio</FieldLabel>
+            <FieldHeading>Ratio</FieldHeading>
             <RatioRow ratios={VIDEO_RATIOS} ratio={ratio} setRatio={setRatio} />
           </div>
 
@@ -256,11 +244,13 @@ export function ForgePanel({
 
       {/* FORGE BUTTON */}
       <button
+        type="button"
         onClick={onForge}
         disabled={!canForge}
+        aria-label={forgeAction}
         className={`btn-forge w-full rounded-lg py-3 text-sm flex items-center justify-center gap-2 ${forging ? 'forging' : ''}`}
       >
-        {forgeLabel}
+        <span aria-hidden="true">{forgeLabel}</span>
       </button>
     </div>
   );
