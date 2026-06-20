@@ -212,7 +212,7 @@ export function ForgePanel({
               rows={6}
               className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)]"
             />
-            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">Pixverse · text→video</p>
+            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">fal · text → video</p>
           </div>
 
           <div>

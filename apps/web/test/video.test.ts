@@ -41,7 +41,7 @@ describe('api: short video', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Pixverse video (generate-clip)
+// Generate video (generate-clip) — fal-preferred, Pixverse fallback
 // ──────────────────────────────────────────────────────────────────────────────
 
 const savedPixverse = process.env.PIXVERSE_API_KEY;
@@ -54,29 +54,37 @@ async function project(svc: ReturnType<typeof buildServices>) {
   return (created.body as { project: { id: string } }).project.id;
 }
 
-describe('api: generate video (pixverse)', () => {
-  it('503 when no video provider configured', async () => {
+describe('api: generate video', () => {
+  it('503 when neither fal nor pixverse is configured', async () => {
     delete process.env.PIXVERSE_API_KEY;
-    const svc = buildServices({ falKey: 'k' });
+    const svc = buildServices({ falKey: undefined }); // no FAL_KEY, no PIXVERSE_API_KEY
     const pid = await project(svc);
     expect((await generateVideo(svc, pid, { prompt: 'x' })).status).toBe(503);
   });
 
+  it('uses fal for video when FAL_KEY is set (no Pixverse credits needed)', async () => {
+    delete process.env.PIXVERSE_API_KEY;
+    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+    const pid = await project(svc);
+    const r = await generateVideo(svc, pid, { prompt: 'a fox', aspectRatio: '9:16' });
+    expect(r.status).toBe(202);
+    const body = r.body as { job: { kind: string; status: string; provider: string } };
+    expect(body.job.kind).toBe('video');
+    expect(body.job.provider).toBe('fal-video');
+  });
+
   it('400 without a prompt', async () => {
-    process.env.PIXVERSE_API_KEY = 'k';
     const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const pid = await project(svc);
     expect((await generateVideo(svc, pid, {})).status).toBe(400);
   });
 
-  it('202 queued video job when configured', async () => {
+  it('falls back to Pixverse when only PIXVERSE_API_KEY is set', async () => {
     process.env.PIXVERSE_API_KEY = 'k';
-    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+    const svc = buildServices({ falKey: undefined, fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const pid = await project(svc);
-    const r = await generateVideo(svc, pid, { prompt: 'a fox', aspectRatio: '9:16' });
+    const r = await generateVideo(svc, pid, { prompt: 'a fox' });
     expect(r.status).toBe(202);
-    const body = r.body as { job: { kind: string; status: string } };
-    expect(body.job.kind).toBe('video');
-    expect(body.job.status).toBe('queued');
+    expect((r.body as { job: { provider: string } }).job.provider).toBe('pixverse');
   });
 });

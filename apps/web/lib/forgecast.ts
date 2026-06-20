@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, PixverseVideoProvider, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -86,7 +86,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     fetchFn: opts.fetchFn,
   });
   const videoWorker = new MoneyPrinterWorker();
-  const videoProvider = new PixverseVideoProvider({ fetchFn: opts.fetchFn });
+  // Prefer fal for video (reuses FAL_KEY — no separate Pixverse credits needed);
+  // fall back to Pixverse only if its key is set instead.
+  const videoProvider: VideoProvider = falKey
+    ? new FalVideoProvider({ apiKey: falKey, fetchFn: opts.fetchFn })
+    : new PixverseVideoProvider({ fetchFn: opts.fetchFn });
   const handlers: JobHandler[] = [imageHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(

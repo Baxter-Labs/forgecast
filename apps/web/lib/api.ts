@@ -107,7 +107,7 @@ export async function generateVideo(services: Services, projectId: string, input
   if (typeof fields.model === 'string') params.model = fields.model;
 
   const job = await services.jobs.create(
-    newJob({ projectId, kind: 'video', provider: 'pixverse', params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+    newJob({ projectId, kind: 'video', provider: services.videoProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
   void services.runner.run(job.id).catch(() => {});
   return { status: 202, body: { job } };

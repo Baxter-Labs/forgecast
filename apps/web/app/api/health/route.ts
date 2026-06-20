@@ -7,7 +7,7 @@ export async function GET() {
     ok: true,
     providers: {
       image: svc.imageRegistry.available(),
-      video: svc.videoProvider.isAvailable() ? ['pixverse'] : [],
+      video: svc.videoProvider.isAvailable() ? [svc.videoProvider.name] : [],
       montage: svc.montageWorker.isAvailable() ? ['remotion'] : [],
     },
     publishers: svc.publishers.available(),
