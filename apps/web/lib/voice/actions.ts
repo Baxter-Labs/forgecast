@@ -3,6 +3,7 @@ import type { Services } from '../forgecast';
 import { ContentAgent } from '@forgecast/agent';
 import { makeForgecastActions } from '../agent/forgecast-actions';
 import { OpenAiLlmClient } from '../agent/llm';
+import { maybeTrendTool } from '../agent/trends';
 
 export function makeVoiceActions(services: Services): VoiceActions {
   return {
@@ -10,7 +11,7 @@ export function makeVoiceActions(services: Services): VoiceActions {
       if (!brief || brief.trim().length === 0) return 'Please tell me what content you want to create.';
       const llm = new OpenAiLlmClient();
       if (!llm.isAvailable()) return 'The content agent is not configured yet. Set OPENAI_API_KEY to enable planning.';
-      const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(services) });
+      const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(services), trends: maybeTrendTool() });
       const plan = await agent.plan(brief, platforms ?? ['instagram']);
       const result = await agent.execute(plan, { publish: Boolean(publish) });
       const parts = [`I planned "${plan.concept}".`];

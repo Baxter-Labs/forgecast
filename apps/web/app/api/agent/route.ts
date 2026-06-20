@@ -3,6 +3,7 @@ import { ContentAgent, type ContentPlan } from '@forgecast/agent';
 import { getServices } from '@/lib/forgecast';
 import { makeForgecastActions } from '@/lib/agent/forgecast-actions';
 import { OpenAiLlmClient } from '@/lib/agent/llm';
+import { maybeTrendTool } from '@/lib/agent/trends';
 
 function msg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
 
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   if (!body?.mode) return NextResponse.json({ error: 'mode is required (plan|execute)' }, { status: 400 });
 
   const llm = new OpenAiLlmClient();
-  const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()) });
+  const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
 
   if (body.mode === 'plan') {
     if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY)' }, { status: 503 });
