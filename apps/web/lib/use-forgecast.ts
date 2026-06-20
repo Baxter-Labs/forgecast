@@ -174,13 +174,14 @@ export function useForgecast() {
     try {
       const res = await fetch('/api/agent', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mode: 'execute', plan, ...opts }),
+        // Generate into the project the gallery is showing so results are visible.
+        body: JSON.stringify({ mode: 'execute', plan, projectId, ...opts }),
       });
       return (await res.json().catch(() => ({ error: 'Network error' }))) as { result?: unknown; error?: string };
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'Network error' };
     }
-  }, []);
+  }, [projectId]);
 
   return {
     projectId, providers, availability, pro, refreshPro,

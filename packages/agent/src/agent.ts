@@ -27,9 +27,14 @@ export class ContentAgent {
     return parsePlan(raw);
   }
 
-  /** Execute an approved plan: generate the assets, then (optionally) cast them. */
-  async execute(plan: ContentPlan, opts: { projectName?: string; publish?: boolean } = {}): Promise<ExecutionResult> {
-    const projectId = await this.deps.forgecast.ensureProject(opts.projectName ?? (plan.concept.slice(0, 60) || 'Forgecast'));
+  /**
+   * Execute an approved plan: generate the assets, then (optionally) cast them.
+   * Pass `projectId` to generate into an existing project (e.g. the one the Studio
+   * is already showing) so the results land in the visible gallery; otherwise a
+   * new project is created from the concept.
+   */
+  async execute(plan: ContentPlan, opts: { projectId?: string; projectName?: string; publish?: boolean } = {}): Promise<ExecutionResult> {
+    const projectId = opts.projectId ?? await this.deps.forgecast.ensureProject(opts.projectName ?? (plan.concept.slice(0, 60) || 'Forgecast'));
 
     const assetIds: string[] = [];
     const videoJobIds: string[] = [];

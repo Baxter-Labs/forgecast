@@ -9,7 +9,7 @@ function msg(e: unknown): string { return e instanceof Error ? e.message : Strin
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as
-    | { mode?: string; brief?: string; platforms?: string[]; plan?: ContentPlan; projectName?: string; publish?: boolean }
+    | { mode?: string; brief?: string; platforms?: string[]; plan?: ContentPlan; projectId?: string; projectName?: string; publish?: boolean }
     | null;
   if (!body?.mode) return NextResponse.json({ error: 'mode is required (plan|execute)' }, { status: 400 });
 
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   if (body.mode === 'execute') {
     if (!body.plan) return NextResponse.json({ error: 'plan is required for execute' }, { status: 400 });
     try {
-      const result = await agent.execute(body.plan, { projectName: body.projectName, publish: body.publish });
+      const result = await agent.execute(body.plan, { projectId: body.projectId, projectName: body.projectName, publish: body.publish });
       return NextResponse.json({ result });
     } catch (e) {
       return NextResponse.json({ error: `execute failed: ${msg(e)}` }, { status: 502 });

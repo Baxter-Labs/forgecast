@@ -69,6 +69,21 @@ describe('ContentAgent.execute', () => {
     expect(forgecast.publish).not.toHaveBeenCalled();
   });
 
+  it('reuses an existing project (no new project) when projectId is provided', async () => {
+    const forgecast: ForgecastActions = {
+      ensureProject: vi.fn(async () => 'NEW-PROJECT'),
+      generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
+      generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
+      generateMontage: vi.fn(async () => ({ jobId: 'j-mtg' })),
+      publish: vi.fn(async () => ({ postId: 'p', status: 's' })),
+    };
+    const plan: ContentPlan = { concept: 'c', assets: [{ kind: 'image', prompt: 'a' }], posts: [] };
+    const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(plan, { projectId: 'EXISTING' });
+    expect(forgecast.ensureProject).not.toHaveBeenCalled();
+    expect(forgecast.generateImage).toHaveBeenCalledWith('EXISTING', 'a', undefined);
+    expect(r.projectId).toBe('EXISTING');
+  });
+
   it('skips montage when the plan has no montage directive', async () => {
     const forgecast: ForgecastActions = {
       ensureProject: vi.fn(async () => 'p1'),
