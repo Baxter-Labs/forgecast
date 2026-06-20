@@ -140,17 +140,27 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 }
 
 /**
- * Process-wide singleton for the running app. Defaults to DURABLE persistence in
- * the working directory (./.forgecast) so generated assets survive restarts and
- * land on disk — overridable via FORGECAST_DB / FORGECAST_DATA_DIR (e.g. a mounted
- * volume in production). Tests call buildServices() directly and stay in-memory.
+ * Process-wide singleton for the running app.
+ *
+ * - `local` (default): DURABLE persistence in the working directory (./.forgecast)
+ *   so generated assets survive restarts — overridable via FORGECAST_DB /
+ *   FORGECAST_DATA_DIR (e.g. a mounted volume in production).
+ * - `baxter-cloud`: asset bytes go to R2 (the profile's storage); metadata stays
+ *   in-memory because the edge/Workers runtime has no local SQLite or filesystem.
+ *   Durable edge metadata (D1/Hyperdrive) is a follow-up step.
+ *
+ * Tests call buildServices() directly and stay in-memory.
  */
 export function getServices(): Services {
   if (!cached) {
-    cached = buildServices({
-      db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
-      dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
-    });
+    const profile = process.env.FORGECAST_PROFILE ?? 'local';
+    cached =
+      profile === 'baxter-cloud'
+        ? buildServices({ profile })
+        : buildServices({
+            db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
+            dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
+          });
   }
   return cached;
 }

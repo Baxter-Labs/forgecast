@@ -139,6 +139,8 @@ pnpm -C apps/web dev          # http://localhost:3210
 
 Without a `FAL_KEY`, the Studio runs fine and shows a clear "set FAL_KEY" state — the whole pipeline executes, it just can't reach the provider. Add a [fal.ai](https://fal.ai) key to forge for real.
 
+**Deploy on Cloudflare Workers** (R2-backed `baxter-cloud` profile): see [`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md).
+
 > Postgres/MinIO + a one-command `docker compose up` land in the next milestone; today the store is in-memory (data resets on restart).
 
 ---
