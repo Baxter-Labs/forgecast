@@ -7,8 +7,9 @@ import {
   openStore,
   FilesystemStorage,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler } from '@forgecast/jobs';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, MontageWorker } from '@forgecast/core';
+import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 
 export interface Services {
@@ -23,6 +24,7 @@ export interface Services {
   videoWorker: ShortVideoWorker;
   videoProvider: VideoProvider;
   montageWorker: MontageWorker;
+  montageAvailable: boolean;
 }
 
 export interface BuildServicesOptions {
@@ -101,12 +103,19 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     handlers.push(new VideoJobHandler({ provider: videoProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
   const montageWorker = new RemotionMontageWorker({ fetchFn: opts.fetchFn });
+  // Prefer the remote Remotion worker when MONTAGE_WORKER_URL is set; otherwise render
+  // montages in-process with the bundled ffmpeg binary (no Chromium worker needed).
+  let montageAvailable = false;
   if (montageWorker.isAvailable()) {
     handlers.push(new MontageJobHandler({ worker: montageWorker, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
+    montageAvailable = true;
+  } else if (ffmpegStatic) {
+    handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
+    montageAvailable = true;
   }
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable };
 }
 
 /**

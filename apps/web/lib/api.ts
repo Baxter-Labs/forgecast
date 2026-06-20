@@ -126,8 +126,8 @@ async function buildSpecFromAssets(services: Services, assetIds: string[], aspec
 export async function generateMontage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
-  if (!services.montageWorker.isAvailable()) {
-    return { status: 503, body: { error: 'montage worker not configured (set MONTAGE_WORKER_URL)' } };
+  if (!services.montageAvailable) {
+    return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
   }
   const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown };
   const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';

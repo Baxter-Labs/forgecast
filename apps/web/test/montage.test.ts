@@ -12,10 +12,11 @@ async function project(svc: ReturnType<typeof buildServices>) {
 const spec = { scenes: [{ url: 'https://x/a.png', kind: 'image' as const, durationSec: 3 }], aspectRatio: '9:16' };
 
 describe('api: generate montage', () => {
-  it('503 when no montage worker configured', async () => {
+  it('202 with no worker configured — falls back to in-process ffmpeg', async () => {
     delete process.env.MONTAGE_WORKER_URL;
-    const svc = buildServices({ falKey: 'k' });
-    expect((await generateMontage(svc, await project(svc), { spec })).status).toBe(503);
+    const svc = buildServices({ falKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+    const r = await generateMontage(svc, await project(svc), { spec });
+    expect(r.status).toBe(202);
   });
 
   it('400 without spec or assetIds', async () => {

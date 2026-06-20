@@ -5,4 +5,5 @@ packages:
   - "!workers/montage"
 allowBuilds:
   esbuild: true
+  ffmpeg-static: true
   sharp: true
