@@ -13,6 +13,9 @@ export interface Availability {
   image: boolean;
   video: boolean;
   montage: boolean;
+  voice: boolean;
+  transcribe: boolean;
+  presenter: boolean;
 }
 
 interface RawAsset {
@@ -34,8 +37,11 @@ function normalizeAsset(a: RawAsset): StudioAsset {
 }
 
 interface GenerateImageArgs { prompt: string; model?: string; width?: number; height?: number }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
+interface GenerateVoiceoverArgs { text: string; voice?: string }
+interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
+interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_TRIES = 120;
@@ -43,7 +49,8 @@ const POLL_MAX_TRIES = 120;
 export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
-  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false });
+  const [publishers, setPublishers] = useState<string[]>([]);
+  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
@@ -60,8 +67,13 @@ export function useForgecast() {
       const image: string[] = health?.providers?.image ?? [];
       const video: string[] = health?.providers?.video ?? [];
       const montage: string[] = health?.providers?.montage ?? [];
+      const voice: string[] = health?.providers?.voice ?? [];
+      const transcribe: string[] = health?.providers?.transcribe ?? [];
+      const presenter: string[] = health?.providers?.presenter ?? [];
+      const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
-      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0 });
+      setPublishers(pubs);
+      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
       await refreshPro();
 
@@ -125,13 +137,15 @@ export function useForgecast() {
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio, model }: GenerateVideoArgs): Promise<string | null> => {
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId }: GenerateVideoArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
+      const body: Record<string, unknown> = { prompt, aspectRatio, model };
+      if (imageAssetId) body.imageAssetId = imageAssetId;
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, aspectRatio, model }),
+        body: JSON.stringify(body),
       });
       if (res.status !== 202) { setError(await readError(res, 'Failed to start clip')); setStatus('error'); return null; }
       const { job } = await res.json();
@@ -227,6 +241,103 @@ export function useForgecast() {
     return allAssetIds;
   }, [pollJob, projectId]);
 
+  const publishAsset = useCallback(async (assetId: string, content: string, channels?: string[], publisher?: string): Promise<{ postId?: string; status?: string; error?: string }> => {
+    try {
+      const body: Record<string, unknown> = { content };
+      if (channels && channels.length > 0) body.channels = channels;
+      if (publisher) body.publisher = publisher;
+      const res = await fetch(`/api/assets/${assetId}/publish`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Publish failed (${res.status})` };
+      return data?.published ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
+  const generateVoiceover = useCallback(async ({ text, voice }: GenerateVoiceoverArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const body: Record<string, unknown> = { text };
+      if (voice) body.voice = voice;
+      const res = await fetch(`/api/projects/${projectId}/generate-voiceover`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start voiceover')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const narrateVideo = useCallback(async ({ videoAssetId, text, voice }: NarrateVideoArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const body: Record<string, unknown> = { videoAssetId, text };
+      if (voice) body.voice = voice;
+      const res = await fetch(`/api/projects/${projectId}/narrate`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start narration')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const generatePresenter = useCallback(async ({ imagePrompt, imageUrl, text, audioUrl, voice }: GeneratePresenterArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (imagePrompt) body.imagePrompt = imagePrompt;
+      if (imageUrl) body.imageUrl = imageUrl;
+      if (text) body.text = text;
+      if (audioUrl) body.audioUrl = audioUrl;
+      if (voice) body.voice = voice;
+      const res = await fetch(`/api/projects/${projectId}/generate-presenter`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start presenter')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
+    try {
+      const form = new FormData();
+      form.append('audio', blob, 'rec.webm');
+      const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? `Transcription failed (${res.status})`);
+        return null;
+      }
+      return (body?.text as string | undefined) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error');
+      return null;
+    }
+  }, []);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -252,10 +363,43 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  // Tool-calling "auto-run": the agent brainstorms AND produces the campaign in
+  // one shot via OpenAI function calling. Returns the agentic result transcript.
+  const agentRun = useCallback(async (brief: string, platforms: string[]) => {
+    try {
+      const res = await fetch('/api/agent', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'agentic', brief, platforms, projectId }),
+      });
+      return (await res.json().catch(() => ({ error: 'Network error' }))) as { result?: unknown; error?: string };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId]);
+
+  // After an agentic run, b-roll video jobs and presenter video jobs render in
+  // the background. Poll both tracks to completion, then refresh the gallery.
+  const awaitAgenticJobs = useCallback(async (result: {
+    videoJobIds?: string[];
+    presenterJobIds?: string[];
+  }): Promise<string[]> => {
+    const jobIds = [...(result.videoJobIds ?? []), ...(result.presenterJobIds ?? [])].filter(Boolean);
+    if (jobIds.length === 0) return [];
+    setStatus('forging'); setError(null);
+    const results = await Promise.all(jobIds.map((id) => pollJob(id)));
+    const assetIds = results.flatMap((r) => (r.assetId ? [r.assetId] : []));
+    setStatus(results.some((r) => r.outcome === 'error') ? 'error' : 'idle');
+    await refreshAssets();
+    return assetIds;
+  }, [pollJob, refreshAssets]);
+
   return {
-    projectId, providers, availability, pro, refreshPro,
+    projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
-    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    generateVoiceover, narrateVideo, generatePresenter,
+    publishAsset,
+    agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
+    transcribeAudio,
   };
 }

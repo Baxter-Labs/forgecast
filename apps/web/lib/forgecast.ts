@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -9,8 +9,8 @@ import {
   R2Storage,
   r2OptionsFromEnv,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, MontageWorker } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 
@@ -27,6 +27,12 @@ export interface Services {
   videoProvider: VideoProvider;
   montageWorker: MontageWorker;
   montageAvailable: boolean;
+  voiceProvider: VoiceProvider;
+  voiceAvailable: boolean;
+  transcriber: Transcriber;
+  transcribeAvailable: boolean;
+  presenterProvider: PresenterProvider;
+  presenterAvailable: boolean;
 }
 
 export interface BuildServicesOptions {
@@ -70,10 +76,14 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
-  imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
+  const falImageProvider = new FalImageProvider({ apiKey: falKey });
+  imageRegistry.register(falImageProvider);
 
   const publishers = new PublisherRegistry();
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new InstagramPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new LinkedInPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new YouTubePublisher({ fetchFn: opts.fetchFn }));
 
   const dbPath = opts.db ?? process.env.FORGECAST_DB;
   const dataDir = opts.dataDir ?? process.env.FORGECAST_DATA_DIR;
@@ -134,9 +144,36 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
     montageAvailable = true;
   }
+  const voiceProvider: VoiceProvider = new FalTtsProvider({ fetchFn: opts.fetchFn });
+  if (voiceProvider.isAvailable()) {
+    handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
+  }
+  if (voiceProvider.isAvailable() && ffmpegStatic) {
+    handlers.push(new NarrateJobHandler({ voiceProvider, storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
+  }
+  const voiceAvailable = voiceProvider.isAvailable();
+
+  const transcriber: Transcriber = new WisprFlowTranscriber({ fetchFn: opts.fetchFn });
+  const transcribeAvailable = transcriber.isAvailable();
+
+  const presenterProvider: PresenterProvider = new OmniHumanPresenterProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
+  const presenterAvailable = presenterProvider.isAvailable() && voiceProvider.isAvailable() && falImageProvider.isAvailable();
+  if (presenterAvailable) {
+    handlers.push(new PresenterJobHandler({
+      provider: presenterProvider,
+      imageProvider: falImageProvider,
+      voiceProvider,
+      storage,
+      assets,
+      idGen: randomId,
+      clock: nowIso,
+      fetchFn: opts.fetchFn,
+    }));
+  }
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable };
 }
 
 /**

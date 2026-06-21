@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import type { CatalogModel, VideoModel } from '@forgecast/catalog';
 import { imageModels, videoModels } from '@forgecast/catalog';
-import type { Availability } from '@/lib/use-forgecast';
+import type { Availability, StudioAsset } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
 
@@ -20,11 +20,14 @@ interface ForgePanelProps {
   setModel: (v: string) => void;
   videoModel: string;
   setVideoModel: (v: string) => void;
+  videoImageAssetId: string | null;
+  setVideoImageAssetId: (id: string | null) => void;
   ratio: string;
   setRatio: (v: string) => void;
   onForge: () => void;
   forging: boolean;
   availability: Availability;
+  assets: StudioAsset[];
   montagePrompts: string[];
   setMontagePrompts: (prompts: string[]) => void;
   campaigns: StoredCampaign[];
@@ -89,6 +92,9 @@ function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string
   );
 }
 
+const t2vModels = videoModels.filter((m) => m.mode === 'text-to-video');
+const i2vModels = videoModels.filter((m) => m.mode === 'image-to-video');
+
 function VideoModelSelect({ videoModel, setVideoModel }: { videoModel: string; setVideoModel: (v: string) => void }) {
   const selected = videoModels.find((m) => m.id === videoModel) ?? videoModels[0];
   return (
@@ -102,24 +108,98 @@ function VideoModelSelect({ videoModel, setVideoModel }: { videoModel: string; s
           className={SELECT_CLASS}
           style={SELECT_ARROW}
         >
-          {videoModels.map((m: VideoModel) => (
-            <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
-              {m.name}
-            </option>
-          ))}
+          <optgroup label="Text → Video" style={{ background: '#221b16', color: '#6b5e54' }}>
+            {t2vModels.map((m: VideoModel) => (
+              <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                {m.name}{m.note ? ` — ${m.note}` : ''}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Image → Video" style={{ background: '#221b16', color: '#6b5e54' }}>
+            {i2vModels.map((m: VideoModel) => (
+              <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                {m.name}{m.note ? ` — ${m.note}` : ''}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
       <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
         <span className="text-[var(--ember-1)] opacity-70">{selected?.id ?? videoModel}</span>
         <span className="text-[var(--forge-faint)]"> · fal.ai</span>
+        {selected?.audio && <span className="text-[var(--forge-faint)]"> · native audio</span>}
       </p>
+    </div>
+  );
+}
+
+function ImageSourcePicker({
+  assets,
+  selectedId,
+  onSelect,
+}: {
+  assets: StudioAsset[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const imageAssets = assets.filter((a) => a.type === 'image');
+  if (imageAssets.length === 0) {
+    return (
+      <div>
+        <FieldHeading>Source image</FieldHeading>
+        <p className="font-mono text-[10px] text-[var(--forge-faint)]">no images yet — forge one in Image mode first</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <FieldHeading>Source image</FieldHeading>
+      <div className="grid grid-cols-4 gap-1.5">
+        {imageAssets.slice(0, 16).map((a) => {
+          const sel = a.id === selectedId;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onSelect(sel ? null : a.id)}
+              aria-pressed={sel}
+              className="relative aspect-square rounded overflow-hidden border-2 transition-all"
+              style={sel ? {
+                borderColor: 'var(--ember-2)',
+                boxShadow: '0 0 10px var(--ember-glow)',
+              } : {
+                borderColor: 'var(--forge-border)',
+              }}
+              title={a.params.prompt ?? a.id}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/assets/${a.id}/raw`}
+                alt=""
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+              {sel && (
+                <span
+                  className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold"
+                  style={{ background: 'rgba(255,122,26,0.22)', color: 'var(--ember-1)' }}
+                >
+                  ✓
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 export function ForgePanel({
   mode, setMode, prompt, setPrompt, model, setModel, videoModel, setVideoModel,
+  videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
+  assets,
   montagePrompts, setMontagePrompts,
   campaigns, activeCampaignId, setActiveCampaignId, onCreateCampaign,
 }: ForgePanelProps) {
@@ -147,13 +227,16 @@ export function ForgePanel({
 
   const hasCampaign = !!activeCampaignId;
 
+  const selectedVideoModelDef = videoModels.find((m) => m.id === videoModel);
+  const isI2V = selectedVideoModelDef?.mode === 'image-to-video';
+
   const canForge =
     !forging &&
     hasCampaign &&
     (mode === 'image'
       ? prompt.trim().length > 0
       : mode === 'video'
-        ? prompt.trim().length > 0 && availability.video
+        ? prompt.trim().length > 0 && availability.video && (!isI2V || !!videoImageAssetId)
         : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
@@ -347,6 +430,21 @@ export function ForgePanel({
           </div>
 
           <VideoModelSelect videoModel={videoModel} setVideoModel={setVideoModel} />
+
+          {isI2V && (
+            <>
+              <ImageSourcePicker
+                assets={assets}
+                selectedId={videoImageAssetId}
+                onSelect={setVideoImageAssetId}
+              />
+              {!videoImageAssetId && (
+                <p className="font-mono text-[10px] text-[var(--forge-faint)] -mt-3">
+                  pick a source image above to enable forging
+                </p>
+              )}
+            </>
+          )}
 
           <div>
             <FieldHeading>Ratio</FieldHeading>

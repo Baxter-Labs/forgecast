@@ -8,4 +8,8 @@ export * from './jobengine';
 export * from './video';
 export * from './publish';
 export * from './videogen';
+export * from './voicegen';
 export * from './montage';
+export * from './transcribe';
+export * from './presenter';
+export * from './website';

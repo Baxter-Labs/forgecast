@@ -52,11 +52,15 @@ export class FalVideoProvider implements VideoProvider {
   async create(input: VideoGenInput): Promise<{ taskId: string }> {
     if (!this.apiKey) throw new Error('fal video not configured (set FAL_KEY_VIDEO)');
     const model = input.model ?? this.model;
-    const body: Record<string, unknown> = {
-      prompt: input.prompt,
-      aspect_ratio: input.aspectRatio ?? '16:9',
-      resolution: input.quality ?? '720p',
-    };
+
+    // Build a minimal universal body; model-specific params arrive via input.extra
+    // (populated by the API layer from the catalog's VideoModel.params). This avoids
+    // forcing fields like `resolution` onto models whose schemas don't accept them.
+    const body: Record<string, unknown> = { prompt: input.prompt };
+    if (input.aspectRatio) body.aspect_ratio = input.aspectRatio;
+    if (input.imageUrl) body.image_url = input.imageUrl;       // image-to-video source
+    if (input.extra) Object.assign(body, input.extra);         // per-model params from catalog
+
     const res = await this.fetchFn(`${this.baseUrl}/${model}`, {
       method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body),
     });

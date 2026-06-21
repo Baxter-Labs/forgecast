@@ -8,7 +8,9 @@ import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
 import { CampaignPanel, type StoredCampaign } from './CampaignPanel';
+import { PublishPanel } from './PublishPanel';
 import type { ContentPlan } from '@forgecast/agent';
+import type { StudioAsset } from '@/lib/use-forgecast';
 
 // ─── Persistence keys ────────────────────────────────────────────────────────
 const CAMPAIGNS_KEY = 'forgecast:campaigns';
@@ -85,18 +87,22 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
 // ─── Studio ───────────────────────────────────────────────────────────────────
 export function Studio() {
   const {
-    providers, availability, pro, assets, status, error,
+    providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
-    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    publishAsset,
+    agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
+    transcribeAudio,
   } = useForgecast();
 
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
   const [videoModel, setVideoModel] = useState(videoModels[0]?.id ?? '');
+  const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
+  const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -185,7 +191,7 @@ export function Studio() {
       const { width, height } = ratioToDimensions(ratio);
       void generateImage({ prompt, model, width, height }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel }).then(attach);
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -207,11 +213,14 @@ export function Studio() {
             setModel={setModel}
             videoModel={videoModel}
             setVideoModel={setVideoModel}
+            videoImageAssetId={videoImageAssetId}
+            setVideoImageAssetId={setVideoImageAssetId}
             ratio={ratio}
             setRatio={setRatio}
             onForge={handleForge}
             forging={status === 'forging'}
             availability={availability}
+            assets={assets}
             montagePrompts={montagePrompts}
             setMontagePrompts={setMontagePrompts}
             campaigns={campaigns}
@@ -226,6 +235,7 @@ export function Studio() {
           <AgentChat
             agentPlan={agentPlan}
             agentExecute={agentExecute}
+            agentRun={agentRun}
             onExecuted={(result) => {
               void refreshAssets();
               void awaitAgentJobs(result).then((videoAssetIds) => {
@@ -233,7 +243,13 @@ export function Studio() {
                 if (campId) appendVideoAssets(campId, videoAssetIds);
               });
             }}
+            onAgenticDone={(r) => {
+              void refreshAssets();
+              void awaitAgenticJobs(r);
+            }}
             onCampaignExecuted={addCampaign}
+            transcribeAudio={transcribeAudio}
+            voiceInputAvailable={availability.transcribe}
           />
           <JobStatus status={status} error={error} />
 
@@ -249,7 +265,7 @@ export function Studio() {
                 ? { position: 'relative', width: '100%', transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(0)', opacity: 1 }
                 : { position: 'absolute', inset: 0, transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(-105%)', opacity: 0, pointerEvents: 'none' }}
             >
-              <Gallery assets={assets} />
+              <Gallery assets={assets} onPublish={(asset) => setPublishingAsset(asset)} />
             </div>
 
             {/* History pane */}
@@ -278,6 +294,18 @@ export function Studio() {
               )}
             </div>
           </div>
+
+          {/* Publish panel — slides in when user clicks Cast on an asset */}
+          {publishingAsset && (
+            <div className="rise mt-4" style={{ animationDelay: '0ms' }}>
+              <PublishPanel
+                asset={publishingAsset}
+                publishers={publishers}
+                onPublish={publishAsset}
+                onClose={() => setPublishingAsset(null)}
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>

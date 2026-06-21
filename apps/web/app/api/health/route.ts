@@ -9,6 +9,9 @@ export async function GET() {
       image: svc.imageRegistry.available(),
       video: svc.videoProvider.isAvailable() ? [svc.videoProvider.name] : [],
       montage: svc.montageAvailable ? ['ffmpeg'] : [],
+      voice: svc.voiceAvailable ? [svc.voiceProvider.name] : [],
+      transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
+      presenter: svc.presenterAvailable ? [svc.presenterProvider.name] : [],
     },
     publishers: svc.publishers.available(),
   });
