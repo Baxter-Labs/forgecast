@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -10,7 +10,7 @@ import {
   r2OptionsFromEnv,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 
@@ -29,6 +29,8 @@ export interface Services {
   montageAvailable: boolean;
   voiceProvider: VoiceProvider;
   voiceAvailable: boolean;
+  transcriber: Transcriber;
+  transcribeAvailable: boolean;
 }
 
 export interface BuildServicesOptions {
@@ -148,9 +150,12 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   }
   const voiceAvailable = voiceProvider.isAvailable();
 
+  const transcriber: Transcriber = new WisprFlowTranscriber({ fetchFn: opts.fetchFn });
+  const transcribeAvailable = transcriber.isAvailable();
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable };
 }
 
 /**

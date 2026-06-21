@@ -10,6 +10,7 @@ export async function GET() {
       video: svc.videoProvider.isAvailable() ? [svc.videoProvider.name] : [],
       montage: svc.montageAvailable ? ['ffmpeg'] : [],
       voice: svc.voiceAvailable ? [svc.voiceProvider.name] : [],
+      transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
     },
     publishers: svc.publishers.available(),
   });

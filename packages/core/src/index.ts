@@ -10,3 +10,4 @@ export * from './publish';
 export * from './videogen';
 export * from './voicegen';
 export * from './montage';
+export * from './transcribe';
