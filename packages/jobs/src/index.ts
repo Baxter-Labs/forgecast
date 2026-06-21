@@ -4,3 +4,5 @@ export * from './handlers/shortVideo';
 export * from './handlers/video';
 export * from './handlers/montage';
 export * from './handlers/localMontage';
+export * from './handlers/voiceover';
+export * from './handlers/narrate';
