@@ -121,13 +121,21 @@ export class R2Storage implements StorageDriver {
     return { data: buf, contentType };
   }
 
+  async delete(key: string): Promise<void> {
+    const res = await this.signedFetch('DELETE', key);
+    if (!res.ok && res.status !== 404) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`R2 delete failed (${res.status}) for ${key}: ${text}`);
+    }
+  }
+
   url(key: string): string {
     if (this.publicBaseUrl) return `${this.publicBaseUrl}/${key}`;
     return `${this.endpoint}/${this.bucket}/${encodePath(key)}`;
   }
 
   private async signedFetch(
-    method: 'GET' | 'PUT',
+    method: 'GET' | 'PUT' | 'DELETE',
     key: string,
     body?: Uint8Array,
     contentType?: string,

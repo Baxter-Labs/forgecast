@@ -166,11 +166,13 @@ export function Studio() {
 
   // ── Clear all history + gallery ─────────────────────────────────────────────
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const handleClearAll = useCallback(() => {
+  const handleClearAll = useCallback(async () => {
+    try {
+      await clearAllAssets();
+    } catch { /* best-effort */ }
     setCampaigns([]);
     localStorage.removeItem(CAMPAIGNS_KEY);
     setActiveCampaignId(null);
-    void clearAllAssets();
   }, [clearAllAssets]);
 
   // ── Manual campaign creation (from ForgePanel "+" button) ───────────────────

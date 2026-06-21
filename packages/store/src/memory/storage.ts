@@ -22,6 +22,10 @@ export class InMemoryStorage implements StorageDriver {
     return this.objects.get(key) ?? null;
   }
 
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
+  }
+
   url(key: string): string {
     return `${this.baseUrl}/${key}`;
   }

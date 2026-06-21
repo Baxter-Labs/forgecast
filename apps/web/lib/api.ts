@@ -111,9 +111,17 @@ export async function listAssets(services: Services, projectId: string): Promise
 export async function clearAssets(services: Services, projectId: string): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
-  if (services.assets.deleteByProject) {
-    await services.assets.deleteByProject(projectId);
+  if (!services.assets.deleteByProject) {
+    return { status: 501, body: { error: 'asset deletion not supported by this storage backend' } };
   }
+
+  // Delete storage blobs before removing DB records to avoid orphaning files.
+  const assets = await services.assets.listByProject(projectId);
+  if (services.storage.delete) {
+    await Promise.all(assets.map((a) => services.storage.delete!(a.storageKey)));
+  }
+
+  await services.assets.deleteByProject(projectId);
   return { status: 200, body: { cleared: true } };
 }
 
