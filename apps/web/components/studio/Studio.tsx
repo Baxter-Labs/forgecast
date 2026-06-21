@@ -8,7 +8,9 @@ import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
 import { CampaignPanel, type StoredCampaign } from './CampaignPanel';
+import { PublishPanel } from './PublishPanel';
 import type { ContentPlan } from '@forgecast/agent';
+import type { StudioAsset } from '@/lib/use-forgecast';
 
 // ─── Persistence keys ────────────────────────────────────────────────────────
 const CAMPAIGNS_KEY = 'forgecast:campaigns';
@@ -85,8 +87,9 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
 // ─── Studio ───────────────────────────────────────────────────────────────────
 export function Studio() {
   const {
-    providers, availability, pro, assets, status, error,
+    providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
+    publishAsset,
     agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
   } = useForgecast();
 
@@ -97,6 +100,7 @@ export function Studio() {
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
+  const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -249,7 +253,7 @@ export function Studio() {
                 ? { position: 'relative', width: '100%', transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(0)', opacity: 1 }
                 : { position: 'absolute', inset: 0, transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(-105%)', opacity: 0, pointerEvents: 'none' }}
             >
-              <Gallery assets={assets} />
+              <Gallery assets={assets} onPublish={(asset) => setPublishingAsset(asset)} />
             </div>
 
             {/* History pane */}
@@ -278,6 +282,18 @@ export function Studio() {
               )}
             </div>
           </div>
+
+          {/* Publish panel — slides in when user clicks Cast on an asset */}
+          {publishingAsset && (
+            <div className="rise mt-4" style={{ animationDelay: '0ms' }}>
+              <PublishPanel
+                asset={publishingAsset}
+                publishers={publishers}
+                onPublish={publishAsset}
+                onClose={() => setPublishingAsset(null)}
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>

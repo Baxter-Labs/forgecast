@@ -5,4 +5,7 @@ export * from './video/pixverse';
 export * from './video/fal';
 export * from './publish/registry';
 export * from './publish/omnisocials';
+export * from './publish/instagram';
+export * from './publish/linkedin';
+export * from './publish/youtube';
 export * from './montage/remotion';

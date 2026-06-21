@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -74,6 +74,9 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const publishers = new PublisherRegistry();
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new InstagramPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new LinkedInPublisher({ fetchFn: opts.fetchFn }));
+  publishers.register(new YouTubePublisher({ fetchFn: opts.fetchFn }));
 
   const dbPath = opts.db ?? process.env.FORGECAST_DB;
   const dataDir = opts.dataDir ?? process.env.FORGECAST_DATA_DIR;
