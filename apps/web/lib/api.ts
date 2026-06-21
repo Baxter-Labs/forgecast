@@ -230,6 +230,48 @@ export async function generateNarratedVideo(services: Services, projectId: strin
   return { status: 202, body: { job } };
 }
 
+export async function generatePresenter(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.presenterAvailable) {
+    return { status: 503, body: { error: 'presenter not configured — needs FAL_KEY (image), a voice key, and FAL_KEY_VIDEO (OmniHuman)' } };
+  }
+
+  const fields = (input ?? {}) as {
+    imagePrompt?: unknown;
+    imageUrl?: unknown;
+    text?: unknown;
+    audioUrl?: unknown;
+    voice?: unknown;
+  };
+
+  const hasImage =
+    (typeof fields.imagePrompt === 'string' && fields.imagePrompt.length > 0) ||
+    (typeof fields.imageUrl === 'string' && fields.imageUrl.length > 0);
+  const hasAudio =
+    (typeof fields.text === 'string' && fields.text.length > 0) ||
+    (typeof fields.audioUrl === 'string' && fields.audioUrl.length > 0);
+
+  if (!hasImage) return { status: 400, body: { error: 'imagePrompt or imageUrl is required' } };
+  if (!hasAudio) return { status: 400, body: { error: 'text or audioUrl is required' } };
+
+  const params: Record<string, unknown> = {};
+  if (typeof fields.imagePrompt === 'string') params.imagePrompt = fields.imagePrompt;
+  if (typeof fields.imageUrl === 'string') params.imageUrl = fields.imageUrl;
+  if (typeof fields.text === 'string') params.text = fields.text;
+  if (typeof fields.audioUrl === 'string') params.audioUrl = fields.audioUrl;
+  if (typeof fields.voice === 'string') params.voice = fields.voice;
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'presenter', provider: services.presenterProvider.name, params },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}
+
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };

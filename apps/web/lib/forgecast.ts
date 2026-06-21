@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -9,8 +9,8 @@ import {
   R2Storage,
   r2OptionsFromEnv,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 
@@ -31,6 +31,8 @@ export interface Services {
   voiceAvailable: boolean;
   transcriber: Transcriber;
   transcribeAvailable: boolean;
+  presenterProvider: PresenterProvider;
+  presenterAvailable: boolean;
 }
 
 export interface BuildServicesOptions {
@@ -74,7 +76,8 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
-  imageRegistry.register(new FalImageProvider({ apiKey: falKey }));
+  const falImageProvider = new FalImageProvider({ apiKey: falKey });
+  imageRegistry.register(falImageProvider);
 
   const publishers = new PublisherRegistry();
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
@@ -153,9 +156,24 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const transcriber: Transcriber = new WisprFlowTranscriber({ fetchFn: opts.fetchFn });
   const transcribeAvailable = transcriber.isAvailable();
 
+  const presenterProvider: PresenterProvider = new OmniHumanPresenterProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
+  const presenterAvailable = presenterProvider.isAvailable() && voiceProvider.isAvailable() && falImageProvider.isAvailable();
+  if (presenterAvailable) {
+    handlers.push(new PresenterJobHandler({
+      provider: presenterProvider,
+      imageProvider: falImageProvider,
+      voiceProvider,
+      storage,
+      assets,
+      idGen: randomId,
+      clock: nowIso,
+      fetchFn: opts.fetchFn,
+    }));
+  }
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable };
 }
 
 /**

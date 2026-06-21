@@ -15,6 +15,7 @@ export interface Availability {
   montage: boolean;
   voice: boolean;
   transcribe: boolean;
+  presenter: boolean;
 }
 
 interface RawAsset {
@@ -40,6 +41,7 @@ interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: stri
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
+interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_TRIES = 120;
@@ -48,7 +50,7 @@ export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
   const [publishers, setPublishers] = useState<string[]>([]);
-  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false, transcribe: false });
+  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
@@ -67,10 +69,11 @@ export function useForgecast() {
       const montage: string[] = health?.providers?.montage ?? [];
       const voice: string[] = health?.providers?.voice ?? [];
       const transcribe: string[] = health?.providers?.transcribe ?? [];
+      const presenter: string[] = health?.providers?.presenter ?? [];
       const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
       setPublishers(pubs);
-      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0 });
+      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
       await refreshPro();
 
@@ -294,6 +297,30 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  const generatePresenter = useCallback(async ({ imagePrompt, imageUrl, text, audioUrl, voice }: GeneratePresenterArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (imagePrompt) body.imagePrompt = imagePrompt;
+      if (imageUrl) body.imageUrl = imageUrl;
+      if (text) body.text = text;
+      if (audioUrl) body.audioUrl = audioUrl;
+      if (voice) body.voice = voice;
+      const res = await fetch(`/api/projects/${projectId}/generate-presenter`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start presenter')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
   const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
     try {
       const form = new FormData();
@@ -340,7 +367,7 @@ export function useForgecast() {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
-    generateVoiceover, narrateVideo,
+    generateVoiceover, narrateVideo, generatePresenter,
     publishAsset,
     agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
     transcribeAudio,
