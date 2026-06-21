@@ -15,7 +15,17 @@
   "vars": {
     // Store generated asset bytes in Cloudflare R2 (via the S3 API in R2Storage).
     "FORGECAST_PROFILE": "baxter-cloud"
-  }
+  },
+  // Edge-durable metadata (projects/assets/jobs) so state survives across isolates.
+  // Schema self-initializes on first use; or run:
+  //   wrangler d1 execute forgecast-db --remote --file d1/schema.sql
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forgecast-db",
+      "database_id": "29652570-edb0-40f1-aef7-297db4e43910"
+    }
+  ]
   // R2 credentials are secrets — set them with `wrangler secret put`:
   //   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
   //   (optional) R2_PUBLIC_BASE_URL, R2_ENDPOINT
