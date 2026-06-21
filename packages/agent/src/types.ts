@@ -90,4 +90,6 @@ export interface ForgecastActions {
   /** Generate a talking-head presenter video: a person presenting the product, lip-synced to a voice-over. */
   generatePresenter(projectId: string, opts: { imagePrompt: string; script: string; voice?: string }): Promise<{ jobId: string }>;
   publish(assetId: string, content: string, channels?: string[]): Promise<{ postId: string; status: string }>;
+  /** Fetch and read a product's website, returning a compact LLM-readable summary. */
+  readWebsite(url: string): Promise<{ summary: string }>;
 }

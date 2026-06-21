@@ -1,6 +1,21 @@
 import type { ForgecastActions } from '@forgecast/agent';
 import type { Services } from '../forgecast';
 import { createProject, generateImage, generatePresenter, generateVideo, publishAsset } from '../api';
+import { HttpWebsiteReader } from '@forgecast/providers';
+import type { WebsiteInfo } from '@forgecast/core';
+
+const websiteReader = new HttpWebsiteReader();
+
+function formatWebsite(info: WebsiteInfo): string {
+  const lines: string[] = [`Website: ${info.url}`];
+  if (info.title) lines.push(`Title: ${info.title}`);
+  if (info.siteName) lines.push(`Brand: ${info.siteName}`);
+  if (info.description) lines.push(`Summary: ${info.description}`);
+  if (info.headings.length > 0) lines.push(`Key sections: ${info.headings.join(' · ')}`);
+  if (info.text) lines.push(`Content: ${info.text}`);
+  if (info.images.length > 0) lines.push(`Product images: ${info.images.join(', ')}`);
+  return lines.join('\n');
+}
 
 const RATIO_TO_DIM: Record<string, { width: number; height: number }> = {
   '1:1': { width: 1024, height: 1024 },
@@ -42,6 +57,14 @@ export function makeForgecastActions(services: Services): ForgecastActions {
       const r = await publishAsset(services, assetId, { content, channels });
       const pub = (r.body as { published?: { postId: string; status: string } }).published;
       return pub ?? { postId: '', status: 'error' };
+    },
+    async readWebsite(url: string): Promise<{ summary: string }> {
+      try {
+        const info = await websiteReader.read(url);
+        return { summary: formatWebsite(info) };
+      } catch (e) {
+        return { summary: 'Could not read that website: ' + (e instanceof Error ? e.message : String(e)) };
+      }
     },
   };
 }

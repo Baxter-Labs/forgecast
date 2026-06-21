@@ -20,7 +20,18 @@ export async function POST(req: Request) {
     if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY)' }, { status: 503 });
     if (typeof body.brief !== 'string' || body.brief.trim().length === 0) return NextResponse.json({ error: 'brief is required' }, { status: 400 });
     try {
-      const plan = await agent.plan(body.brief, body.platforms ?? ['instagram']);
+      // Detect a URL/domain in the brief and pre-fetch website context to enrich planning.
+      const urlMatch = body.brief.match(/\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[\S]*)?/i);
+      let planBrief = body.brief;
+      if (urlMatch) {
+        try {
+          const { summary } = await makeForgecastActions(getServices()).readWebsite(urlMatch[0]);
+          planBrief = `Website context:\n${summary}\n\nBrief: ${body.brief}`;
+        } catch {
+          // On error, proceed with the original brief unchanged.
+        }
+      }
+      const plan = await agent.plan(planBrief, body.platforms ?? ['instagram']);
       return NextResponse.json({ plan });
     } catch (e) {
       return NextResponse.json({ error: `planning failed: ${msg(e)}` }, { status: 502 });

@@ -26,6 +26,8 @@ export interface ToolCallingAgentRunOpts {
 
 const SYSTEM_PROMPT = `You are Forgecast's creative director — an autonomous agent that turns a product brief into a short, scroll-stopping social campaign and then PRODUCES it by calling tools.
 
+If the brief contains a website URL or a domain name, your FIRST action must be to call read_website on it, then base the concept, visuals, and copy on the real product and brand from that site.
+
 Given the brief (and any trending notes), first brainstorm a tight campaign idea, then build it. You MUST make at least one image and at least one video. For every video, DECIDE which format best fits the beat:
 - generate_broll_video → a silent, cinematic product b-roll clip (mood, beauty shots, the product in motion). No spokesperson.
 - generate_presenter_video → a real-looking person presenting the product to camera, lip-synced to a spoken voice-over. Use this when a spokesperson, explainer, or human hook adds value.
@@ -33,6 +35,18 @@ Given the brief (and any trending notes), first brainstorm a tight campaign idea
 Prefer 9:16 (vertical) for social. Keep presenter scripts under ~25 seconds of speech. Do not call more than a few tools — be decisive. When the campaign's assets are produced, call finish with a summary of what you made.`;
 
 const TOOLS: LlmTool[] = [
+  {
+    name: 'read_website',
+    description:
+      "Fetch and read a product's website to understand the product, brand, and messaging. Call this FIRST whenever the brief contains a website URL or domain name, then ground the whole campaign in what you learn from the site.",
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The website URL or domain to read' },
+      },
+      required: ['url'],
+    },
+  },
   {
     name: 'generate_image',
     description: 'Generate a still product/hero image.',
@@ -143,7 +157,12 @@ export class ToolCallingAgent {
         const args = safeParse(tc.argumentsJson);
         let result = 'unknown tool';
 
-        if (tc.name === 'generate_image') {
+        if (tc.name === 'read_website') {
+          const url = asString(args.url) ?? '';
+          const { summary } = await this.deps.forgecast.readWebsite(url);
+          result = summary;
+          steps.push({ tool: tc.name, summary: 'read ' + url });
+        } else if (tc.name === 'generate_image') {
           const prompt = asString(args.prompt) ?? '';
           const { assetId } = await this.deps.forgecast.generateImage(projectId, prompt);
           if (assetId) {

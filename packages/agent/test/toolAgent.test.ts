@@ -9,6 +9,7 @@ function makeForgecast(): ForgecastActions {
     generateVideo: vi.fn(async () => ({ jobId: 'vid1' })),
     generatePresenter: vi.fn(async () => ({ jobId: 'pres1' })),
     publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
+    readWebsite: vi.fn(async () => ({ summary: '' })),
   };
 }
 
@@ -87,5 +88,27 @@ describe('ToolCallingAgent.run', () => {
     const result = await new ToolCallingAgent({ llm, forgecast }).run('a product', { projectId: 'EXISTING' });
     expect(forgecast.ensureProject).not.toHaveBeenCalled();
     expect(result.projectId).toBe('EXISTING');
+  });
+
+  it('calls readWebsite when the LLM emits a read_website tool call and records a step', async () => {
+    const responses: { content: string; toolCalls: LlmToolCall[] }[] = [
+      { content: '', toolCalls: [call('read_website', { url: 'https://acme.com' })] },
+      { content: '', toolCalls: [call('finish', { summary: 'done' })] },
+    ];
+    let n = 0;
+    const llm: LlmClient = {
+      complete: vi.fn(),
+      chat: vi.fn(async () => responses[n++]!),
+    };
+    const forgecast = makeForgecast();
+    (forgecast.readWebsite as ReturnType<typeof vi.fn>).mockResolvedValue({ summary: 'ACME sells eco shoes' });
+
+    const result = await new ToolCallingAgent({ llm, forgecast }).run('check out https://acme.com');
+
+    expect(forgecast.readWebsite).toHaveBeenCalledWith('https://acme.com');
+    const readStep = result.steps.find((s) => s.tool === 'read_website');
+    expect(readStep).toBeDefined();
+    expect(readStep!.summary).toBe('read https://acme.com');
+    expect(result.summary).toBe('done');
   });
 });
