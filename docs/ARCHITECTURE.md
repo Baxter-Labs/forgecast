@@ -1,83 +1,136 @@
-# Forgecast — Architecture (the spine)
+# Forgecast — Architecture
 
-This document is the bird's-eye view of *how Forgecast is built* and *why it's shaped this way*. The short version: **everything points inward to a set of pure contracts, so any concrete piece — a model provider, a database, a storage backend, a cloud — is a swappable adapter.** That is the entire design.
+The short version: **everything depends inward on `@forgecast/core`'s pure contracts**, so any concrete piece — a model provider, a database, a storage backend, a publishing adapter — is a swappable adapter that drops in with zero changes to everything above it.
 
 ---
 
 ## 1. Principles
 
-- **Dependency inversion.** `@forgecast/core` defines *interfaces* (contracts) and pure types with **zero I/O**. Every other package depends on those contracts, never the reverse. You can read and test any unit without reading the others.
-- **Pluggable everything.** Generation, storage, persistence, and (soon) distribution are interfaces. The default implementations are *cloud* (run anywhere, no GPU) and *in-memory* (for dev/tests); production swaps in real backends behind the same interfaces with **no changes upstream**.
-- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection, so the whole system is unit-tested with mocks — no network, no GPU, no database required to run the suite.
-- **Two interfaces, one spine.** Each capability is exposed as a web API (for humans) *and* an MCP tool (for agents).
+- **Dependency inversion.** `@forgecast/core` defines interfaces (contracts) and pure types with **zero I/O**. Every other package depends on those contracts, never the reverse.
+- **Pluggable everything.** Generation, storage, persistence, publishing, voice, and distribution are all interfaces. The default implementations are cloud-backed (no GPU) and in-memory (for dev/tests); SQLite + filesystem and Cloudflare D1 + R2 are the production backends.
+- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection — the whole suite is mock-tested with no network, GPU, or database. 141 tests, all offline.
+- **Two front doors, one spine.** Each capability is exposed as an HTTP route (for humans and the Studio UI) and as an MCP tool (for agents and Claude Desktop).
 
 ---
 
 ## 2. Package graph
 
 ```
-                         @forgecast/core
-            (Project, Asset, Job · ImageProvider · ProjectRepo/AssetRepo/JobRepo
-             · StorageDriver · JobHandler/JobRunner contracts · factories)
-                    ▲             ▲              ▲
-        ┌───────────┘             │              └─────────────┐
- @forgecast/providers      @forgecast/store            @forgecast/catalog
- ImageProviderRegistry     InMemory*Repo +             typed model list
- + FalImageProvider        InMemoryStorage             (51 t2i models)
-        ▲                         ▲
-        └────────────┬────────────┘
-                @forgecast/jobs
-         JobRunner (lifecycle) + ImageJobHandler
-                     ▲
-                  apps/web
-        Next.js spine API + Image Studio UI
-              (+ MCP surface — planned)
+                              @forgecast/core
+      (Project, Asset, Job · ImageProvider · VideoProvider · VoiceProvider
+       PresenterProvider · MontageWorker · Transcriber · Publisher
+       ProjectRepo / AssetRepo / JobRepo · StorageDriver
+       JobHandler / JobRunner · ShortVideoWorker)
+          ▲             ▲             ▲              ▲
+   ┌──────┘        ┌────┘        ┌───┘          ┌───┘
+@forgecast/    @forgecast/   @forgecast/    @forgecast/
+ providers       store          jobs           agent
+ (adapters:    (repos +      (JobRunner +    (ContentAgent:
+  image, video, storage:      handlers:       LLM plan →
+  TTS, montage, in-memory,    image, video,   execute →
+  publish,      SQLite/FS,    short_video,    publish)
+  presenter)    D1, R2)       montage,
+                              voiceover,
+     ▲               ▲        narrate,
+     └───────┬────────┘        presenter)
+             ▲              ▲
+       @forgecast/catalog   │
+       (typed model list)   │
+                  ▲         │
+               apps/web ────┘
+       (Next.js spine API + Studio UI)
+                  ▲
+               apps/mcp
+       (MCP server — forgecast_* tools)
 ```
 
-| Package | Responsibility | Depends on |
+| Package / App | Responsibility | Depends on |
 |---|---|---|
 | `@forgecast/core` | Pure types + all contracts. No side effects. | — |
-| `@forgecast/providers` | `ImageProviderRegistry` + the fal.ai adapter | core |
-| `@forgecast/store` | In-memory repositories + storage (Postgres/MinIO next, same interfaces) | core |
 | `@forgecast/catalog` | Vendored, typed text-to-image model catalog | — |
-| `@forgecast/jobs` | `JobRunner` + `ImageJobHandler` | core, providers |
-| `apps/web` | Composition root: spine API + Studio UI | all of the above |
+| `@forgecast/providers` | All adapters: image (fal), video (fal/PixVerse), short-video (MoneyPrinter), TTS (fal), montage (Remotion), presenter (OmniHuman), publishing (Instagram/LinkedIn/YouTube/OmniSocials), transcription (WisprFlow), website fetcher | core |
+| `@forgecast/store` | Repositories + storage: in-memory (dev), SQLite/FS (local durable), Cloudflare D1/R2 (edge) | core |
+| `@forgecast/jobs` | `JobRunner` lifecycle + all `JobHandler`s | core, providers |
+| `@forgecast/agent` | `ContentAgent`: LLM-driven content planning + execution + publishing | core |
+| `apps/web` | Composition root: spine HTTP API + Studio UI | all packages |
+| `apps/mcp` | MCP server: `forgecast_*` tools over the spine HTTP API | — (HTTP client) |
+| `workers/montage` | Remotion render service (Docker). Called by `RemotionMontageWorker`. | — |
+| `workers/shorts` | MoneyPrinterTurbo setup (Docker). Called by `MoneyPrinterWorker`. | — |
 
 ---
 
-## 3. The provider contract (the heart)
+## 3. Provider contracts
+
+All provider contracts live in `@forgecast/core`. The key ones:
 
 ```ts
-export interface ImageProvider {
+interface ImageProvider {
   readonly name: string;
-  isAvailable(): boolean;                                  // has creds/config?
+  isAvailable(): boolean;
   generateImage(input: GenerateImageInput): Promise<ImageResult>;
+}
+
+interface VideoProvider {
+  readonly name: string;
+  isAvailable(): boolean;
+  generateVideo(input: GenerateVideoInput): Promise<VideoResult>;
+}
+
+interface VoiceProvider {
+  readonly name: string;
+  isAvailable(): boolean;
+  synthesize(input: SynthesizeInput): Promise<VoiceResult>;
+}
+
+interface MontageWorker {
+  isAvailable(): boolean;
+  render(spec: MontageSpec): Promise<{ taskId: string }>;
+  poll(taskId: string): Promise<MontageTaskResult>;
+}
+
+interface Publisher {
+  readonly platform: string;
+  isAvailable(): boolean;
+  publish(post: PublishPost): Promise<PublishResult>;
+}
+
+interface Transcriber {
+  isAvailable(): boolean;
+  transcribe(audio: TranscribeInput): Promise<string>;
 }
 ```
 
-- `isAvailable()` powers **graceful degradation** — a provider with no API key is reported unavailable and never offered, instead of crashing.
-- Providers are chosen by name from a registry; the platform is unaware of which adapter is active.
-- **Cloud-default / local-optional:** the shipped adapter is `FalImageProvider` (cloud, BYO key). A local Stable Diffusion adapter is just another class implementing this interface — the canonical way to contribute (see `CONTRIBUTING.md`).
-
-The same pattern will extend to `VideoProvider`, `TtsProvider`, `ScriptProvider`, `StockProvider`.
+`isAvailable()` powers **graceful degradation** — a provider missing its API key reports unavailable and is never offered, instead of crashing. Providers are selected by name from registries; the platform is unaware of which adapter is active.
 
 ---
 
-## 4. Data model & repositories
+## 4. Data model
 
 ```ts
 interface Project { id; name; createdAt }
 interface Asset   { id; projectId; type; provider; params; storageKey; status; createdAt }
-interface Job     { id; projectId; kind; provider; params; status; progress; resultAssetId?; error?; ... }
+interface Job     {
+  id; projectId; kind; provider; params;
+  status; progress; resultAssetId?; error?;
+  createdAt; startedAt?; completedAt?
+}
 ```
 
-Persistence is behind interfaces — `ProjectRepo`, `AssetRepo`, `JobRepo` — implemented today by `InMemory*Repo` and (next milestone) by Postgres repos behind the **same** signatures. Generation is always **Job → (async) → Asset**; the UI and MCP both create Jobs and read status, never blocking on a render.
+Generation is always **Job → (async) → Asset**. The UI and MCP both create jobs and poll status — they never block on a render.
 
-`StorageDriver` (`put` / `get` / `url`) abstracts object storage — `InMemoryStorage` for dev, S3/MinIO and Cloudflare R2 next.
+Persistence is behind interfaces (`ProjectRepo`, `AssetRepo`, `JobRepo`) with three implementations:
+
+| Backend | Class | When used |
+|---|---|---|
+| In-memory | `InMemory*Repo` | Dev / tests (data resets on restart) |
+| SQLite + filesystem | `Sqlite*Repo` + `FilesystemStorage` | Local durable (`FORGECAST_DATA_DIR` set) |
+| Cloudflare D1 + R2 | `D1*Repo` + `R2Storage` | Edge deployment (`baxter-cloud` profile) |
+
+`StorageDriver` (`put` / `get` / `url`) abstracts object storage behind the same interface across all backends.
 
 ---
 
-## 5. The job engine
+## 5. Job engine
 
 ```ts
 interface JobHandler { readonly kind: JobKind; run(job, report): Promise<JobOutcome> }
@@ -85,58 +138,91 @@ type ProgressReporter = (progress: number) => void | Promise<void>;
 ```
 
 `JobRunner.run(jobId)`:
+1. Loads the job (unknown id → throws; unknown kind → marks job `error`).
+2. Transitions to `running` (progress 0).
+3. Invokes the matching `JobHandler`, persisting progress as it reports.
+4. On success → `done` + `resultAssetId`; on throw → `error` with message captured.
 
-1. loads the job (unknown id → throws; unknown kind → marks the job `error`),
-2. transitions it to `running` (progress 0),
-3. invokes the matching `JobHandler`, persisting progress as it reports,
-4. on success → `done` + `resultAssetId`; on throw → `error` with the message captured.
+Registered handlers:
 
-`ImageJobHandler` (kind `image`) is the first handler:
-
-```
-validate prompt → registry.get(provider).generateImage() → download bytes (injectable fetch)
-→ StorageDriver.put() → AssetRepo.create() → return { assetId }
-```
-
-Today the runner executes in-process (image gen is fast). When durable queues arrive (Redis/Cloudflare Queues) for long renders like video, the **same `JobHandler` contract** runs behind the queue — the API shape (`create job → poll status`) doesn't change.
-
----
-
-## 6. The web app (`apps/web`)
-
-- **Composition root** `lib/forgecast.ts` — `buildServices()` wires the registry (+ fal), the in-memory store, the image handler, and the runner; `getServices()` is the process singleton. Everything is injectable (`falKey`, `fetchFn`) so the route logic is unit-tested offline.
-- **Route logic** `lib/api.ts` — pure `(services, input) → { status, body }` functions, fully tested. The Next.js route handlers are thin wrappers.
-- **API surface** — `POST/GET /api/projects`, `POST /api/projects/[id]/generate`, `GET /api/jobs/[id]`, `GET /api/projects/[id]/assets`, `GET /api/assets/[id]/raw` (serves bytes), `GET /api/health`.
-- **Studio UI** — a "Molten Forge" aesthetic (Bricolage Grotesque + IBM Plex, warm-charcoal canvas, molten ember accents, grain/glow). Components: `Header`, `ForgePanel` (prompt · model picker from the catalog · ratio chips · Forge button), `JobStatus` (heat-bar + error card), `Gallery`/`AssetCard`, `EmptyState`. The `useForgecast` hook drives projects → generate → gallery.
-
-### MCP surface (planned)
-
-A thin `apps/mcp` package will wrap the same spine API as MCP tools (`create_project`, `generate_image`, `get_job`, `list_assets`, later `publish_*`), so external agents (Claude Code) and a future in-app agent drive the exact actions humans do.
-
----
-
-## 7. Deployment profiles
-
-The OSS core stays **cloud-agnostic**; clouds are opt-in profiles, never a requirement.
-
-| Layer | `local` (default) | `baxter-cloud` (optional) |
+| Handler | Kind | What it does |
 |---|---|---|
-| Storage | MinIO (S3-compatible) | Cloudflare **R2** (zero egress) ✅ |
-| AI generation | BYO keys (fal, Edge TTS, …) | GCP **Vertex AI** (Imagen/Veo/Gemini/Cloud TTS) |
-| Heavy/local-model workers | local | GCP **GPU** (Cloud Run / GKE) |
-| Data | Postgres + Redis (containers) | Cloud SQL + Memorystore |
-| Exposure | localhost | Cloudflare **Tunnel** |
-
-Because storage is S3-compatible, providers are interfaces, and workers are containerized HTTP services, switching profiles is **configuration, not a rewrite**.
-
-**Selecting a profile.** The composition root (`apps/web/lib/forgecast.ts`) reads `FORGECAST_PROFILE` (`local` default, or `baxter-cloud`). Under `baxter-cloud`, asset bytes are stored in Cloudflare R2 via `R2Storage` (`packages/store`, an S3-compatible `StorageDriver` that signs requests with AWS SigV4 — no SDK dependency), configured by `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (+ optional `R2_PUBLIC_BASE_URL` for CDN serving, `R2_ENDPOINT` override). If R2 is unconfigured it falls back to local storage with a warning. The GCP (Vertex/GPU/Cloud SQL) and Cloudflare Tunnel layers remain on the M1.5 roadmap.
+| `ImageJobHandler` | `image` | validate → `ImageProvider.generateImage()` → download → store → asset |
+| `VideoJobHandler` | `video` | `VideoProvider.generateVideo()` → poll → download → store → asset |
+| `ShortVideoJobHandler` | `short_video` | drive MoneyPrinterTurbo worker → download MP4 → store → asset |
+| `MontageJobHandler` | `montage` | drive Remotion worker → poll → download MP4 → store → asset |
+| `LocalMontageJobHandler` | `local_montage` | in-process montage fallback |
+| `VoiceoverJobHandler` | `voiceover` | `VoiceProvider.synthesize()` → store audio → asset |
+| `NarrateJobHandler` | `narrate` | script generation + TTS in sequence |
+| `PresenterJobHandler` | `presenter` | `PresenterProvider` → avatar video → store → asset |
 
 ---
 
-## 8. Testing philosophy
+## 6. The content agent (`@forgecast/agent`)
+
+`ContentAgent` is an LLM-powered planner that drives the same spine actions humans use via the Studio:
+
+1. **Plan:** calls an LLM with the user's brief + optional trend data (Agent-Reach). Returns a structured `ContentPlan` (concept, assets array, publish targets).
+2. **Execute:** iterates the plan — `generateImage` / `generateVideo` per asset, `publish` per target.
+
+Dependencies are injected (`LlmClient`, `ForgecastActions`, `TrendTool?`) so the agent is fully offline-testable. The web app exposes `POST /api/agent` (chat-style streaming) and the Studio has a chat panel to drive it.
+
+---
+
+## 7. The web app (`apps/web`)
+
+- **Composition root** `lib/forgecast.ts` — `buildServices()` wires all providers, repos, storage, job handlers, and the runner based on environment. `getServices()` is the process singleton.
+- **Route logic** `lib/api.ts` — pure `(services, input) → { status, body }` functions, unit-tested offline. Next.js route handlers are thin wrappers.
+- **API surface:**
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Liveness + configured providers |
+| `GET/POST` | `/api/projects` | List / create projects |
+| `POST` | `/api/projects/:id/generate` | Start image job |
+| `POST` | `/api/projects/:id/generate-video` | Start video/short-video job |
+| `POST` | `/api/projects/:id/generate-montage` | Start montage job |
+| `GET` | `/api/jobs/:id` | Poll job status |
+| `GET` | `/api/projects/:id/assets` | List assets |
+| `GET` | `/api/assets/:id/raw` | Serve asset bytes |
+| `POST` | `/api/agent` | Chat endpoint (ContentAgent) |
+| `POST` | `/api/voice/vapi` | Vapi voice webhook |
+| `POST` | `/api/transcribe` | Audio transcription |
+| `POST` | `/api/billing/checkout` | Mollie checkout session |
+| `POST` | `/api/billing/webhook` | Mollie payment webhook |
+| `GET` | `/api/billing/status` | Pro entitlement check |
+
+- **Studio UI** — "Molten Forge" aesthetic (Bricolage Grotesque + IBM Plex, warm-charcoal canvas, molten ember accents). Components: `Header`, `ForgePanel` (prompt + model picker + ratio + mode toggle), `JobStatus`, `Gallery` / `AssetCard`, `CampaignPanel`, `MontageBuilder`, `PublishPanel`, `AgentChat`, `Lightbox`.
+
+---
+
+## 8. The MCP server (`apps/mcp`)
+
+A standalone process that wraps the spine HTTP API as MCP tools. Requires the Forgecast web app to be running. Tools: `forgecast_health`, `forgecast_list_projects`, `forgecast_create_project`, `forgecast_generate_image`, `forgecast_generate_short_video`, `forgecast_generate_video`, `forgecast_generate_montage`, `forgecast_get_job`, `forgecast_list_assets`, `forgecast_publish_asset`.
+
+See [`apps/mcp/README.md`](../apps/mcp/README.md) for configuration.
+
+---
+
+## 9. Deployment profiles
+
+The OSS core is cloud-agnostic; clouds are opt-in configuration, never a requirement.
+
+| Layer | `local` (default) | `baxter-cloud` |
+|---|---|---|
+| Asset bytes | Filesystem (`FORGECAST_DATA_DIR`) or in-memory | Cloudflare **R2** (S3-compatible, zero egress) |
+| Metadata | SQLite (`FORGECAST_DB`) or in-memory | Cloudflare **D1** (edge-durable) |
+| App hosting | Node / Docker | Cloudflare **Workers** (via OpenNext) |
+
+Switching profiles is **configuration, not a rewrite** — storage is S3-compatible, repos implement the same interface, and the composition root reads `FORGECAST_PROFILE`.
+
+See [`docs/DEPLOY-CLOUDFLARE.md`](DEPLOY-CLOUDFLARE.md) for the step-by-step Cloudflare Workers + D1 + R2 deployment.
+
+---
+
+## 10. Testing philosophy
 
 - **TDD per change**, every commit green.
-- **Strict TypeScript** (`strict` + `noUncheckedIndexedAccess`), enforced by `pnpm typecheck` over every package (no test escapes the type gate).
-- **No network, no GPU, no DB in the suite** — adapters inject their I/O and are tested against mocks/in-memory implementations.
-
-See the design history in [`docs/specs`](specs) and the phased build in [`docs/plans`](plans).
+- **Strict TypeScript** (`strict` + `noUncheckedIndexedAccess`) — `pnpm typecheck` must pass across every package.
+- **No network, GPU, or DB in the suite** — adapters inject I/O and are tested against mocks or in-memory implementations.
+- 141 tests, CI on Node 24 (GitHub Actions).
