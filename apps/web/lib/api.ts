@@ -181,6 +181,55 @@ export async function generateMontage(services: Services, projectId: string, inp
   return { status: 202, body: { job } };
 }
 
+export async function generateVoiceover(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.voiceAvailable) {
+    return { status: 503, body: { error: 'voice-over not configured (set FAL_KEY_VOICE or FAL_KEY)' } };
+  }
+  const fields = (input ?? {}) as { text?: unknown; voice?: unknown; model?: unknown };
+  if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {
+    return { status: 400, body: { error: 'text is required' } };
+  }
+  const params: Record<string, unknown> = { text: fields.text };
+  if (typeof fields.voice === 'string') params.voice = fields.voice;
+  if (typeof fields.model === 'string') params.model = fields.model;
+
+  const job = await services.jobs.create(
+    newJob({ projectId, kind: 'voiceover', provider: services.voiceProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}
+
+export async function generateNarratedVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.voiceAvailable) {
+    return { status: 503, body: { error: 'narrate not configured (set FAL_KEY_VOICE or FAL_KEY)' } };
+  }
+  const fields = (input ?? {}) as { text?: unknown; voice?: unknown; videoAssetId?: unknown; videoUrl?: unknown };
+  if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {
+    return { status: 400, body: { error: 'text is required' } };
+  }
+  const hasSource =
+    (typeof fields.videoAssetId === 'string' && fields.videoAssetId.length > 0) ||
+    (typeof fields.videoUrl === 'string' && fields.videoUrl.length > 0);
+  if (!hasSource) {
+    return { status: 400, body: { error: 'videoAssetId or videoUrl is required' } };
+  }
+  const params: Record<string, unknown> = { text: fields.text };
+  if (typeof fields.videoAssetId === 'string') params.videoAssetId = fields.videoAssetId;
+  if (typeof fields.videoUrl === 'string') params.videoUrl = fields.videoUrl;
+  if (typeof fields.voice === 'string') params.voice = fields.voice;
+
+  const job = await services.jobs.create(
+    newJob({ projectId, kind: 'narrate', provider: 'narrate', params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  void services.runner.run(job.id).catch(() => {});
+  return { status: 202, body: { job } };
+}
+
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };

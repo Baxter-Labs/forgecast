@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -9,8 +9,8 @@ import {
   R2Storage,
   r2OptionsFromEnv,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, MontageWorker } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 
@@ -27,6 +27,8 @@ export interface Services {
   videoProvider: VideoProvider;
   montageWorker: MontageWorker;
   montageAvailable: boolean;
+  voiceProvider: VoiceProvider;
+  voiceAvailable: boolean;
 }
 
 export interface BuildServicesOptions {
@@ -137,9 +139,18 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
     montageAvailable = true;
   }
+  const voiceProvider: VoiceProvider = new FalTtsProvider({ fetchFn: opts.fetchFn });
+  if (voiceProvider.isAvailable()) {
+    handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
+  }
+  if (voiceProvider.isAvailable() && ffmpegStatic) {
+    handlers.push(new NarrateJobHandler({ voiceProvider, storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
+  }
+  const voiceAvailable = voiceProvider.isAvailable();
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable };
 }
 
 /**
