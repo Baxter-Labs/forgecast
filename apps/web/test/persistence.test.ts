@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import type { D1Like, D1LikePreparedStatement } from '@forgecast/store';
 import { buildServices } from '../lib/forgecast';
 
 const R2_VARS = ['R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'FORGECAST_PROFILE'] as const;
@@ -62,5 +63,29 @@ describe('buildServices profile wiring', () => {
     process.env.R2_SECRET_ACCESS_KEY = 'secret';
     const svc = buildServices({ falKey: 'k', profile: 'local' });
     expect(svc.storage.constructor.name).toBe('InMemoryStorage');
+  });
+
+  it('uses D1-backed metadata repos when a D1 binding is provided (edge-durable)', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(':memory:');
+    const d1: D1Like = {
+      prepare(sql: string) {
+        const make = (params: unknown[]): D1LikePreparedStatement => ({
+          bind: (...v: unknown[]) => make(v),
+          first: async <T = unknown>() => (db.prepare(sql).get(...(params as never[])) ?? null) as T | null,
+          all: async <T = unknown>() => ({ results: db.prepare(sql).all(...(params as never[])) as T[] }),
+          run: async () => db.prepare(sql).run(...(params as never[])),
+        });
+        return make([]);
+      },
+    };
+    const svc = buildServices({ falKey: 'k', profile: 'baxter-cloud', d1 });
+    expect(svc.projects.constructor.name).toBe('D1ProjectRepo');
+    expect(svc.assets.constructor.name).toBe('D1AssetRepo');
+    expect(svc.jobs.constructor.name).toBe('D1JobRepo');
+
+    const { newProject } = await import('@forgecast/core');
+    await svc.projects.create(newProject({ name: 'Edge' }, { id: 'pe', now: 'T' }));
+    expect((await svc.projects.get('pe'))?.name).toBe('Edge');
   });
 });

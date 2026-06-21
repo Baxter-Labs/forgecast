@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { imageModels, videoModels } from '@forgecast/catalog';
+import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
 import { useForgecast } from '@/lib/use-forgecast';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
@@ -97,7 +97,9 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
-  const [videoModel, setVideoModel] = useState(videoModels[0]?.id ?? '');
+  const [videoModel, setVideoModel] = useState(
+    videoModels.find((m) => m.id === defaultVideoModelId)?.id ?? videoModels[0]?.id ?? '',
+  );
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);

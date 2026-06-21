@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "forgecast-web",
+  "main": ".open-next/worker.js",
+  // OpenNext requires a compatibility_date >= 2024-09-23 and the nodejs_compat flag.
+  "compatibility_date": "2025-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Store generated asset bytes in Cloudflare R2 (via the S3 API in R2Storage).
+    "FORGECAST_PROFILE": "baxter-cloud",
+    // Public origin so image-to-video, montage, and publish can resolve asset URLs.
+    "FORGECAST_BASE_URL": "https://forgecast-web.saikiran-vanamala1990.workers.dev"
+  },
+  // Edge-durable metadata (projects/assets/jobs) so state survives across isolates.
+  // Schema self-initializes on first use; or run:
+  //   wrangler d1 execute forgecast-db --remote --file d1/schema.sql
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "forgecast-db",
+      "database_id": "29652570-edb0-40f1-aef7-297db4e43910"
+    }
+  ]
+  // R2 credentials are secrets — set them with `wrangler secret put`:
+  //   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+  //   (optional) R2_PUBLIC_BASE_URL, R2_ENDPOINT
+  //
+  // Native R2 binding (alternative to the S3 API path, wired in a later step) —
+  // create the bucket first with `wrangler r2 bucket create forgecast-media`:
+  // "r2_buckets": [{ "binding": "MEDIA_BUCKET", "bucket_name": "forgecast-media" }]
+}

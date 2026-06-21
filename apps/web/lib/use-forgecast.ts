@@ -43,8 +43,8 @@ interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
 interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
 
-const POLL_INTERVAL_MS = 2500;
-const POLL_MAX_TRIES = 120;
+const POLL_INTERVAL_MS = 3000;
+const POLL_MAX_TRIES = 200;
 
 export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
