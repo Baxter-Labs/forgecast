@@ -8,6 +8,7 @@ import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
 import { CampaignPanel, type StoredCampaign } from './CampaignPanel';
+import { ConfirmDialog } from './ConfirmDialog';
 import { PublishPanel } from './PublishPanel';
 import type { ContentPlan } from '@forgecast/agent';
 import type { StudioAsset } from '@/lib/use-forgecast';
@@ -89,7 +90,7 @@ export function Studio() {
   const {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
-    publishAsset,
+    publishAsset, clearAllAssets,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -138,6 +139,7 @@ export function Studio() {
       return next;
     });
     latestCampaignIdRef.current = id;
+    setActiveCampaignId(id);
     setView('history');
   }, []);
 
@@ -161,6 +163,15 @@ export function Studio() {
       return next;
     });
   }, []);
+
+  // ── Clear all history + gallery ─────────────────────────────────────────────
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const handleClearAll = useCallback(() => {
+    setCampaigns([]);
+    localStorage.removeItem(CAMPAIGNS_KEY);
+    setActiveCampaignId(null);
+    void clearAllAssets();
+  }, [clearAllAssets]);
 
   // ── Manual campaign creation (from ForgePanel "+" button) ───────────────────
   const createManualCampaign = useCallback((name: string) => {
@@ -186,7 +197,10 @@ export function Studio() {
   function handleForge() {
     if (!activeCampaignId) return;
     const attach = (assetId: string | null | undefined) => {
-      if (assetId) appendVideoAssets(activeCampaignId, [assetId]);
+      if (assetId) {
+        appendVideoAssets(activeCampaignId, [assetId]);
+        setView('history');
+      }
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
@@ -256,8 +270,30 @@ export function Studio() {
           />
           <JobStatus status={status} error={error} />
 
-          {/* View toggle */}
-          <ViewToggle view={view} onChange={setView} />
+          {/* View toggle + Clear */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmingClear(true)}
+              title="Clear all history and gallery"
+              className="font-mono text-[10px] uppercase tracking-[0.12em] px-3 py-2 rounded-lg border transition-all hover:border-red-400/50 hover:text-red-400"
+              style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+            >
+              Clear
+            </button>
+          </div>
+          {confirmingClear && (
+            <ConfirmDialog
+              title="Clear everything?"
+              description="This will permanently delete all campaigns from history and all generated assets from the gallery. This cannot be undone."
+              confirmLabel="Clear All"
+              onConfirm={() => { setConfirmingClear(false); handleClearAll(); }}
+              onCancel={() => setConfirmingClear(false)}
+            />
+          )}
 
           {/* Sliding panel — inactive pane is absolute (no flow width); active pane
               is relative with explicit width:100% so content can't push it wider */}

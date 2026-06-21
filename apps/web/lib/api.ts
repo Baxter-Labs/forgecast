@@ -3,6 +3,7 @@ import type { MontageSpec, Job, VideoGenTask } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { runBackground } from './cf-env';
+import { checkContentGuard } from './content-guard';
 
 // Reserved job-param key holding the provider's async task reference (response_url).
 // Stripped before it ever lands on the produced asset's params.
@@ -35,6 +36,11 @@ export async function generateImage(services: Services, projectId: string, input
   const fields = (input ?? {}) as { prompt?: unknown; provider?: unknown; width?: unknown; height?: unknown };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
+  }
+
+  const guard = checkContentGuard(fields.prompt);
+  if (!guard.allowed) {
+    return { status: 400, body: { error: guard.reason ?? 'Content violates usage policy' } };
   }
 
   const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
@@ -102,6 +108,15 @@ export async function listAssets(services: Services, projectId: string): Promise
   return { status: 200, body: { assets: await services.assets.listByProject(projectId) } };
 }
 
+export async function clearAssets(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (services.assets.deleteByProject) {
+    await services.assets.deleteByProject(projectId);
+  }
+  return { status: 200, body: { cleared: true } };
+}
+
 export async function getAssetBytes(
   services: Services,
   assetId: string,
@@ -120,6 +135,11 @@ export async function generateShortVideo(services: Services, projectId: string, 
   const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown };
   const subject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
   if (subject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+
+  const guard = checkContentGuard(subject);
+  if (!guard.allowed) {
+    return { status: 400, body: { error: guard.reason ?? 'Content violates usage policy' } };
+  }
 
   const job = await services.jobs.create(
     newJob(
@@ -150,6 +170,11 @@ export async function generateVideo(services: Services, projectId: string, input
   };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
+  }
+
+  const guard = checkContentGuard(fields.prompt);
+  if (!guard.allowed) {
+    return { status: 400, body: { error: guard.reason ?? 'Content violates usage policy' } };
   }
 
   const modelId = typeof fields.model === 'string' ? fields.model : undefined;

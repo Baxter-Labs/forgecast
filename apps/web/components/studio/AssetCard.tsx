@@ -29,7 +29,7 @@ export function AssetCard({ asset, index, compact = false, onPublish }: AssetCar
           {isVideo ? (
             <video
               src={`/api/assets/${asset.id}/raw`}
-              muted loop playsInline
+              autoPlay muted loop playsInline
               className="w-full aspect-square object-cover block bg-black pointer-events-none"
             />
           ) : (

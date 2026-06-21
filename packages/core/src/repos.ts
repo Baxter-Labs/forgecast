@@ -10,6 +10,7 @@ export interface AssetRepo {
   create(asset: Asset): Promise<Asset>;
   get(id: string): Promise<Asset | null>;
   listByProject(projectId: string): Promise<Asset[]>;
+  deleteByProject?(projectId: string): Promise<void>;
 }
 
 export interface JobRepo {

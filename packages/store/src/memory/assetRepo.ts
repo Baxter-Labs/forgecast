@@ -15,4 +15,10 @@ export class InMemoryAssetRepo implements AssetRepo {
   async listByProject(projectId: string): Promise<Asset[]> {
     return [...this.items.values()].filter((a) => a.projectId === projectId);
   }
+
+  async deleteByProject(projectId: string): Promise<void> {
+    for (const [id, asset] of this.items) {
+      if (asset.projectId === projectId) this.items.delete(id);
+    }
+  }
 }

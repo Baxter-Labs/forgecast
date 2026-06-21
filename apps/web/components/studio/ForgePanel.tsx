@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { CatalogModel } from '@forgecast/catalog';
 import { imageModels } from '@forgecast/catalog';
 import type { Availability, StudioAsset } from '@/lib/use-forgecast';
+import { promptGuardCheck } from '@/lib/content-guard-client';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
 
@@ -220,9 +221,22 @@ export function ForgePanel({
 
   const isI2V = false; // boost-quality toggle only exposes t2v models
 
+  // Content guardrail — check prompt in real time
+  const guardWarning = useMemo(() => {
+    if (mode === 'montage') {
+      for (const p of montagePrompts) {
+        const w = promptGuardCheck(p);
+        if (w) return w;
+      }
+      return null;
+    }
+    return promptGuardCheck(prompt);
+  }, [prompt, mode, montagePrompts]);
+
   const canForge =
     !forging &&
     hasCampaign &&
+    !guardWarning &&
     (mode === 'image'
       ? prompt.trim().length > 0
       : mode === 'video'
@@ -462,6 +476,13 @@ export function ForgePanel({
             generates 3 video clips and stitches them into a montage (Remotion)
           </p>
         </>
+      )}
+
+      {/* Content guard warning */}
+      {guardWarning && (
+        <p className="font-mono text-[10px] text-red-400 border border-red-400/30 rounded-lg px-3 py-2">
+          ⚠ {guardWarning}
+        </p>
       )}
 
       {/* FORGE BUTTON */}

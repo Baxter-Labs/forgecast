@@ -393,12 +393,18 @@ export function useForgecast() {
     return assetIds;
   }, [pollJob, refreshAssets]);
 
+  const clearAllAssets = useCallback(async () => {
+    if (!projectId) return;
+    await fetch(`/api/projects/${projectId}/assets`, { method: 'DELETE' });
+    setAssets([]);
+  }, [projectId]);
+
   return {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset,
+    publishAsset, clearAllAssets,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

@@ -32,4 +32,9 @@ export class D1AssetRepo implements AssetRepo {
     const { results } = await this.db.prepare('SELECT * FROM assets WHERE project_id = ? ORDER BY created_at ASC, id ASC').bind(projectId).all<AssetRow>();
     return results.map(toAsset);
   }
+
+  async deleteByProject(projectId: string): Promise<void> {
+    await ensureD1Schema(this.db);
+    await this.db.prepare('DELETE FROM assets WHERE project_id = ?').bind(projectId).run();
+  }
 }

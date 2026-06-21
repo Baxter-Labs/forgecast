@@ -28,4 +28,8 @@ export class SqliteAssetRepo implements AssetRepo {
     const rows = this.db.prepare('SELECT * FROM assets WHERE project_id = ? ORDER BY created_at ASC, id ASC').all(projectId) as unknown as AssetRow[];
     return rows.map(toAsset);
   }
+
+  async deleteByProject(projectId: string): Promise<void> {
+    this.db.prepare('DELETE FROM assets WHERE project_id = ?').run(projectId);
+  }
 }

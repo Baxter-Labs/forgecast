@@ -25,6 +25,7 @@ Rules:
 - "montage" = a separate production: EXACTLY 3 unique video clip prompts that are generated independently and then stitched into one longer-form video. Include a montage whenever it would add clear value — product teasers, brand reels, event recaps, launch sequences — even if not explicitly requested. The montage scenes must NOT be repeated in "assets".
 - For every video asset, set "model" to the most appropriate fal.ai model ID from the guide below. For the montage, set the top-level "model" (applies to all 3 clips) unless individual clips need different models.
 - Prefer 9:16 for short-form video. Make captions native to each platform. Keep prompts vivid and specific.
+- CONTENT POLICY: NEVER generate prompts containing nudity, sexual content, explicit violence, gore, hate speech, extremism, child exploitation, or any NSFW material. All prompts must be safe for work and suitable for public social media platforms. If the user's brief contains explicit or inappropriate content, refuse by returning an empty assets array and set concept to "Content policy violation — brief contains prohibited material."
 ${VIDEO_MODEL_GUIDE}`;
 
 export function buildPlanUserPrompt(brief: string, platforms: string[], trendingNotes?: string): string {
