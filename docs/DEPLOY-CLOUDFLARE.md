@@ -41,7 +41,24 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 # optional:
 wrangler secret put R2_PUBLIC_BASE_URL   # public bucket / CDN domain for serving
 wrangler secret put FAL_KEY              # to actually generate images
+wrangler secret put OMNISOCIALS_API_KEY  # to enable publishing (Studio "Cast")
 ```
+
+### Publishing (the "Cast" panel)
+
+The Studio publish panel only offers platforms when a publisher backend is
+configured. The fast path is the **OmniSocials** aggregator — one key fans a post
+out to Instagram, LinkedIn, YouTube, X, TikTok and more:
+
+```bash
+cd apps/web
+wrangler secret put OMNISOCIALS_API_KEY   # then: pnpm --filter @forgecast/web cf:deploy
+```
+
+Verify it's live: `curl https://<your-worker>/api/health` should list
+`"publishers": ["omnisocials"]`. If it returns `[]`, the secret isn't set on the
+Worker (setting it only in `.env`/`.dev.vars` does **not** reach production — it
+must be a `wrangler secret`).
 
 For local preview, copy `.dev.vars.example` to `.dev.vars` and fill it in.
 

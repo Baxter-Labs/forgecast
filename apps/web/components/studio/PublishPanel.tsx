@@ -170,7 +170,7 @@ export function PublishPanel({ asset, publishers, onPublish, onClose }: PublishP
         <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 border border-[var(--forge-border)] bg-[var(--forge-surface-2)]">
           <AlertCircle size={14} className="text-[var(--ember-1)] shrink-0" />
           <p className="font-mono text-[10px] text-[var(--forge-muted)]">
-            No publishers configured. Set OMNISOCIALS_API_KEY or platform credentials in .env
+            No publishing backend configured. Set an OMNISOCIALS_API_KEY secret — locally in <span className="text-[var(--forge-text)]">.env</span>/<span className="text-[var(--forge-text)]">.dev.vars</span>, or on Cloudflare with <span className="text-[var(--forge-text)]">wrangler secret put OMNISOCIALS_API_KEY</span> then redeploy.
           </p>
         </div>
       )}
