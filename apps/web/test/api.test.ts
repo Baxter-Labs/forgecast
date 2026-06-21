@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ImageProvider } from '@forgecast/core';
 import { buildServices } from '../lib/forgecast';
-import { createProject, listProjects, generateImage, getJob, listAssets, getAssetBytes } from '../lib/api';
+import { createProject, listProjects, generateImage, getJob, listAssets, getAssetBytes, clearAssets } from '../lib/api';
+import { checkContentGuard } from '../lib/content-guard';
 
 function fakeProvider(): ImageProvider {
   return {
@@ -91,5 +92,65 @@ describe('api: asset bytes', () => {
     expect(bytes?.data.length).toBeGreaterThan(0);
 
     expect(await getAssetBytes(svc, 'nope')).toBeNull();
+  });
+});
+
+describe('api: content guard', () => {
+  it('blocks explicit terms', () => {
+    expect(checkContentGuard('generate a nude woman').allowed).toBe(false);
+    expect(checkContentGuard('nsfw content please').allowed).toBe(false);
+    expect(checkContentGuard('show me porn').allowed).toBe(false);
+    expect(checkContentGuard('mass shooting scene').allowed).toBe(false);
+    expect(checkContentGuard('a deepfake video').allowed).toBe(false);
+  });
+
+  it('does NOT false-positive on legitimate prompts', () => {
+    expect(checkContentGuard('Historical category of Byzantine art').allowed).toBe(true);
+    expect(checkContentGuard('Ashkenazi Jewish traditions').allowed).toBe(true);
+    expect(checkContentGuard('Al Gore climate speech').allowed).toBe(true);
+    expect(checkContentGuard('VIP was escorted to the venue').allowed).toBe(true);
+    expect(checkContentGuard('Asexual reproduction in plants').allowed).toBe(true);
+    expect(checkContentGuard('A gorgeous sunset over the ocean').allowed).toBe(true);
+    expect(checkContentGuard('The category winner was announced').allowed).toBe(true);
+  });
+
+  it('allows empty and whitespace-only prompts', () => {
+    expect(checkContentGuard('').allowed).toBe(true);
+    expect(checkContentGuard('   ').allowed).toBe(true);
+  });
+
+  it('rejects explicit prompts at the API level with 400', async () => {
+    const svc = services();
+    const created = await createProject(svc, { name: 'P' });
+    const projectId = (created.body as { project: { id: string } }).project.id;
+    const r = await generateImage(svc, projectId, { prompt: 'generate nude photo' });
+    expect(r.status).toBe(400);
+    expect((r.body as { error: string }).error).toContain('explicit');
+  });
+});
+
+describe('api: clearAssets', () => {
+  it('deletes all project assets and storage blobs', async () => {
+    const svc = services();
+    const created = await createProject(svc, { name: 'P' });
+    const projectId = (created.body as { project: { id: string } }).project.id;
+
+    await generateImage(svc, projectId, { prompt: 'a fox' });
+    await generateImage(svc, projectId, { prompt: 'a cat' });
+
+    let assets = await listAssets(svc, projectId);
+    expect((assets.body as { assets: unknown[] }).assets).toHaveLength(2);
+
+    const r = await clearAssets(svc, projectId);
+    expect(r.status).toBe(200);
+    expect((r.body as { cleared: boolean }).cleared).toBe(true);
+
+    assets = await listAssets(svc, projectId);
+    expect((assets.body as { assets: unknown[] }).assets).toHaveLength(0);
+  });
+
+  it('404 for unknown project', async () => {
+    const r = await clearAssets(services(), 'nope');
+    expect(r.status).toBe(404);
   });
 });

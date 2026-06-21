@@ -118,7 +118,7 @@ export async function clearAssets(services: Services, projectId: string): Promis
   // Delete storage blobs before removing DB records to avoid orphaning files.
   const assets = await services.assets.listByProject(projectId);
   if (services.storage.delete) {
-    await Promise.all(assets.map((a) => services.storage.delete!(a.storageKey)));
+    await Promise.allSettled(assets.map((a) => services.storage.delete!(a.storageKey)));
   }
 
   await services.assets.deleteByProject(projectId);

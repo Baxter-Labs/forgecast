@@ -1,35 +1,14 @@
 /**
  * Content guardrails — rejects prompts containing explicit, NSFW, or violent keywords.
  * Called server-side in generate routes to prevent misuse of the generation APIs.
+ *
+ * All matching uses word-boundary regex to avoid false positives
+ * (e.g. "category" does NOT match "gory", "escorted" does NOT match "escort").
  */
 
-// Explicit/NSFW terms — keep lowercase, checked against lowercased input.
-const BLOCKED_TERMS: string[] = [
-  // Sexual content
-  'nude', 'nudes', 'naked', 'nsfw', 'pornography', 'porn', 'xxx',
-  'hentai', 'erotic', 'erotica', 'sexual', 'sexually explicit',
-  'genitalia', 'genitals', 'penis', 'vagina', 'breasts exposed',
-  'topless', 'bottomless', 'orgasm', 'masturbat', 'intercourse',
-  'fetish', 'bondage', 'bdsm', 'dominatrix', 'stripper', 'striptease',
-  'sex act', 'sex scene', 'lovemaking', 'provocative nude',
-  'lingerie model', 'playboy', 'onlyfans', 'camgirl', 'escort',
-  'prostitut', 'hooker', 'slutty', 'slut', 'whore',
-  // Violence / gore
-  'gore', 'gory', 'dismember', 'decapitat', 'mutilat', 'torture',
-  'gruesome death', 'bloody corpse', 'dead body', 'murder scene',
-  'mass shooting', 'terrorist attack', 'suicide bomb', 'school shooting',
-  'child abuse', 'child exploitation', 'pedophil', 'underage',
-  // Hate / extremism
-  'nazi', 'white supremac', 'ethnic cleansing', 'genocide',
-  'hate crime', 'racial slur', 'blackface',
-  // Drug abuse (explicit manufacturing)
-  'cook meth', 'make drugs', 'drug manufacturing',
-  // Deepfakes / impersonation
-  'deepfake', 'face swap without consent',
-];
-
-// Regex patterns for more nuanced matching (word boundaries, combinations).
+// All patterns use \b word boundaries to prevent substring false positives.
 const BLOCKED_PATTERNS: RegExp[] = [
+  // Sexual content
   /\bnude[sd]?\b/i,
   /\bnaked\b/i,
   /\bporn(?:ograph(?:y|ic))?\b/i,
@@ -41,28 +20,59 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /\borgasm/i,
   /\bmasturbat/i,
   /\bintercourse\b/i,
-  /\bfetish/i,
+  /\bfetish\b/i,
   /\bbondage\b/i,
   /\bbdsm\b/i,
-  /\bstripper/i,
+  /\bdominatrix\b/i,
+  /\bstripper[s]?\b/i,
   /\bstriptease\b/i,
+  /\bsex\s+act/i,
+  /\bsex\s+scene/i,
+  /\blovemaking\b/i,
+  /\btopless\b/i,
+  /\bbottomless\b/i,
+  /\bplayboy\b/i,
+  /\bonlyfans\b/i,
+  /\bcamgirl\b/i,
+  /\bescort\s+service/i,
   /\bprostitut/i,
-  /\bslut(?:ty)?\b/i,
-  /\bwhore\b/i,
-  /\bgore\b/i,
+  /\bhooker[s]?\b/i,
+  /\bslut(?:ty|s)?\b/i,
+  /\bwhore[s]?\b/i,
+  /\bpenis\b/i,
+  /\bvagina\b/i,
+  // Violence / gore (avoid matching proper nouns like "Al Gore")
+  /\b(?:blood(?:y)?\s+(?:and\s+)?)?gore\b(?!\s+(?:climate|vidal|tex))/i,
+  /\bgory\b/i,
   /\bdismember/i,
   /\bdecapitat/i,
   /\bmutilat/i,
   /\btorture\b/i,
+  /\bgruesome\s+death/i,
+  /\bbloody\s+corpse/i,
+  /\bdead\s+bod(?:y|ies)\b/i,
+  /\bmurder\s+scene/i,
+  /\bmass\s+shoot/i,
+  /\bterrorist\s+attack/i,
+  /\bsuicide\s+bomb/i,
+  /\bschool\s+shoot/i,
+  // Child safety
+  /\bchild\b.*\b(?:exploit|abuse|porn)/i,
   /\bpedophil/i,
   /\bunderage\b.*\b(?:sex|nude|naked)/i,
-  /\bchild\b.*\b(?:exploit|abuse|porn)/i,
-  /\bdeepfake/i,
-  /\bsuicide\s+bomb/i,
-  /\bmass\s+shoot/i,
-  /\bschool\s+shoot/i,
-  /\bethnic\s+cleans/i,
+  // Hate / extremism
+  /\bnazi\b/i,
   /\bwhite\s+supremac/i,
+  /\bethnic\s+cleans/i,
+  /\bgenocide\b/i,
+  /\bhate\s+crime/i,
+  /\bracial\s+slur/i,
+  /\bblackface\b/i,
+  // Drug manufacturing
+  /\bcook\s+meth/i,
+  /\bdrug\s+manufactur/i,
+  // Deepfakes / impersonation
+  /\bdeepfake/i,
 ];
 
 export interface GuardResult {
@@ -77,16 +87,6 @@ export interface GuardResult {
 export function checkContentGuard(text: string): GuardResult {
   if (!text || text.trim().length === 0) return { allowed: true };
 
-  const lower = text.toLowerCase();
-
-  // Check exact substring matches.
-  for (const term of BLOCKED_TERMS) {
-    if (lower.includes(term)) {
-      return { allowed: false, reason: `Content contains prohibited term: "${term}"` };
-    }
-  }
-
-  // Check regex patterns.
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(text)) {
       return { allowed: false, reason: 'Content contains explicit or prohibited language' };

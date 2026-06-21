@@ -395,7 +395,8 @@ export function useForgecast() {
 
   const clearAllAssets = useCallback(async () => {
     if (!projectId) return;
-    await fetch(`/api/projects/${projectId}/assets`, { method: 'DELETE' });
+    const res = await fetch(`/api/projects/${projectId}/assets`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Failed to clear assets (${res.status})`);
     setAssets([]);
   }, [projectId]);
 
