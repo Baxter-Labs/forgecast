@@ -4,22 +4,31 @@ Runs the Next.js spine + Studio UI (`apps/web`) as a Cloudflare Worker via the
 [OpenNext](https://opennext.js.org/cloudflare) adapter, with generated asset
 bytes stored in **Cloudflare R2** (the `baxter-cloud` profile).
 
-This is step 1 of the Cloudflare path. Metadata (projects/assets/jobs) currently
-lives **in-memory** on the edge — durable edge metadata via **D1/Hyperdrive** and
-a **Queues**-backed job runner for long renders are follow-up steps. Heavy GPU
-work (MoneyPrinter shorts, Remotion montage, local SD/VibeVoice) does not run on
-Workers and stays on a container/GPU back-end (see `docs/ARCHITECTURE.md` §7).
+Metadata (projects/assets/jobs) persists in **Cloudflare D1** (the `DB` binding),
+so state survives across Worker isolates. A **Queues**-backed job runner for long
+renders is a follow-up step. Heavy GPU work (MoneyPrinter shorts, Remotion
+montage, local SD/VibeVoice) does not run on Workers and stays on a
+container/GPU back-end (see `docs/ARCHITECTURE.md` §7).
 
 ## Prerequisites
 
-- A Cloudflare account and an **API token** with Workers + R2 permissions.
+- A Cloudflare account and an **API token** with **Workers Scripts**, **Workers R2 Storage**, and **D1** edit permissions.
 - An R2 bucket: `wrangler r2 bucket create forgecast-media`.
 - R2 **S3 API** credentials (Access Key ID + Secret) from the R2 dashboard.
+- A D1 database: `wrangler d1 create forgecast-db` (copy the printed `database_id` into `wrangler.jsonc`).
 
 ## Configure
 
 `apps/web/wrangler.jsonc` already sets the Worker name, `nodejs_compat`, the
-static-assets binding, and `FORGECAST_PROFILE=baxter-cloud`.
+static-assets binding, the **D1 binding** (`DB` → `forgecast-db`), and
+`FORGECAST_PROFILE=baxter-cloud`. After `wrangler d1 create`, paste the returned
+`database_id` into the `d1_databases` entry.
+
+The schema self-initializes on first use; to pre-create it run:
+
+```bash
+wrangler d1 execute forgecast-db --remote --file apps/web/d1/schema.sql
+```
 
 Set secrets (production):
 
@@ -56,5 +65,8 @@ cd apps/web && wrangler deploy --dry-run
   on a Worker and on a Node host — no separate code path. A native R2 *binding*
   (`r2_buckets` in `wrangler.jsonc`) is the more idiomatic Workers option and can
   replace the S3 path later.
-- Because metadata is in-memory per isolate today, projects/jobs are not durable
-  across requests/deploys yet — wire D1 (step 2) before relying on persistence.
+- Metadata is stored in **D1** under `baxter-cloud`. If the `DB` binding is
+  missing, the app logs a warning and falls back to in-memory (non-durable)
+  metadata so it still boots.
+- The D1 schema mirrors the local SQLite schema and is created lazily
+  (`ensureD1Schema`) or via `apps/web/d1/schema.sql`.

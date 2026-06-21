@@ -5,14 +5,17 @@ import {
   InMemoryJobRepo,
   InMemoryStorage,
   openStore,
+  d1Store,
   FilesystemStorage,
   R2Storage,
   r2OptionsFromEnv,
+  type D1Like,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
+import { getD1Binding } from './cf-env';
 
 export interface Services {
   imageRegistry: ImageProviderRegistry;
@@ -45,6 +48,8 @@ export interface BuildServicesOptions {
   dataDir?: string;
   /** Deployment profile. Falls back to FORGECAST_PROFILE env, then 'local'. 'baxter-cloud' stores asset bytes in Cloudflare R2. */
   profile?: string;
+  /** Cloudflare D1 binding for edge-durable metadata (baxter-cloud). When set, repos persist to D1 instead of in-memory. */
+  d1?: D1Like;
   /** Injectable fetch for the image handler's download step (tests). */
   fetchFn?: typeof fetch;
 }
@@ -101,7 +106,14 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   let projects: ProjectRepo;
   let assets: AssetRepo;
   let jobs: JobRepo;
-  if (dbPath) {
+  if (opts.d1) {
+    // Edge-durable metadata: D1 (SQLite at the edge), so projects/assets/jobs
+    // persist across Worker isolates.
+    const store = d1Store(opts.d1);
+    projects = store.projects;
+    assets = store.assets;
+    jobs = store.jobs;
+  } else if (dbPath) {
     const store = openStore(dbPath);
     projects = store.projects;
     assets = store.assets;
@@ -182,22 +194,30 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
  * - `local` (default): DURABLE persistence in the working directory (./.forgecast)
  *   so generated assets survive restarts — overridable via FORGECAST_DB /
  *   FORGECAST_DATA_DIR (e.g. a mounted volume in production).
- * - `baxter-cloud`: asset bytes go to R2 (the profile's storage); metadata stays
- *   in-memory because the edge/Workers runtime has no local SQLite or filesystem.
- *   Durable edge metadata (D1/Hyperdrive) is a follow-up step.
+ * - `baxter-cloud`: asset bytes go to R2 and metadata to Cloudflare D1 (the `DB`
+ *   binding), so state survives across Worker isolates. If the D1 binding is
+ *   absent (e.g. local dev without it), metadata falls back to in-memory.
  *
  * Tests call buildServices() directly and stay in-memory.
  */
 export function getServices(): Services {
   if (!cached) {
     const profile = process.env.FORGECAST_PROFILE ?? 'local';
-    cached =
-      profile === 'baxter-cloud'
-        ? buildServices({ profile })
-        : buildServices({
-            db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
-            dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
-          });
+    if (profile === 'baxter-cloud') {
+      const d1 = getD1Binding();
+      if (!d1) {
+        console.warn(
+          "[forgecast] Profile 'baxter-cloud' has no D1 binding ('DB'); metadata is in-memory and will not " +
+            'persist across Worker isolates. Bind a D1 database named DB in wrangler.jsonc.',
+        );
+      }
+      cached = buildServices({ profile, d1: d1 ?? undefined });
+    } else {
+      cached = buildServices({
+        db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
+        dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
+      });
+    }
   }
   return cached;
 }
