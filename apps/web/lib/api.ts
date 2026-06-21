@@ -1,8 +1,12 @@
-import { newProject, newJob } from '@forgecast/core';
-import type { MontageSpec } from '@forgecast/core';
+import { newProject, newJob, newAsset } from '@forgecast/core';
+import type { MontageSpec, Job, VideoGenTask } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { runBackground } from './cf-env';
+
+// Reserved job-param key holding the provider's async task reference (response_url).
+// Stripped before it ever lands on the produced asset's params.
+const VIDEO_TASK_KEY = '__videoTaskId';
 
 export interface ApiResult {
   status: number;
@@ -49,9 +53,46 @@ export async function generateImage(services: Services, projectId: string, input
   return { status: 200, body: { job: finished, asset } };
 }
 
+// Advance an in-flight video job by one provider poll. This is driven by the
+// client polling GET /api/jobs/:id, so each request stays short — the right model
+// for Cloudflare Workers, which terminate long-lived background work after the
+// response is sent. On completion the video is downloaded and stored to R2.
+async function advanceVideoJob(services: Services, job: Job): Promise<Job> {
+  const taskId = job.params[VIDEO_TASK_KEY];
+  if (typeof taskId !== 'string' || taskId.length === 0) return job;
+
+  let task: VideoGenTask;
+  try {
+    task = await services.videoProvider.getTask(taskId);
+  } catch {
+    return job; // transient — the next poll retries
+  }
+  if (task.state === 'failed') {
+    return services.jobs.update(job.id, { status: 'error', error: 'video provider reported failure', updatedAt: services.ids.nowIso() });
+  }
+  if (task.state !== 'complete' || !task.videoUrl) return job;
+
+  const res = await fetch(task.videoUrl);
+  if (!res.ok) return job; // transient download failure — retry next poll
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const id = services.ids.randomId();
+  const key = `projects/${job.projectId}/videos/${id}.mp4`;
+  const stored = await services.storage.put(key, bytes, 'video/mp4');
+
+  const assetParams = { ...job.params };
+  delete assetParams[VIDEO_TASK_KEY];
+  const asset = await services.assets.create(
+    newAsset({ projectId: job.projectId, type: 'video', provider: job.provider, storageKey: stored.key, params: assetParams }, { id, now: services.ids.nowIso() }),
+  );
+  return services.jobs.update(job.id, { status: 'done', progress: 1, resultAssetId: asset.id, updatedAt: services.ids.nowIso() });
+}
+
 export async function getJob(services: Services, jobId: string): Promise<ApiResult> {
-  const job = await services.jobs.get(jobId);
+  let job = await services.jobs.get(jobId);
   if (!job) return { status: 404, body: { error: 'job not found' } };
+  if (job.kind === 'video' && job.status === 'running') {
+    job = await advanceVideoJob(services, job);
+  }
   return { status: 200, body: { job } };
 }
 
@@ -141,8 +182,36 @@ export async function generateVideo(services: Services, projectId: string, input
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'video', provider: services.videoProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  runBackground(services.runner.run(job.id));
-  return { status: 202, body: { job } };
+
+  // Submit to the provider synchronously (a fast queue POST), then let the client
+  // drive completion via GET /api/jobs/:id (see advanceVideoJob). This keeps each
+  // request short so heavy/slow models complete reliably on Cloudflare Workers,
+  // which kill background work once the response is returned.
+  try {
+    const { taskId } = await services.videoProvider.create({
+      prompt: fields.prompt,
+      aspectRatio: typeof fields.aspectRatio === 'string' ? fields.aspectRatio : undefined,
+      duration: typeof fields.duration === 'number' ? fields.duration : undefined,
+      quality: typeof fields.quality === 'string' ? fields.quality : undefined,
+      model: modelId,
+      imageUrl: resolvedImageUrl,
+      extra: modelDef?.params,
+    });
+    const running = await services.jobs.update(job.id, {
+      status: 'running',
+      progress: 0.05,
+      params: { ...params, [VIDEO_TASK_KEY]: taskId },
+      updatedAt: services.ids.nowIso(),
+    });
+    return { status: 202, body: { job: running } };
+  } catch (e) {
+    const errored = await services.jobs.update(job.id, {
+      status: 'error',
+      error: e instanceof Error ? e.message : String(e),
+      updatedAt: services.ids.nowIso(),
+    });
+    return { status: 202, body: { job: errored } };
+  }
 }
 
 async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string): Promise<MontageSpec | null> {

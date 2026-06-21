@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { buildServices } from '../lib/forgecast';
-import { createProject, generateShortVideo, generateVideo } from '../lib/api';
+import { createProject, generateShortVideo, generateVideo, getJob } from '../lib/api';
 
 const saved = process.env.FORGECAST_VIDEO_WORKER_URL;
 const savedVideoKey = process.env.FAL_KEY_VIDEO;
@@ -74,5 +74,34 @@ describe('api: generate video', () => {
     const svc = buildServices({ falVideoKey: 'k', fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
     const pid = await project(svc);
     expect((await generateVideo(svc, pid, {})).status).toBe(400);
+  });
+
+  it('submits synchronously then completes via a job poll (no background task)', async () => {
+    const responseUrl = 'https://queue.fal.run/fal-ai/wan/requests/abc';
+    const providerFetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.endsWith('/status')) return new Response(JSON.stringify({ status: 'COMPLETED' }), { status: 200 });
+      if (u === responseUrl) return new Response(JSON.stringify({ video: { url: 'https://cdn.example/v.mp4' } }), { status: 200 });
+      return new Response(JSON.stringify({ request_id: 'abc', response_url: responseUrl }), { status: 200 });
+    });
+    const svc = buildServices({ falVideoKey: 'k', fetchFn: providerFetch as unknown as typeof fetch });
+    const pid = await project(svc);
+
+    const start = await generateVideo(svc, pid, { prompt: 'a fox', aspectRatio: '9:16' });
+    expect(start.status).toBe(202);
+    const startJob = (start.body as { job: { id: string; status: string } }).job;
+    expect(startJob.status).toBe('running');
+
+    // The video bytes are fetched with the global fetch in advanceVideoJob.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 })));
+    const done = await getJob(svc, startJob.id);
+    vi.unstubAllGlobals();
+
+    const doneJob = (done.body as { job: { status: string; resultAssetId?: string } }).job;
+    expect(doneJob.status).toBe('done');
+    expect(doneJob.resultAssetId).toBeTruthy();
+    const asset = await svc.assets.get(doneJob.resultAssetId as string);
+    expect(asset?.type).toBe('video');
+    expect((asset?.params as Record<string, unknown>).__videoTaskId).toBeUndefined();
   });
 });
