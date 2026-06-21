@@ -37,10 +37,7 @@ export function JobStatus({ status, error }: JobStatusProps) {
         style={{ borderColor: 'rgba(229, 51, 27, 0.4)' }}
       >
         <p className="font-mono text-sm text-[var(--ember-1)] font-semibold mb-1">FORGE FAILED</p>
-        <p className="text-sm text-[var(--forge-muted)] mb-2">{error}</p>
-        <p className="font-mono text-xs text-[var(--forge-faint)]">
-          Set FAL_KEY to forge real images.
-        </p>
+        <p className="text-sm text-[var(--forge-muted)]">{error}</p>
       </div>
     );
   }

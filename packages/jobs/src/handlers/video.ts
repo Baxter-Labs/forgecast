@@ -50,7 +50,7 @@ export class VideoJobHandler implements JobHandler {
     for (let i = 0; i < maxPolls; i += 1) {
       const task = await this.deps.provider.getTask(taskId);
       await report(0.5);
-      if (task.state === 'failed') throw new Error(`video provider reported failure for task ${taskId}`);
+      if (task.state === 'failed') throw new Error(`video generation failed${task.error ? `: ${task.error}` : ` (task ${taskId})`}`);
       if (task.state === 'complete') { videoUrl = task.videoUrl; break; }
       await wait(interval);
     }

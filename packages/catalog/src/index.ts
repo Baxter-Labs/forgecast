@@ -21,6 +21,15 @@ export const videoModels: VideoModel[] = [
     params: { resolution: '720p' },
   },
   {
+    id: 'fal-ai/wan/v2.2-14b/text-to-video',
+    name: 'WAN 2.2 14B',
+    category: 'video',
+    mode: 'text-to-video',
+    note: 'standard quality',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    params: { resolution: '720p' },
+  },
+  {
     id: 'fal-ai/minimax/hailuo-2.3/standard/text-to-video',
     name: 'Hailuo 2.3',
     category: 'video',

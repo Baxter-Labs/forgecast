@@ -97,9 +97,8 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
-  const [videoModel, setVideoModel] = useState(
-    videoModels.find((m) => m.id === defaultVideoModelId)?.id ?? videoModels[0]?.id ?? '',
-  );
+  const [boostQuality, setBoostQuality] = useState(false);
+  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-14b/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
@@ -213,8 +212,8 @@ export function Studio() {
             setPrompt={setPrompt}
             model={model}
             setModel={setModel}
-            videoModel={videoModel}
-            setVideoModel={setVideoModel}
+            boostQuality={boostQuality}
+            setBoostQuality={setBoostQuality}
             videoImageAssetId={videoImageAssetId}
             setVideoImageAssetId={setVideoImageAssetId}
             ratio={ratio}
@@ -252,6 +251,8 @@ export function Studio() {
             onCampaignExecuted={addCampaign}
             transcribeAudio={transcribeAudio}
             voiceInputAvailable={availability.transcribe}
+            boostQuality={boostQuality}
+            setBoostQuality={setBoostQuality}
           />
           <JobStatus status={status} error={error} />
 

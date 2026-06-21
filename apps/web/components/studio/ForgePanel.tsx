@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
-import type { CatalogModel, VideoModel } from '@forgecast/catalog';
-import { imageModels, videoModels } from '@forgecast/catalog';
+import type { CatalogModel } from '@forgecast/catalog';
+import { imageModels } from '@forgecast/catalog';
 import type { Availability, StudioAsset } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
@@ -18,8 +18,8 @@ interface ForgePanelProps {
   setPrompt: (v: string) => void;
   model: string;
   setModel: (v: string) => void;
-  videoModel: string;
-  setVideoModel: (v: string) => void;
+  boostQuality: boolean;
+  setBoostQuality: (v: boolean) => void;
   videoImageAssetId: string | null;
   setVideoImageAssetId: (id: string | null) => void;
   ratio: string;
@@ -92,42 +92,33 @@ function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string
   );
 }
 
-const t2vModels = videoModels.filter((m) => m.mode === 'text-to-video');
-const i2vModels = videoModels.filter((m) => m.mode === 'image-to-video');
-
-function VideoModelSelect({ videoModel, setVideoModel }: { videoModel: string; setVideoModel: (v: string) => void }) {
-  const selected = videoModels.find((m) => m.id === videoModel) ?? videoModels[0];
+function BoostToggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
   return (
     <div>
-      <FieldLabel htmlFor="forge-video-model">Model</FieldLabel>
-      <div className="relative">
-        <select
-          id="forge-video-model"
-          value={videoModel}
-          onChange={(e) => setVideoModel(e.target.value)}
-          className={SELECT_CLASS}
-          style={SELECT_ARROW}
-        >
-          <optgroup label="Text → Video" style={{ background: '#221b16', color: '#6b5e54' }}>
-            {t2vModels.map((m: VideoModel) => (
-              <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
-                {m.name}{m.note ? ` — ${m.note}` : ''}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Image → Video" style={{ background: '#221b16', color: '#6b5e54' }}>
-            {i2vModels.map((m: VideoModel) => (
-              <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
-                {m.name}{m.note ? ` — ${m.note}` : ''}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      </div>
+      <FieldHeading>Quality</FieldHeading>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={active}
+        className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 border font-mono text-[11px] uppercase tracking-[0.12em] transition-all"
+        style={active ? {
+          borderColor: 'var(--ember-2)',
+          color: 'var(--ember-1)',
+          background: 'rgba(255,122,26,0.08)',
+          boxShadow: '0 0 12px var(--ember-glow)',
+        } : {
+          borderColor: 'var(--forge-border)',
+          color: 'var(--forge-faint)',
+          background: 'transparent',
+        }}
+      >
+        <span aria-hidden="true">{active ? '⚡' : '○'}</span>
+        Boost Quality
+      </button>
       <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
-        <span className="text-[var(--ember-1)] opacity-70">{selected?.id ?? videoModel}</span>
-        <span className="text-[var(--forge-faint)]"> · fal.ai</span>
-        {selected?.audio && <span className="text-[var(--forge-faint)]"> · native audio</span>}
+        {active
+          ? <><span className="text-[var(--ember-1)] opacity-70">fal-ai/veo3.1/fast</span> · 4K + native audio</>
+          : <><span style={{ color: 'var(--forge-muted)' }}>fal-ai/wan/v2.2-14b</span> · standard</>}
       </p>
     </div>
   );
@@ -196,7 +187,7 @@ function ImageSourcePicker({
 }
 
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, videoModel, setVideoModel,
+  mode, setMode, prompt, setPrompt, model, setModel, boostQuality, setBoostQuality,
   videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
   assets,
@@ -227,8 +218,7 @@ export function ForgePanel({
 
   const hasCampaign = !!activeCampaignId;
 
-  const selectedVideoModelDef = videoModels.find((m) => m.id === videoModel);
-  const isI2V = selectedVideoModelDef?.mode === 'image-to-video';
+  const isI2V = false; // boost-quality toggle only exposes t2v models
 
   const canForge =
     !forging &&
@@ -429,7 +419,7 @@ export function ForgePanel({
             />
           </div>
 
-          <VideoModelSelect videoModel={videoModel} setVideoModel={setVideoModel} />
+          <BoostToggle active={boostQuality} onToggle={() => setBoostQuality(!boostQuality)} />
 
           {isI2V && (
             <>
@@ -461,7 +451,7 @@ export function ForgePanel({
             setPrompts={setMontagePrompts}
           />
 
-          <VideoModelSelect videoModel={videoModel} setVideoModel={setVideoModel} />
+          <BoostToggle active={boostQuality} onToggle={() => setBoostQuality(!boostQuality)} />
 
           <div>
             <FieldHeading>Ratio</FieldHeading>

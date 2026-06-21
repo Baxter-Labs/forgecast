@@ -16,6 +16,7 @@ export interface VideoGenTask {
   taskId: string;
   state: VideoGenState;
   videoUrl?: string;
+  error?: string;
 }
 
 export interface VideoProvider {

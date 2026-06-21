@@ -12,6 +12,8 @@ interface AgentChatProps {
   onAgenticDone: (result: AgenticResult) => void;
   transcribeAudio: (blob: Blob) => Promise<string | null>;
   voiceInputAvailable: boolean;
+  boostQuality: boolean;
+  setBoostQuality: (v: boolean) => void;
 }
 
 type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error' | 'agentic' | 'agentic-done';
@@ -23,7 +25,7 @@ function isAgentOffline(err: string): boolean {
   return e.includes('openai') || e.includes('agent');
 }
 
-export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCampaignExecuted, onAgenticDone, transcribeAudio, voiceInputAvailable }: AgentChatProps) {
+export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCampaignExecuted, onAgenticDone, transcribeAudio, voiceInputAvailable, boostQuality, setBoostQuality }: AgentChatProps) {
   const [open, setOpen] = useState(true);
   const [brief, setBrief] = useState('');
   const [platforms, setPlatforms] = useState<string[]>(['instagram']);
@@ -58,7 +60,13 @@ export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCam
   async function runExecute() {
     if (!plan) return;
     setPhase('executing'); setError(null);
-    const res = await agentExecute(plan);
+    const model = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-14b/text-to-video';
+    const planWithModel: ContentPlan = {
+      ...plan,
+      assets: plan.assets.map((a) => a.kind === 'video' ? { ...a, model } : a),
+      montage: plan.montage ? { ...plan.montage, model } : undefined,
+    };
+    const res = await agentExecute(planWithModel);
     if (res.error || !res.result) {
       setError(res.error ?? 'Execution failed'); setPhase('error'); return;
     }
@@ -459,15 +467,36 @@ export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCam
                 </div>
               )}
 
-              {/* EXECUTE button */}
+              {/* Quality toggle + EXECUTE */}
               {phase === 'planned' && (
-                <button
-                  type="button"
-                  onClick={runExecute}
-                  className="btn-forge rounded-lg py-2.5 px-5 text-xs self-start"
-                >
-                  EXECUTE →
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={runExecute}
+                    className="btn-forge rounded-lg py-2.5 px-5 text-xs"
+                  >
+                    EXECUTE →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBoostQuality(!boostQuality)}
+                    aria-pressed={boostQuality}
+                    className="flex items-center gap-2 rounded-lg px-3.5 py-2 border font-mono text-[11px] uppercase tracking-[0.12em] transition-all"
+                    style={boostQuality ? {
+                      borderColor: 'var(--ember-2)',
+                      color: 'var(--ember-1)',
+                      background: 'rgba(255,122,26,0.08)',
+                      boxShadow: '0 0 12px var(--ember-glow)',
+                    } : {
+                      borderColor: 'var(--forge-border)',
+                      color: 'var(--forge-faint)',
+                      background: 'transparent',
+                    }}
+                  >
+                    <span aria-hidden="true">{boostQuality ? '⚡' : '○'}</span>
+                    Boost Video Quality
+                  </button>
+                </div>
               )}
 
               {/* Executing heatbar */}
