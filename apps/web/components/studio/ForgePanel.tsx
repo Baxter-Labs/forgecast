@@ -112,7 +112,7 @@ function BoostToggle({ active, onToggle }: { active: boolean; onToggle: () => vo
           background: 'transparent',
         }}
       >
-        <span aria-hidden="true">{active ? '⚡' : '○'}</span>
+      <span aria-hidden="true">{active ? '⚡' : '○'}</span>
         Boost Quality
       </button>
       <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
