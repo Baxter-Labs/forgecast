@@ -11,3 +11,4 @@ export * from './videogen';
 export * from './voicegen';
 export * from './montage';
 export * from './transcribe';
+export * from './presenter';

@@ -6,3 +6,4 @@ export * from './handlers/montage';
 export * from './handlers/localMontage';
 export * from './handlers/voiceover';
 export * from './handlers/narrate';
+export * from './handlers/presenter';
