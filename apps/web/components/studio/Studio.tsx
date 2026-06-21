@@ -97,6 +97,7 @@ export function Studio() {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
   const [videoModel, setVideoModel] = useState(videoModels[0]?.id ?? '');
+  const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
@@ -189,7 +190,7 @@ export function Studio() {
       const { width, height } = ratioToDimensions(ratio);
       void generateImage({ prompt, model, width, height }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel }).then(attach);
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -211,11 +212,14 @@ export function Studio() {
             setModel={setModel}
             videoModel={videoModel}
             setVideoModel={setVideoModel}
+            videoImageAssetId={videoImageAssetId}
+            setVideoImageAssetId={setVideoImageAssetId}
             ratio={ratio}
             setRatio={setRatio}
             onForge={handleForge}
             forging={status === 'forging'}
             availability={availability}
+            assets={assets}
             montagePrompts={montagePrompts}
             setMontagePrompts={setMontagePrompts}
             campaigns={campaigns}

@@ -34,7 +34,7 @@ function normalizeAsset(a: RawAsset): StudioAsset {
 }
 
 interface GenerateImageArgs { prompt: string; model?: string; width?: number; height?: number }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 
 const POLL_INTERVAL_MS = 2500;
@@ -128,13 +128,15 @@ export function useForgecast() {
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio, model }: GenerateVideoArgs): Promise<string | null> => {
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId }: GenerateVideoArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
+      const body: Record<string, unknown> = { prompt, aspectRatio, model };
+      if (imageAssetId) body.imageAssetId = imageAssetId;
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, aspectRatio, model }),
+        body: JSON.stringify(body),
       });
       if (res.status !== 202) { setError(await readError(res, 'Failed to start clip')); setStatus('error'); return null; }
       const { job } = await res.json();
