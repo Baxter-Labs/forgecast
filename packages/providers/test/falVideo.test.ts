@@ -29,7 +29,31 @@ describe('FalVideoProvider', () => {
     expect(url).toBe(`${BASE}/${MODEL}`);
     expect((init as RequestInit).method).toBe('POST');
     expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Key k' });
-    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({ prompt: 'a fox', aspect_ratio: '9:16', resolution: '720p' });
+    // Body is minimal: no hardcoded resolution — only prompt + aspect_ratio
+    const parsed = JSON.parse((init as RequestInit).body as string);
+    expect(parsed).toMatchObject({ prompt: 'a fox', aspect_ratio: '9:16' });
+    expect(parsed).not.toHaveProperty('resolution');
+  });
+
+  it('merges extra params (e.g. per-model resolution from catalog) into the body', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ request_id: REQUEST_ID, response_url: RESPONSE_URL }),
+    );
+    const p = new FalVideoProvider(opts(fetchFn));
+    await p.create({ prompt: 'a fox', aspectRatio: '16:9', extra: { resolution: '720p', motion_strength: 5 } });
+    const parsed = JSON.parse((fetchFn.mock.calls[0]![1] as RequestInit).body as string);
+    expect(parsed).toMatchObject({ prompt: 'a fox', aspect_ratio: '16:9', resolution: '720p', motion_strength: 5 });
+  });
+
+  it('passes image_url for image-to-video requests', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ request_id: REQUEST_ID, response_url: RESPONSE_URL }),
+    );
+    const p = new FalVideoProvider(opts(fetchFn));
+    await p.create({ prompt: 'animate this', imageUrl: 'https://cdn/source.jpg' });
+    const parsed = JSON.parse((fetchFn.mock.calls[0]![1] as RequestInit).body as string);
+    expect(parsed).toMatchObject({ prompt: 'animate this', image_url: 'https://cdn/source.jpg' });
+    expect(parsed).not.toHaveProperty('aspect_ratio');
   });
 
   it('falls back to constructing response_url from model path when fal omits response_url', async () => {

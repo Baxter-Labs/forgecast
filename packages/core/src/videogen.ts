@@ -4,6 +4,10 @@ export interface VideoGenInput {
   duration?: number;
   quality?: string;
   model?: string;
+  /** Source image URL for image-to-video models. */
+  imageUrl?: string;
+  /** Extra model-specific params merged into the fal request body. */
+  extra?: Record<string, unknown>;
 }
 
 export type VideoGenState = 'processing' | 'complete' | 'failed';

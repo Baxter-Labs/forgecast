@@ -24,7 +24,7 @@ export class VideoJobHandler implements JobHandler {
   constructor(private readonly deps: VideoJobHandlerDeps) {}
 
   async run(job: Job, report: ProgressReporter): Promise<JobOutcome> {
-    const params = job.params as { prompt?: unknown; aspectRatio?: unknown; duration?: unknown; quality?: unknown; model?: unknown };
+    const params = job.params as { prompt?: unknown; aspectRatio?: unknown; duration?: unknown; quality?: unknown; model?: unknown; imageUrl?: unknown; extra?: unknown };
     if (typeof params.prompt !== 'string' || params.prompt.trim().length === 0) {
       throw new Error('video job requires a non-empty "prompt" param');
     }
@@ -35,6 +35,10 @@ export class VideoJobHandler implements JobHandler {
       duration: typeof params.duration === 'number' ? params.duration : undefined,
       quality: typeof params.quality === 'string' ? params.quality : undefined,
       model: typeof params.model === 'string' ? params.model : undefined,
+      imageUrl: typeof params.imageUrl === 'string' ? params.imageUrl : undefined,
+      extra: params.extra != null && typeof params.extra === 'object' && !Array.isArray(params.extra)
+        ? (params.extra as Record<string, unknown>)
+        : undefined,
     });
     await report(0.05);
 
