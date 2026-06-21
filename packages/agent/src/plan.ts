@@ -1,4 +1,4 @@
-import type { ContentPlan, ContentPlanItem, MontagePlan, PlatformPost } from './types';
+import type { ContentPlan, ContentPlanItem, MontagePlan, MontageScene, PlatformPost } from './types';
 
 const VIDEO_MODEL_GUIDE = `
 Available video models (fal.ai) — choose the best fit per clip:
