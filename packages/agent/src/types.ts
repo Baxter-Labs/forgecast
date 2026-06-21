@@ -46,9 +46,35 @@ export interface ExecutionResult {
   published: { postId: string; status: string } | null;
 }
 
+/** A tool the LLM may call. `parameters` is a JSON Schema describing the args. */
+export interface LlmTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** A single tool call the LLM emitted (args are an unparsed JSON string). */
+export interface LlmToolCall {
+  id: string;
+  name: string;
+  argumentsJson: string;
+}
+
+/** A chat message in a tool-calling conversation. */
+export interface LlmChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  /** Set on role:'tool' messages — the id of the call this is a result for. */
+  toolCallId?: string;
+  /** Set on role:'assistant' messages that requested tool calls. */
+  toolCalls?: LlmToolCall[];
+}
+
 /** Abstracts the LLM (Codex / OpenAI / Claude). Inject a mock in tests; a real client in production. */
 export interface LlmClient {
   complete(input: { system: string; user: string }): Promise<string>;
+  /** Optional tool-calling turn. Optional so mocks that only implement `complete` keep compiling. */
+  chat?(input: { messages: LlmChatMessage[]; tools: LlmTool[] }): Promise<{ content: string; toolCalls: LlmToolCall[] }>;
 }
 
 /** Trend intelligence (e.g. Agent-Reach). Returns a short summary of what's trending. */
@@ -61,5 +87,7 @@ export interface ForgecastActions {
   ensureProject(name: string): Promise<string>;
   generateImage(projectId: string, prompt: string, aspectRatio?: string): Promise<{ assetId: string | null }>;
   generateVideo(projectId: string, prompt: string, aspectRatio?: string): Promise<{ jobId: string }>;
+  /** Generate a talking-head presenter video: a person presenting the product, lip-synced to a voice-over. */
+  generatePresenter(projectId: string, opts: { imagePrompt: string; script: string; voice?: string }): Promise<{ jobId: string }>;
   publish(assetId: string, content: string, channels?: string[]): Promise<{ postId: string; status: string }>;
 }

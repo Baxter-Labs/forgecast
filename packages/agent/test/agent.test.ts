@@ -30,6 +30,7 @@ function makeForgecast(): ForgecastActions {
     ensureProject: vi.fn(async () => 'p1'),
     generateImage: vi.fn(async () => ({ assetId: 'a-img' })),
     generateVideo: vi.fn(async () => ({ jobId: 'j-vid' })),
+    generatePresenter: vi.fn(async () => ({ jobId: 'j-pres' })),
     publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
   };
 }
