@@ -15,3 +15,18 @@ export function getD1Binding(): D1Like | null {
     return null;
   }
 }
+
+/**
+ * Keeps a long-running background task (e.g. a video job) alive after the HTTP
+ * response is sent. On Cloudflare Workers an unawaited promise is cancelled once
+ * the response returns, so async jobs must be registered via `ctx.waitUntil`.
+ * Off-Workers (Node), the event loop keeps the promise running on its own.
+ */
+export function runBackground(task: Promise<unknown>): void {
+  const safe = task.catch(() => {});
+  try {
+    getCloudflareContext().ctx.waitUntil(safe);
+  } catch {
+    void safe;
+  }
+}

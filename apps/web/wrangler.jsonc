@@ -14,7 +14,9 @@
   },
   "vars": {
     // Store generated asset bytes in Cloudflare R2 (via the S3 API in R2Storage).
-    "FORGECAST_PROFILE": "baxter-cloud"
+    "FORGECAST_PROFILE": "baxter-cloud",
+    // Public origin so image-to-video, montage, and publish can resolve asset URLs.
+    "FORGECAST_BASE_URL": "https://forgecast-web.saikiran-vanamala1990.workers.dev"
   },
   // Edge-durable metadata (projects/assets/jobs) so state survives across isolates.
   // Schema self-initializes on first use; or run:

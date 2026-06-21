@@ -117,6 +117,12 @@ export const videoModels: VideoModel[] = [
   },
 ];
 
+/**
+ * Recommended default text-to-video model — a pro-tier model with strong motion
+ * and native audio (over the cheaper, lower-fidelity WAN default).
+ */
+export const defaultVideoModelId = 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
+
 /** Look up a video model by its fal endpoint id. */
 export function videoModelById(id: string): VideoModel | undefined {
   return videoModels.find((m) => m.id === id);

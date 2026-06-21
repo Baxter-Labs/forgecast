@@ -2,6 +2,7 @@ import { newProject, newJob } from '@forgecast/core';
 import type { MontageSpec } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
+import { runBackground } from './cf-env';
 
 export interface ApiResult {
   status: number;
@@ -85,9 +86,9 @@ export async function generateShortVideo(services: Services, projectId: string, 
       { id: services.ids.randomId(), now: services.ids.nowIso() },
     ),
   );
-  // Long-running: run in the background (works in the persistent self-hosted Node server);
-  // the client polls GET /api/jobs/:id for completion.
-  void services.runner.run(job.id).catch(() => {});
+  // Long-running: run in the background. On Workers `ctx.waitUntil` keeps the job
+  // alive past the 202 response; the client polls GET /api/jobs/:id for completion.
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
@@ -140,7 +141,7 @@ export async function generateVideo(services: Services, projectId: string, input
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'video', provider: services.videoProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  void services.runner.run(job.id).catch(() => {});
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
@@ -177,7 +178,7 @@ export async function generateMontage(services: Services, projectId: string, inp
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  void services.runner.run(job.id).catch(() => {});
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
@@ -198,7 +199,7 @@ export async function generateVoiceover(services: Services, projectId: string, i
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'voiceover', provider: services.voiceProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  void services.runner.run(job.id).catch(() => {});
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
@@ -226,7 +227,7 @@ export async function generateNarratedVideo(services: Services, projectId: strin
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'narrate', provider: 'narrate', params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  void services.runner.run(job.id).catch(() => {});
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
@@ -268,7 +269,7 @@ export async function generatePresenter(services: Services, projectId: string, i
       { id: services.ids.randomId(), now: services.ids.nowIso() },
     ),
   );
-  void services.runner.run(job.id).catch(() => {});
+  runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
 }
 
