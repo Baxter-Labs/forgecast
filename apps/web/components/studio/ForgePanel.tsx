@@ -118,7 +118,7 @@ function BoostToggle({ active, onToggle }: { active: boolean; onToggle: () => vo
       <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
         {active
           ? <><span className="text-[var(--ember-1)] opacity-70">fal-ai/veo3.1/fast</span> · 4K + native audio</>
-          : <><span style={{ color: 'var(--forge-muted)' }}>fal-ai/wan/v2.2-14b</span> · standard</>}
+          : <><span style={{ color: 'var(--forge-muted)' }}>fal-ai/wan/v2.2-a14b</span> · standard</>}
       </p>
     </div>
   );

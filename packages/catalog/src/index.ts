@@ -21,8 +21,8 @@ export const videoModels: VideoModel[] = [
     params: { resolution: '720p' },
   },
   {
-    id: 'fal-ai/wan/v2.2-14b/text-to-video',
-    name: 'WAN 2.2 14B',
+    id: 'fal-ai/wan/v2.2-a14b/text-to-video',
+    name: 'WAN 2.2 A14B',
     category: 'video',
     mode: 'text-to-video',
     note: 'standard quality',

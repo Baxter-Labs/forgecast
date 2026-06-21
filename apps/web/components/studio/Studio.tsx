@@ -98,7 +98,7 @@ export function Studio() {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
   const [boostQuality, setBoostQuality] = useState(false);
-  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-14b/text-to-video';
+  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-a14b/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
