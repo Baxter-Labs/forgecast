@@ -68,7 +68,7 @@ describe('ContentAgent.execute', () => {
     expect(result.projectId).toBe('p1');
     expect(result.assetIds).toEqual(['a-img']);
     expect(result.videoJobIds).toEqual(['j-vid']);
-    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'sneaker from leaves', '9:16');
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'sneaker from leaves', '9:16', undefined);
     expect(forgecast.publish).toHaveBeenCalledWith('a-img', 'Drop 🌱', ['instagram', 'linkedin']);
     expect(result.published).toEqual({ postId: 'post1', status: 'publishing' });
   });
@@ -96,9 +96,9 @@ describe('ContentAgent.execute', () => {
     const r = await new ContentAgent({ llm: { complete: vi.fn() } as unknown as LlmClient, forgecast }).execute(montagePlan);
     // Montage clips are queued via generateVideo (3 times, once per scene)
     expect(forgecast.generateVideo).toHaveBeenCalledTimes(3);
-    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip a', '9:16');
-    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip b', '9:16');
-    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip c', '9:16');
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip a', '9:16', undefined);
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip b', '9:16', undefined);
+    expect(forgecast.generateVideo).toHaveBeenCalledWith('p1', 'clip c', '9:16', undefined);
     // Job IDs end up in montageJobIds, not videoJobIds
     expect(r.montageJobIds).toHaveLength(3);
     expect(r.videoJobIds).toHaveLength(0);

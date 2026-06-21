@@ -43,8 +43,8 @@ export function makeForgecastActions(services: Services): ForgecastActions {
       }
       return { assetId: asset?.id ?? null };
     },
-    async generateVideo(projectId, prompt, aspectRatio) {
-      const r = await generateVideo(services, projectId, { prompt, aspectRatio });
+    async generateVideo(projectId, prompt, aspectRatio, model) {
+      const r = await generateVideo(services, projectId, { prompt, aspectRatio, model });
       const job = (r.body as { job?: { id: string } }).job;
       return { jobId: job?.id ?? '' };
     },

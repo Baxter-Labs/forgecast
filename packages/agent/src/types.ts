@@ -2,6 +2,8 @@ export interface ContentPlanItem {
   kind: 'image' | 'video';
   prompt: string;
   aspectRatio?: string;
+  /** fal.ai model ID to use when kind is "video". Agent selects based on content needs. */
+  model?: string;
 }
 
 export interface PlatformPost {
@@ -13,11 +15,15 @@ export interface PlatformPost {
 export interface MontageScene {
   prompt: string;
   aspectRatio?: string;
+  /** Per-clip model override. Falls back to MontagePlan.model, then provider default. */
+  model?: string;
 }
 
 /** A montage: 3 unique video clips generated from their own prompts and then stitched together. */
 export interface MontagePlan {
   aspectRatio?: string;
+  /** Default model for all montage clips. Agent selects based on content needs. */
+  model?: string;
   /** The 3 unique clip prompts. Must have at least 2. */
   scenes: MontageScene[];
 }
@@ -86,7 +92,7 @@ export interface TrendTool {
 export interface ForgecastActions {
   ensureProject(name: string): Promise<string>;
   generateImage(projectId: string, prompt: string, aspectRatio?: string): Promise<{ assetId: string | null }>;
-  generateVideo(projectId: string, prompt: string, aspectRatio?: string): Promise<{ jobId: string }>;
+  generateVideo(projectId: string, prompt: string, aspectRatio?: string, model?: string): Promise<{ jobId: string }>;
   /** Generate a talking-head presenter video: a person presenting the product, lip-synced to a voice-over. */
   generatePresenter(projectId: string, opts: { imagePrompt: string; script: string; voice?: string }): Promise<{ jobId: string }>;
   publish(assetId: string, content: string, channels?: string[]): Promise<{ postId: string; status: string }>;

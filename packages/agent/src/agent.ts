@@ -43,7 +43,7 @@ export class ContentAgent {
         const { assetId } = await this.deps.forgecast.generateImage(projectId, item.prompt, item.aspectRatio);
         if (assetId) assetIds.push(assetId);
       } else {
-        const { jobId } = await this.deps.forgecast.generateVideo(projectId, item.prompt, item.aspectRatio);
+        const { jobId } = await this.deps.forgecast.generateVideo(projectId, item.prompt, item.aspectRatio, item.model);
         if (jobId) videoJobIds.push(jobId);
       }
     }
@@ -53,8 +53,9 @@ export class ContentAgent {
     const montageJobIds: string[] = [];
     if (plan.montage && plan.montage.scenes.length >= 2) {
       for (const scene of plan.montage.scenes) {
+        const sceneModel = scene.model ?? plan.montage.model;
         const { jobId } = await this.deps.forgecast.generateVideo(
-          projectId, scene.prompt, scene.aspectRatio ?? plan.montage.aspectRatio,
+          projectId, scene.prompt, scene.aspectRatio ?? plan.montage.aspectRatio, sceneModel,
         );
         if (jobId) montageJobIds.push(jobId);
       }
