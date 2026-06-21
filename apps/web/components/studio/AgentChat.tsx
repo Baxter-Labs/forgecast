@@ -60,7 +60,7 @@ export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCam
   async function runExecute() {
     if (!plan) return;
     setPhase('executing'); setError(null);
-    const model = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-14b/text-to-video';
+    const model = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-a14b/text-to-video';
     const planWithModel: ContentPlan = {
       ...plan,
       assets: plan.assets.map((a) => a.kind === 'video' ? { ...a, model } : a),
