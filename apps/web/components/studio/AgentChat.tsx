@@ -1,18 +1,20 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Sparkles, ChevronDown, Mic, MicOff } from 'lucide-react';
-import type { ContentPlan, ExecutionResult } from '@forgecast/agent';
+import type { AgenticResult, ContentPlan, ExecutionResult } from '@forgecast/agent';
 
 interface AgentChatProps {
   agentPlan: (brief: string, platforms: string[]) => Promise<{ plan?: unknown; error?: string }>;
   agentExecute: (plan: unknown, opts?: { projectName?: string; publish?: boolean }) => Promise<{ result?: unknown; error?: string }>;
+  agentRun: (brief: string, platforms: string[]) => Promise<{ result?: unknown; error?: string }>;
   onExecuted: (result: ExecutionResult) => void;
   onCampaignExecuted: (c: { brief: string; platforms: string[]; plan: ContentPlan; assetIds: string[] }) => void;
+  onAgenticDone: (result: AgenticResult) => void;
   transcribeAudio: (blob: Blob) => Promise<string | null>;
   voiceInputAvailable: boolean;
 }
 
-type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error';
+type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error' | 'agentic' | 'agentic-done';
 
 const PLATFORMS = ['instagram', 'linkedin', 'youtube', 'tiktok'];
 
@@ -21,12 +23,13 @@ function isAgentOffline(err: string): boolean {
   return e.includes('openai') || e.includes('agent');
 }
 
-export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecuted, transcribeAudio, voiceInputAvailable }: AgentChatProps) {
+export function AgentChat({ agentPlan, agentExecute, agentRun, onExecuted, onCampaignExecuted, onAgenticDone, transcribeAudio, voiceInputAvailable }: AgentChatProps) {
   const [open, setOpen] = useState(true);
   const [brief, setBrief] = useState('');
   const [platforms, setPlatforms] = useState<string[]>(['instagram']);
   const [plan, setPlan] = useState<ContentPlan | null>(null);
   const [result, setResult] = useState<ExecutionResult | null>(null);
+  const [agentic, setAgentic] = useState<AgenticResult | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +69,20 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
     // so Studio can attach the resolved video asset IDs to the right entry.
     onCampaignExecuted({ brief, platforms, plan, assetIds: execResult.assetIds ?? [] });
     onExecuted(execResult);
+  }
+
+  async function runAgentic() {
+    if (!brief.trim()) return;
+    setPhase('agentic'); setError(null); setPlan(null); setResult(null); setAgentic(null);
+    const res = await agentRun(brief, platforms.length ? platforms : ['instagram']);
+    if (res.error || !res.result) {
+      setError(res.error ?? 'Auto-run failed'); setPhase('error'); return;
+    }
+    const agenticResult = res.result as AgenticResult;
+    setAgentic(agenticResult);
+    setPhase('agentic-done');
+    // Hand off to Studio so it polls the b-roll + presenter jobs and refreshes the gallery.
+    onAgenticDone(agenticResult);
   }
 
   async function handleMicClick() {
@@ -168,6 +185,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
   }
 
   const offline = phase === 'error' && error != null && isAgentOffline(error);
+  const busy = phase === 'planning' || phase === 'executing' || phase === 'agentic';
 
   return (
     <div className="panel p-5 mb-6">
@@ -207,14 +225,14 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
               onChange={(e) => setBrief(e.target.value)}
               placeholder="Make a 15s teaser for an eco-friendly sneaker drop…"
               rows={3}
-              disabled={phase === 'planning' || phase === 'executing'}
+              disabled={busy}
               className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 pr-12 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)] disabled:opacity-60"
             />
             {/* Mic button — top-right corner of textarea */}
             <button
               type="button"
               onClick={handleMicClick}
-              disabled={transcribing || phase === 'planning' || phase === 'executing'}
+              disabled={transcribing || busy}
               aria-label={recording ? 'Stop recording' : 'Record voice input'}
               className="absolute top-2 right-2 grid place-items-center w-7 h-7 rounded-md border transition-all disabled:opacity-40"
               style={recording ? {
@@ -273,15 +291,72 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
             })}
           </div>
 
-          {/* PLAN button */}
-          <button
-            type="button"
-            onClick={runPlan}
-            disabled={!brief.trim() || phase === 'planning' || phase === 'executing'}
-            className={`btn-forge rounded-lg py-2.5 px-5 text-xs self-start ${phase === 'planning' ? 'forging' : ''}`}
-          >
-            {phase === 'planning' ? '⚒ PLANNING…' : 'PLAN'}
-          </button>
+          {/* PLAN + AUTO-RUN buttons */}
+          <div className="flex items-center gap-2.5 self-start">
+            <button
+              type="button"
+              onClick={runPlan}
+              disabled={!brief.trim() || busy}
+              className={`btn-forge rounded-lg py-2.5 px-5 text-xs ${phase === 'planning' ? 'forging' : ''}`}
+            >
+              {phase === 'planning' ? '⚒ PLANNING…' : 'PLAN'}
+            </button>
+            {/* AUTO-RUN — tool-calling agent that brainstorms AND produces in one shot */}
+            <button
+              type="button"
+              onClick={runAgentic}
+              disabled={!brief.trim() || busy}
+              className={`rounded-lg py-2 px-4 text-[11px] font-mono uppercase tracking-[0.12em] border transition-all disabled:opacity-40 ${phase === 'agentic' ? 'forging' : ''}`}
+              style={{
+                borderColor: 'var(--ember-2)',
+                color: 'var(--ember-1)',
+                background: 'transparent',
+                boxShadow: '0 0 10px var(--ember-glow)',
+              }}
+            >
+              {phase === 'agentic' ? '⚡ WORKING…' : '⚡ AUTO-RUN'}
+            </button>
+          </div>
+
+          {/* Agentic working heatbar */}
+          {phase === 'agentic' && (
+            <div className="flex items-center gap-3">
+              <div className="heatbar h-2 flex-1">
+                <span className="forging" style={{ width: '60%' }} />
+              </div>
+              <p className="font-mono text-xs text-[var(--ember-1)] shrink-0 forging">AGENT WORKING…</p>
+            </div>
+          )}
+
+          {/* Agentic transcript + summary */}
+          {agentic && phase === 'agentic-done' && (
+            <div className="flex flex-col gap-3 rise">
+              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)]">Agent transcript</p>
+              <div className="flex flex-col gap-1.5">
+                {agentic.steps.map((s, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 rounded-md px-2.5 py-1.5 border"
+                    style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+                  >
+                    <span
+                      className="font-mono text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 rounded shrink-0 mt-px"
+                      style={{ color: 'var(--ember-1)', border: '1px solid var(--ember-2)' }}
+                    >
+                      {s.tool}
+                    </span>
+                    <span className="font-mono text-[11px] text-[var(--forge-muted)] leading-relaxed">{s.summary}</span>
+                  </div>
+                ))}
+              </div>
+              {agentic.summary && (
+                <p className="text-sm text-[var(--forge-text)] leading-relaxed">{agentic.summary}</p>
+              )}
+              <p className="font-mono text-xs text-[var(--forge-muted)]">
+                ✓ {agentic.imageAssetIds.length} image{agentic.imageAssetIds.length !== 1 ? 's' : ''}, {agentic.videoJobIds.length} b-roll, {agentic.presenterJobIds.length} presenter — forging in the gallery.
+              </p>
+            </div>
+          )}
 
           {/* Planning heatbar */}
           {phase === 'planning' && (

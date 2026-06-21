@@ -90,7 +90,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     publishAsset,
-    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
 
@@ -235,12 +235,17 @@ export function Studio() {
           <AgentChat
             agentPlan={agentPlan}
             agentExecute={agentExecute}
+            agentRun={agentRun}
             onExecuted={(result) => {
               void refreshAssets();
               void awaitAgentJobs(result).then((videoAssetIds) => {
                 const campId = latestCampaignIdRef.current;
                 if (campId) appendVideoAssets(campId, videoAssetIds);
               });
+            }}
+            onAgenticDone={(r) => {
+              void refreshAssets();
+              void awaitAgenticJobs(r);
             }}
             onCampaignExecuted={addCampaign}
             transcribeAudio={transcribeAudio}

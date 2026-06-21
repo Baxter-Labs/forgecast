@@ -1,6 +1,6 @@
 import type { ForgecastActions } from '@forgecast/agent';
 import type { Services } from '../forgecast';
-import { createProject, generateImage, generateVideo, publishAsset } from '../api';
+import { createProject, generateImage, generatePresenter, generateVideo, publishAsset } from '../api';
 
 const RATIO_TO_DIM: Record<string, { width: number; height: number }> = {
   '1:1': { width: 1024, height: 1024 },
@@ -30,6 +30,11 @@ export function makeForgecastActions(services: Services): ForgecastActions {
     },
     async generateVideo(projectId, prompt, aspectRatio) {
       const r = await generateVideo(services, projectId, { prompt, aspectRatio });
+      const job = (r.body as { job?: { id: string } }).job;
+      return { jobId: job?.id ?? '' };
+    },
+    async generatePresenter(projectId, { imagePrompt, script, voice }) {
+      const r = await generatePresenter(services, projectId, { imagePrompt, text: script, voice });
       const job = (r.body as { job?: { id: string } }).job;
       return { jobId: job?.id ?? '' };
     },

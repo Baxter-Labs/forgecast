@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ContentAgent, type ContentPlan } from '@forgecast/agent';
+import { ContentAgent, ToolCallingAgent, type ContentPlan } from '@forgecast/agent';
 import { getServices } from '@/lib/forgecast';
 import { makeForgecastActions } from '@/lib/agent/forgecast-actions';
 import { OpenAiLlmClient } from '@/lib/agent/llm';
@@ -34,6 +34,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ result });
     } catch (e) {
       return NextResponse.json({ error: `execute failed: ${msg(e)}` }, { status: 502 });
+    }
+  }
+
+  if (body.mode === 'agentic') {
+    if (!llm.isAvailable() || !llm.chat) {
+      return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY)' }, { status: 503 });
+    }
+    if (typeof body.brief !== 'string' || body.brief.trim().length === 0) {
+      return NextResponse.json({ error: 'brief is required' }, { status: 400 });
+    }
+    try {
+      const toolAgent = new ToolCallingAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
+      const result = await toolAgent.run(body.brief, { projectId: body.projectId, platforms: body.platforms });
+      return NextResponse.json({ result });
+    } catch (e) {
+      return NextResponse.json({ error: `agentic run failed: ${msg(e)}` }, { status: 502 });
     }
   }
 

@@ -363,13 +363,43 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  // Tool-calling "auto-run": the agent brainstorms AND produces the campaign in
+  // one shot via OpenAI function calling. Returns the agentic result transcript.
+  const agentRun = useCallback(async (brief: string, platforms: string[]) => {
+    try {
+      const res = await fetch('/api/agent', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'agentic', brief, platforms, projectId }),
+      });
+      return (await res.json().catch(() => ({ error: 'Network error' }))) as { result?: unknown; error?: string };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId]);
+
+  // After an agentic run, b-roll video jobs and presenter video jobs render in
+  // the background. Poll both tracks to completion, then refresh the gallery.
+  const awaitAgenticJobs = useCallback(async (result: {
+    videoJobIds?: string[];
+    presenterJobIds?: string[];
+  }): Promise<string[]> => {
+    const jobIds = [...(result.videoJobIds ?? []), ...(result.presenterJobIds ?? [])].filter(Boolean);
+    if (jobIds.length === 0) return [];
+    setStatus('forging'); setError(null);
+    const results = await Promise.all(jobIds.map((id) => pollJob(id)));
+    const assetIds = results.flatMap((r) => (r.assetId ? [r.assetId] : []));
+    setStatus(results.some((r) => r.outcome === 'error') ? 'error' : 'idle');
+    await refreshAssets();
+    return assetIds;
+  }, [pollJob, refreshAssets]);
+
   return {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
     generateVoiceover, narrateVideo, generatePresenter,
     publishAsset,
-    agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };
 }
