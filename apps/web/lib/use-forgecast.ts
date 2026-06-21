@@ -14,6 +14,7 @@ export interface Availability {
   video: boolean;
   montage: boolean;
   voice: boolean;
+  transcribe: boolean;
 }
 
 interface RawAsset {
@@ -47,7 +48,7 @@ export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
   const [publishers, setPublishers] = useState<string[]>([]);
-  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false });
+  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false, transcribe: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
@@ -65,10 +66,11 @@ export function useForgecast() {
       const video: string[] = health?.providers?.video ?? [];
       const montage: string[] = health?.providers?.montage ?? [];
       const voice: string[] = health?.providers?.voice ?? [];
+      const transcribe: string[] = health?.providers?.transcribe ?? [];
       const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
       setPublishers(pubs);
-      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0 });
+      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0 });
 
       await refreshPro();
 
@@ -292,6 +294,23 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
+    try {
+      const form = new FormData();
+      form.append('audio', blob, 'rec.webm');
+      const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(body?.error ?? `Transcription failed (${res.status})`);
+        return null;
+      }
+      return (body?.text as string | undefined) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error');
+      return null;
+    }
+  }, []);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -324,5 +343,6 @@ export function useForgecast() {
     generateVoiceover, narrateVideo,
     publishAsset,
     agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    transcribeAudio,
   };
 }

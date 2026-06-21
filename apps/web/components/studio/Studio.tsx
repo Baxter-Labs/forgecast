@@ -91,6 +91,7 @@ export function Studio() {
     generateImage, generateVideo, generateMontage,
     publishAsset,
     agentPlan, agentExecute, refreshAssets, awaitAgentJobs,
+    transcribeAudio,
   } = useForgecast();
 
   const [mode, setMode] = useState<ForgeMode>('image');
@@ -242,6 +243,8 @@ export function Studio() {
               });
             }}
             onCampaignExecuted={addCampaign}
+            transcribeAudio={transcribeAudio}
+            voiceInputAvailable={availability.transcribe}
           />
           <JobStatus status={status} error={error} />
 

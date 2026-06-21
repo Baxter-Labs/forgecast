@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { Sparkles, ChevronDown } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Sparkles, ChevronDown, Mic, MicOff } from 'lucide-react';
 import type { ContentPlan, ExecutionResult } from '@forgecast/agent';
 
 interface AgentChatProps {
@@ -8,6 +8,8 @@ interface AgentChatProps {
   agentExecute: (plan: unknown, opts?: { projectName?: string; publish?: boolean }) => Promise<{ result?: unknown; error?: string }>;
   onExecuted: (result: ExecutionResult) => void;
   onCampaignExecuted: (c: { brief: string; platforms: string[]; plan: ContentPlan; assetIds: string[] }) => void;
+  transcribeAudio: (blob: Blob) => Promise<string | null>;
+  voiceInputAvailable: boolean;
 }
 
 type Phase = 'idle' | 'planning' | 'planned' | 'executing' | 'done' | 'error';
@@ -19,7 +21,7 @@ function isAgentOffline(err: string): boolean {
   return e.includes('openai') || e.includes('agent');
 }
 
-export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecuted }: AgentChatProps) {
+export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecuted, transcribeAudio, voiceInputAvailable }: AgentChatProps) {
   const [open, setOpen] = useState(true);
   const [brief, setBrief] = useState('');
   const [platforms, setPlatforms] = useState<string[]>(['instagram']);
@@ -27,6 +29,14 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  // Voice input state
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const srRef = useRef<{ stop(): void; onend: (() => void) | null; onerror: (() => void) | null } | null>(null);
 
   function togglePlatform(p: string) {
     setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
@@ -56,6 +66,105 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
     // so Studio can attach the resolved video asset IDs to the right entry.
     onCampaignExecuted({ brief, platforms, plan, assetIds: execResult.assetIds ?? [] });
     onExecuted(execResult);
+  }
+
+  async function handleMicClick() {
+    if (transcribing) return;
+
+    // ── STOP ───────────────────────────────────────────────────────────────────
+    if (recording) {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      } else if (srRef.current) {
+        srRef.current.stop();
+        srRef.current = null;
+        setRecording(false);
+      }
+      return;
+    }
+
+    setVoiceHint(null);
+
+    // ── START — Wispr Flow path ────────────────────────────────────────────────
+    if (voiceInputAvailable && typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunksRef.current = [];
+        const rec = new MediaRecorder(stream);
+        mediaRecorderRef.current = rec;
+
+        rec.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        rec.onstop = async () => {
+          setRecording(false);
+          // Stop all tracks so the mic indicator disappears.
+          stream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+          chunksRef.current = [];
+          mediaRecorderRef.current = null;
+          setTranscribing(true);
+          const text = await transcribeAudio(blob);
+          setTranscribing(false);
+          if (text) {
+            setBrief((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+          }
+        };
+
+        rec.start();
+        setRecording(true);
+      } catch (err) {
+        console.error('mic error:', err);
+        setVoiceHint('Microphone access denied.');
+      }
+      return;
+    }
+
+    // ── START — Web Speech API fallback ────────────────────────────────────────
+    type SRCtor = new () => {
+      continuous: boolean;
+      interimResults: boolean;
+      start(): void;
+      stop(): void;
+      onresult: ((event: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
+      onend: (() => void) | null;
+      onerror: (() => void) | null;
+    };
+    const win = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : undefined;
+    const SR: SRCtor | undefined =
+      (win?.['SpeechRecognition'] as SRCtor | undefined) ??
+      (win?.['webkitSpeechRecognition'] as SRCtor | undefined);
+
+    if (SR) {
+      const recognition = new SR();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      srRef.current = recognition;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0]?.[0]?.transcript ?? '';
+        if (transcript) {
+          setBrief((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+        }
+      };
+      recognition.onend = () => {
+        srRef.current = null;
+        setRecording(false);
+      };
+      recognition.onerror = () => {
+        srRef.current = null;
+        setRecording(false);
+      };
+
+      recognition.start();
+      setRecording(true);
+      return;
+    }
+
+    // ── No voice path available ────────────────────────────────────────────────
+    setVoiceHint('Voice input needs WISPRFLOW_API_KEY (or a Chromium browser)');
+    setTimeout(() => setVoiceHint(null), 4000);
   }
 
   const offline = phase === 'error' && error != null && isAgentOffline(error);
@@ -90,7 +199,7 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
       {open && (
         <div className="mt-4 flex flex-col gap-4">
           {/* Brief */}
-          <div>
+          <div className="relative">
             <label htmlFor="agent-brief" className="sr-only">Creative brief</label>
             <textarea
               id="agent-brief"
@@ -99,9 +208,42 @@ export function AgentChat({ agentPlan, agentExecute, onExecuted, onCampaignExecu
               placeholder="Make a 15s teaser for an eco-friendly sneaker drop…"
               rows={3}
               disabled={phase === 'planning' || phase === 'executing'}
-              className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)] disabled:opacity-60"
+              className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 pr-12 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)] disabled:opacity-60"
             />
+            {/* Mic button — top-right corner of textarea */}
+            <button
+              type="button"
+              onClick={handleMicClick}
+              disabled={transcribing || phase === 'planning' || phase === 'executing'}
+              aria-label={recording ? 'Stop recording' : 'Record voice input'}
+              className="absolute top-2 right-2 grid place-items-center w-7 h-7 rounded-md border transition-all disabled:opacity-40"
+              style={recording ? {
+                borderColor: 'var(--ember-2)',
+                color: 'var(--ember-1)',
+                background: 'rgba(255,122,26,0.12)',
+                boxShadow: '0 0 10px var(--ember-glow)',
+                animation: 'pulse 1.4s ease-in-out infinite',
+              } : {
+                borderColor: 'var(--forge-border)',
+                color: 'var(--forge-faint)',
+                background: 'transparent',
+              }}
+            >
+              {recording ? <MicOff size={14} strokeWidth={2} /> : <Mic size={14} strokeWidth={2} />}
+            </button>
           </div>
+
+          {/* Transcribing indicator */}
+          {transcribing && (
+            <p className="font-mono text-[10px] text-[var(--ember-1)] tracking-[0.12em] forging">
+              transcribing…
+            </p>
+          )}
+
+          {/* Voice hint (no-key / permission-denied notice) */}
+          {voiceHint && !transcribing && (
+            <p className="font-mono text-[10px] text-[var(--forge-muted)] tracking-[0.1em]">{voiceHint}</p>
+          )}
 
           {/* Platform chips */}
           <div role="group" aria-label="Target platforms" className="flex flex-wrap items-center gap-2">
