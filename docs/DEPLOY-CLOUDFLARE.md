@@ -42,6 +42,7 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 wrangler secret put R2_PUBLIC_BASE_URL   # public bucket / CDN domain for serving
 wrangler secret put FAL_KEY              # to actually generate images
 wrangler secret put OMNISOCIALS_API_KEY  # to enable publishing (Studio "Cast")
+wrangler secret put WISPRFLOW_API_KEY    # to enable voice input (talk into the agent)
 ```
 
 ### Publishing (the "Cast" panel)
@@ -59,6 +60,22 @@ Verify it's live: `curl https://<your-worker>/api/health` should list
 `"publishers": ["omnisocials"]`. If it returns `[]`, the secret isn't set on the
 Worker (setting it only in `.env`/`.dev.vars` does **not** reach production — it
 must be a `wrangler secret`).
+
+### Voice input (talk into the agent)
+
+The agent chat box has a mic button. With a **Wispr Flow** key it transcribes your
+speech into the brief via `/api/transcribe`; without one it falls back to the
+browser's built-in Web Speech API (Chromium only, lower quality):
+
+```bash
+cd apps/web
+wrangler secret put WISPRFLOW_API_KEY     # then: pnpm --filter @forgecast/web cf:deploy
+```
+
+Verify it's live: `curl https://<your-worker>/api/health` should list
+`"transcribe": ["wisprflow"]`. If it returns `[]`, the secret isn't set on the
+Worker (a `.env`/`.dev.vars` value does **not** reach production). Get a key at
+https://wisprflow.ai/developers.
 
 For local preview, copy `.dev.vars.example` to `.dev.vars` and fill it in.
 

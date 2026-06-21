@@ -5,6 +5,9 @@ FAL_KEY=
 # Publishing: one key → 10+ social platforms via the OmniSocials aggregator.
 # Without it the Studio publish panel shows "no publishers configured".
 OMNISOCIALS_API_KEY=
+# Voice input: talk into the agent chat box (Wispr Flow speech-to-text).
+# Without it the mic falls back to the browser's Web Speech API (Chromium only).
+WISPRFLOW_API_KEY=
 R2_ACCOUNT_ID=
 R2_BUCKET=
 R2_ACCESS_KEY_ID=
