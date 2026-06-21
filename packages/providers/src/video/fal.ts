@@ -36,7 +36,7 @@ export class FalVideoProvider implements VideoProvider {
 
   constructor(opts: FalVideoProviderOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.FAL_KEY_VIDEO;
-    this.model = opts.model ?? 'fal-ai/wan/v2.2-5b/text-to-video';
+    this.model = opts.model ?? 'fal-ai/veo3.1/fast';
     this.baseUrl = (opts.baseUrl ?? 'https://queue.fal.run').replace(/\/$/, '');
     this.fetchFn = opts.fetchFn ?? fetch;
   }

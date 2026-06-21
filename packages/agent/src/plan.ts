@@ -1,14 +1,6 @@
 import type { ContentPlan, ContentPlanItem, MontagePlan, MontageScene, PlatformPost } from './types';
 
-const VIDEO_MODEL_GUIDE = `
-Available video models (fal.ai) — choose the best fit per clip:
-  "fal-ai/kling-video/v3/pro/text-to-video"          Kling 3 Pro      cinematic motion + audio   → hero clips, brand reels, premium ads
-  "fal-ai/veo3.1/fast"                                Veo 3.1 Fast     4K + native audio          → highest-quality hero shots, music-driven
-  "fal-ai/bytedance/seedance/v1.5/pro/text-to-video"  Seedance 1.5 Pro native audio, keyframes   → product reveals, audio-sync moments
-  "fal-ai/minimax/hailuo-2.3/standard/text-to-video"  Hailuo 2.3       reliable, strong text       → general use, text overlays, steady shots
-  "fal-ai/pixverse/v5/text-to-video"                  PixVerse v5      stylized FX                → abstract, artistic, VFX-heavy content
-  "fal-ai/wan/v2.2-5b/text-to-video"                  WAN 2.2 5B       fast & low-cost             → b-roll filler, quick drafts only
-Default when uncertain: "fal-ai/kling-video/v3/pro/text-to-video". Avoid WAN unless the brief is explicitly low-budget or the clip is filler.`;
+const VIDEO_MODEL_GUIDE = `Always use "fal-ai/veo3.1/fast" as the model for every video asset and montage clip.`;
 
 export const PLAN_SYSTEM_PROMPT = `You are Forgecast's content planning agent. Given a creative brief and target platforms (plus optional trending notes), produce a concrete, on-trend content plan.
 Respond with ONLY a JSON object (no prose) of the shape:

@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { FalVideoProvider } from '../src/index';
 
 const BASE = 'https://queue.fal.run';
-const MODEL = 'fal-ai/wan/v2.2-5b/text-to-video';
-const APP = 'fal-ai/wan'; // fal normalises status/result URLs to the app-level path
+const MODEL = 'fal-ai/veo3.1/fast';
+const APP = 'fal-ai/veo3.1'; // fal normalises status/result URLs to the app-level path
 const REQUEST_ID = 'req-42';
 const RESPONSE_URL = `${BASE}/${APP}/requests/${REQUEST_ID}`;
 
