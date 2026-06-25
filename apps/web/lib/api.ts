@@ -111,6 +111,14 @@ export async function getAssetBytes(
   return services.storage.get(asset.storageKey);
 }
 
+// Single-asset metadata (incl. projectId) so the standalone editor page can load
+// an asset by id from its route without listing a whole project.
+export async function getAsset(services: Services, assetId: string): Promise<ApiResult> {
+  const asset = await services.assets.get(assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  return { status: 200, body: { asset } };
+}
+
 // Base64-encode bytes in a way that works on both Node (Buffer) and the edge
 // runtime (no Buffer — chunked String.fromCharCode + btoa, chunked to avoid the
 // arg-count limit on very large assets).
@@ -526,6 +534,49 @@ export async function editAsset(
   const finished = await services.runner.run(job.id);
   const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
   return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+// Produces N alternate takes of an image by re-running the edit model with
+// variation instructions — "give me options" in one click. Thin layer over the
+// existing edit job; each variation is its own new image asset.
+export async function generateVariations(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; count?: number },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can have variations' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const count = Math.min(4, Math.max(1, typeof input.count === 'number' ? Math.round(input.count) : 3));
+  const assets = [];
+  for (let i = 1; i <= count; i++) {
+    const prompt = `Create a fresh variation of this image: keep the same subject, product, and brand, but change the composition, camera angle, and lighting. Variation ${i} of ${count}.`;
+    const job = await services.jobs.create(
+      newJob(
+        { projectId, kind: 'edit', provider: 'fal', params: { imageUrl, prompt, sourceAssetId: input.assetId, variation: true } },
+        { id: services.ids.randomId(), now: services.ids.nowIso() },
+      ),
+    );
+    const finished = await services.runner.run(job.id);
+    if (finished.resultAssetId) {
+      const a = await services.assets.get(finished.resultAssetId);
+      if (a) assets.push(a);
+    }
+  }
+  if (assets.length === 0) return { status: 502, body: { error: 'variation generation failed' } };
+  return { status: 200, body: { assets } };
 }
 
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {

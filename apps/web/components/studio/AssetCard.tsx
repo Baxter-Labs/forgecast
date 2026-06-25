@@ -1,6 +1,7 @@
 'use client';
-import { useState, useRef } from 'react';
-import { Send, Download } from 'lucide-react';
+import { useState } from 'react';
+import Link from 'next/link';
+import { Send, Download, Pencil } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { Lightbox } from './Lightbox';
 
@@ -9,18 +10,6 @@ interface AssetCardProps {
   index: number;
   compact?: boolean;
   onPublish?: (asset: StudioAsset) => void;
-  onEnhance?: (assetId: string) => void;
-  enhancing?: boolean;
-  onAnimate?: (assetId: string) => void;
-  animating?: boolean;
-  onEdit?: (assetId: string, prompt: string) => void;
-  editing?: boolean;
-  onCutout?: (assetId: string) => void;
-  cutting?: boolean;
-  onNarrate?: (assetId: string, text: string) => void;
-  narrating?: boolean;
-  narrateAvailable?: boolean;
-  videoAvailable?: boolean;
   /** When true the card shows a selection ring and click selects instead of opening lightbox */
   selectable?: boolean;
   selected?: boolean;
@@ -29,21 +18,10 @@ interface AssetCardProps {
 
 export function AssetCard({
   asset, index, compact = false,
-  onPublish, onEnhance, enhancing = false,
-  onAnimate, animating = false,
-  onEdit, editing = false,
-  onCutout, cutting = false,
-  onNarrate, narrating = false, narrateAvailable = false,
-  videoAvailable = false,
+  onPublish,
   selectable = false, selected = false, onSelect,
 }: AssetCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editPrompt, setEditPrompt] = useState('');
-  const editInputRef = useRef<HTMLInputElement>(null);
-  const [narrateOpen, setNarrateOpen] = useState(false);
-  const [narrateText, setNarrateText] = useState('');
-  const narrateInputRef = useRef<HTMLInputElement>(null);
   const prompt = asset.params.prompt ?? '';
   const isVideo = asset.type === 'video';
   const w = asset.params.width;
@@ -58,58 +36,6 @@ export function AssetCard({
       onSelect(asset.id);
     } else {
       setLightboxOpen(true);
-    }
-  }
-
-  function handleEditButtonClick(e: React.MouseEvent) {
-    e.stopPropagation();
-    setEditOpen(true);
-    setEditPrompt('');
-    setTimeout(() => editInputRef.current?.focus(), 0);
-  }
-
-  function handleEditSubmit(e?: React.FormEvent) {
-    e?.preventDefault();
-    const trimmed = editPrompt.trim();
-    if (!trimmed || !onEdit) return;
-    onEdit(asset.id, trimmed);
-    setEditOpen(false);
-    setEditPrompt('');
-  }
-
-  function handleEditKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleEditSubmit();
-    } else if (e.key === 'Escape') {
-      setEditOpen(false);
-      setEditPrompt('');
-    }
-  }
-
-  function handleNarrateButtonClick(e: React.MouseEvent) {
-    e.stopPropagation();
-    setNarrateOpen(true);
-    setNarrateText('');
-    setTimeout(() => narrateInputRef.current?.focus(), 0);
-  }
-
-  function handleNarrateSubmit(e?: React.FormEvent) {
-    e?.preventDefault();
-    const trimmed = narrateText.trim();
-    if (!trimmed || !onNarrate) return;
-    onNarrate(asset.id, trimmed);
-    setNarrateOpen(false);
-    setNarrateText('');
-  }
-
-  function handleNarrateKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleNarrateSubmit();
-    } else if (e.key === 'Escape') {
-      setNarrateOpen(false);
-      setNarrateText('');
     }
   }
 
@@ -209,156 +135,32 @@ export function AssetCard({
                 )}
                 <span className="font-mono text-[10px] text-[var(--forge-faint)] truncate">{modelId}</span>
               </div>
-              <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                {!isVideo && !selectable && onEnhance && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onEnhance(asset.id); }}
-                    disabled={enhancing}
-                    title="Enhance this image"
-                    aria-label="Enhance image"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+              {!selectable && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <Link
+                    href={`/edit/${asset.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Open in editor"
+                    title="Open this asset in the editor"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-colors hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] cursor-pointer"
                     style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
                   >
-                    {enhancing ? 'enhancing…' : '✨ Enhance'}
-                  </button>
-                )}
-                {!isVideo && !selectable && onCutout && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onCutout(asset.id); }}
-                    disabled={cutting}
-                    title="Remove the background — clean product cutout"
-                    aria-label="Remove background"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    {cutting ? 'cutting…' : '✂️ Cutout'}
-                  </button>
-                )}
-                {!isVideo && !selectable && onEdit && (
-                  <button
-                    onClick={editing ? undefined : handleEditButtonClick}
-                    disabled={editing}
-                    title="Edit this image with a text instruction"
-                    aria-label="Edit image"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    {editing ? 'editing…' : '✏️ Edit'}
-                  </button>
-                )}
-                {!isVideo && !selectable && onAnimate && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onAnimate(asset.id); }}
-                    disabled={animating || !videoAvailable}
-                    title={!videoAvailable ? 'Video provider not configured (set FAL_KEY_VIDEO)' : 'Animate this image'}
-                    aria-label="Animate image"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    {animating ? 'animating…' : '▶ Animate'}
-                  </button>
-                )}
-                {isVideo && !selectable && onNarrate && (
-                  <button
-                    onClick={narrating ? undefined : handleNarrateButtonClick}
-                    disabled={narrating || !narrateAvailable}
-                    title={!narrateAvailable ? 'Voice provider not configured (run the VoxCPM-2 worker or set a fal voice key)' : 'Add an AI voice-over to this video'}
-                    aria-label="Narrate video"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    {narrating ? 'narrating…' : '🎙 Narrate'}
-                  </button>
-                )}
-                {!selectable && onPublish && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
-                    title="Publish this asset"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)]"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    <Send size={10} />
-                    Cast
-                  </button>
-                )}
-              </div>
+                    <Pencil size={10} /> Edit
+                  </Link>
+                  {onPublish && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
+                      title="Publish this asset"
+                      aria-label="Publish asset"
+                      className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-colors hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] cursor-pointer"
+                      style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                    >
+                      <Send size={10} /> Cast
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            {/* Inline edit prompt form */}
-            {editOpen && !selectable && onEdit && (
-              <form
-                onSubmit={handleEditSubmit}
-                className="mt-2 flex items-center gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  ref={editInputRef}
-                  type="text"
-                  value={editPrompt}
-                  onChange={(e) => setEditPrompt(e.target.value)}
-                  onKeyDown={handleEditKeyDown}
-                  placeholder="describe the edit — e.g. 'make the background a sunset'"
-                  aria-label="Edit instruction"
-                  className="flex-1 font-mono text-[10px] px-2 py-1 rounded border bg-transparent outline-none min-w-0"
-                  style={{ borderColor: 'var(--ember-2)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
-                />
-                <button
-                  type="submit"
-                  disabled={!editPrompt.trim()}
-                  aria-label="Submit edit instruction"
-                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-1)] hover:text-[var(--ember-1)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-2)' }}
-                >
-                  ✓
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setEditOpen(false); setEditPrompt(''); }}
-                  aria-label="Cancel edit"
-                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--forge-text)] hover:text-[var(--forge-text)]"
-                  style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                >
-                  ✕
-                </button>
-              </form>
-            )}
-            {/* Inline narration script form */}
-            {narrateOpen && !selectable && onNarrate && (
-              <form
-                onSubmit={handleNarrateSubmit}
-                className="mt-2 flex items-center gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  ref={narrateInputRef}
-                  type="text"
-                  value={narrateText}
-                  onChange={(e) => setNarrateText(e.target.value)}
-                  onKeyDown={handleNarrateKeyDown}
-                  placeholder="voice-over script — what should the narrator say?"
-                  aria-label="Narration script"
-                  className="flex-1 font-mono text-[10px] px-2 py-1 rounded border bg-transparent outline-none min-w-0"
-                  style={{ borderColor: 'var(--ember-2)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
-                />
-                <button
-                  type="submit"
-                  disabled={!narrateText.trim()}
-                  aria-label="Submit narration script"
-                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-1)] hover:text-[var(--ember-1)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-2)' }}
-                >
-                  ✓
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setNarrateOpen(false); setNarrateText(''); }}
-                  aria-label="Cancel narration"
-                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--forge-text)] hover:text-[var(--forge-text)]"
-                  style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                >
-                  ✕
-                </button>
-              </form>
-            )}
           </div>
         )}
       </div>
