@@ -149,4 +149,42 @@ describe('SpineClient', () => {
     expect((init as RequestInit).method).toBe('POST');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ assetIds: ['a1', 'a2'], aspectRatio: '9:16' });
   });
+
+  it('reports providers + publishers from health (cross-post discovery)', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ ok: true, providers: { image: ['fal'], video: [] }, publishers: ['omnisocials', 'instagram'] }),
+    );
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn });
+    const h = await c.health();
+    expect(h.publishers).toEqual(['omnisocials', 'instagram']);
+    expect(h.providers.image).toEqual(['fal']);
+    expect(fetchFn.mock.calls[0]![0]).toBe('http://api/api/health');
+  });
+
+  it('gets and saves a brand kit', async () => {
+    const getFetch = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ brandKit: { name: 'Acme' } }));
+    expect((await new SpineClient({ baseUrl: 'http://api', fetchFn: getFetch }).getBrandKit('p1')).brandKit.name).toBe('Acme');
+    expect(getFetch.mock.calls[0]![0]).toBe('http://api/api/projects/p1/brand-kit');
+
+    const putFetch = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ brandKit: { name: 'Acme', palette: ['#000'] } }));
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn: putFetch });
+    const r = await c.saveBrandKit('p1', { name: 'Acme', palette: ['#000'] });
+    expect(r.brandKit.palette).toEqual(['#000']);
+    const [url, init] = putFetch.mock.calls[0]!;
+    expect(url).toBe('http://api/api/projects/p1/brand-kit');
+    expect((init as RequestInit).method).toBe('PUT');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ name: 'Acme', palette: ['#000'] });
+  });
+
+  it('creates assets from a website', async () => {
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) =>
+      json({ assets: [{ id: 'a1', type: 'image' }], summary: { imported: 1, generated: 2, enhanced: 1 } }),
+    );
+    const c = new SpineClient({ baseUrl: 'http://api', fetchFn });
+    const r = await c.generateFromWebsite('p1', { url: 'https://acme.com', generateCount: 2 });
+    expect(r.assets).toHaveLength(1);
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api/api/projects/p1/from-website');
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({ url: 'https://acme.com', generateCount: 2 });
+  });
 });

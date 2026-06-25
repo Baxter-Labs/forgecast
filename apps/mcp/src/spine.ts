@@ -30,6 +30,25 @@ export interface GenerateImageInput {
   height?: number;
 }
 
+export interface BrandKit {
+  name?: string;
+  tagline?: string;
+  palette?: string[];
+  fonts?: { display?: string; body?: string };
+  toneOfVoice?: string;
+  keyMessages?: string[];
+  notes?: string;
+  sourceUrl?: string;
+}
+
+/** Full health shape: generation providers per modality + configured publishers (the
+ * social channels available for cross-posting). */
+export interface Health {
+  ok: boolean;
+  providers: { image?: string[]; video?: string[]; montage?: string[]; voice?: string[]; transcribe?: string[]; presenter?: string[] };
+  publishers: string[];
+}
+
 export class SpineClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -58,7 +77,7 @@ export class SpineClient {
     return body as T;
   }
 
-  health(): Promise<{ ok: boolean; providers: { image: string[] } }> { return this.req('/api/health'); }
+  health(): Promise<Health> { return this.req('/api/health'); }
   listProjects(): Promise<{ projects: Project[] }> { return this.req('/api/projects'); }
   createProject(name: string): Promise<{ project: Project }> {
     return this.req('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
@@ -99,6 +118,26 @@ export class SpineClient {
   listAssets(projectId: string): Promise<{ assets: Asset[] }> { return this.req(`/api/projects/${projectId}/assets`); }
   publishAsset(assetId: string, input: { content: string; channels?: string[]; publisher?: string }): Promise<{ published: { postId: string; status: string } }> {
     return this.req(`/api/assets/${assetId}/publish`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+
+  // ── Brand kit + from-website ──────────────────────────────────────────────
+  getBrandKit(projectId: string): Promise<{ brandKit: BrandKit }> {
+    return this.req(`/api/projects/${projectId}/brand-kit`);
+  }
+  saveBrandKit(projectId: string, kit: BrandKit): Promise<{ brandKit: BrandKit }> {
+    return this.req(`/api/projects/${projectId}/brand-kit`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(kit),
+    });
+  }
+  brandKitFromWebsite(projectId: string, url: string): Promise<{ brandKit: BrandKit; derivedFrom: string }> {
+    return this.req(`/api/projects/${projectId}/brand-kit/from-website`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }),
+    });
+  }
+  generateFromWebsite(projectId: string, input: { url: string; generate?: boolean; generateCount?: number; enhance?: boolean }): Promise<{ assets: Asset[]; summary: unknown }> {
+    return this.req(`/api/projects/${projectId}/from-website`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
