@@ -321,6 +321,40 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  const uploadAsset = useCallback(async (file: File): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/projects/${projectId}/assets/upload`, { method: 'POST', body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Upload failed'); setStatus('error'); return null; }
+      const asset = (body as { asset?: RawAsset }).asset;
+      if (asset) { setAssets((prev) => [normalizeAsset(asset), ...prev]); }
+      setStatus('idle');
+      return asset?.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
+  const enhanceAsset = useCallback(async (assetId: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/enhance`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Enhance failed'); setStatus('error'); return null; }
+      const enhanced = (body as { asset?: RawAsset }).asset;
+      if (enhanced) { setAssets((prev) => [normalizeAsset(enhanced), ...prev]); }
+      setStatus('idle');
+      return enhanced?.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
   const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
     try {
       const form = new FormData();
@@ -398,7 +432,7 @@ export function useForgecast() {
     assets, status, error,
     generateImage, generateVideo, generateMontage,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset,
+    publishAsset, uploadAsset, enhanceAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

@@ -89,7 +89,7 @@ export function Studio() {
   const {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
-    publishAsset,
+    publishAsset, uploadAsset, enhanceAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -104,6 +104,7 @@ export function Studio() {
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
+  const [enhancingId, setEnhancingId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -181,6 +182,22 @@ export function Studio() {
     setActiveCampaignId(id);
     setView('history');
   }, []);
+
+  // ── Upload handler ────────────────────────────────────────────────────────────
+  function handleUpload(file: File) {
+    void uploadAsset(file).then((assetId) => {
+      if (assetId && activeCampaignId) appendVideoAssets(activeCampaignId, [assetId]);
+    });
+  }
+
+  // ── Enhance handler ────────────────────────────────────────────────────────────
+  function handleEnhance(assetId: string) {
+    setEnhancingId(assetId);
+    void enhanceAsset(assetId).then((newId) => {
+      setEnhancingId(null);
+      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
+    });
+  }
 
   // ── Forge handler ────────────────────────────────────────────────────────────
   function handleForge() {
@@ -268,7 +285,13 @@ export function Studio() {
                 ? { position: 'relative', width: '100%', transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(0)', opacity: 1 }
                 : { position: 'absolute', inset: 0, transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(-105%)', opacity: 0, pointerEvents: 'none' }}
             >
-              <Gallery assets={assets} onPublish={(asset) => setPublishingAsset(asset)} />
+              <Gallery
+                assets={assets}
+                onPublish={(asset) => setPublishingAsset(asset)}
+                onUpload={handleUpload}
+                onEnhance={handleEnhance}
+                enhancingId={enhancingId}
+              />
             </div>
 
             {/* History pane */}

@@ -11,7 +11,7 @@ import {
   r2OptionsFromEnv,
   type D1Like,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
+import { JobRunner, ImageJobHandler, EnhanceJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
@@ -81,7 +81,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
-  const falImageProvider = new FalImageProvider({ apiKey: falKey });
+  const falImageProvider = new FalImageProvider({ apiKey: falKey, fetchFn: opts.fetchFn });
   imageRegistry.register(falImageProvider);
 
   const publishers = new PublisherRegistry();
@@ -134,9 +134,17 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     clock: nowIso,
     fetchFn: opts.fetchFn,
   });
+  const enhanceHandler = new EnhanceJobHandler({
+    registry: imageRegistry,
+    storage,
+    assets,
+    idGen: randomId,
+    clock: nowIso,
+    fetchFn: opts.fetchFn,
+  });
   const videoWorker = new MoneyPrinterWorker();
   const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
-  const handlers: JobHandler[] = [imageHandler];
+  const handlers: JobHandler[] = [imageHandler, enhanceHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
       new ShortVideoJobHandler({ worker: videoWorker, storage, assets, idGen: randomId, clock: nowIso }),

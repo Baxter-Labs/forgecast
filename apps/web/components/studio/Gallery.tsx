@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { AssetCard } from './AssetCard';
 import { EmptyState } from './EmptyState';
@@ -7,6 +7,9 @@ import { EmptyState } from './EmptyState';
 interface GalleryProps {
   assets: StudioAsset[];
   onPublish?: (asset: StudioAsset) => void;
+  onUpload?: (file: File) => void;
+  onEnhance?: (assetId: string) => void;
+  enhancingId?: string | null;
 }
 
 type Filter = 'all' | 'image' | 'video';
@@ -17,8 +20,9 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'video', label: 'Videos' },
 ];
 
-export function Gallery({ assets, onPublish }: GalleryProps) {
+export function Gallery({ assets, onPublish, onUpload, onEnhance, enhancingId }: GalleryProps) {
   const [filter, setFilter] = useState<Filter>('all');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const counts = {
     all: assets.length,
@@ -26,8 +30,45 @@ export function Gallery({ assets, onPublish }: GalleryProps) {
     video: assets.filter((a) => a.type === 'video').length,
   };
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || !onUpload) return;
+    for (const file of Array.from(files)) {
+      onUpload(file);
+    }
+    // Reset so the same file can be re-uploaded
+    e.target.value = '';
+  }
+
+  const uploadButton = onUpload ? (
+    <div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        multiple
+        aria-label="Upload asset files"
+        className="sr-only"
+        onChange={handleFileChange}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="font-mono text-xs px-3 py-1.5 rounded border transition-all"
+        style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+      >
+        ⬆ Upload asset
+      </button>
+    </div>
+  ) : null;
+
   if (assets.length === 0) {
-    return <EmptyState />;
+    return (
+      <div className="flex flex-col gap-4">
+        {uploadButton}
+        <EmptyState />
+      </div>
+    );
   }
 
   const visible = filter === 'all' ? assets : assets.filter((a) => a.type === filter);
@@ -39,6 +80,10 @@ export function Gallery({ assets, onPublish }: GalleryProps) {
         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)]">
           Gallery <span className="text-[var(--forge-muted)]">· {counts.all}</span>
         </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {uploadButton}
+        </div>
 
         <div role="group" aria-label="Filter assets by type" className="flex flex-wrap gap-2">
           {FILTERS.map((f) => {
@@ -77,7 +122,13 @@ export function Gallery({ assets, onPublish }: GalleryProps) {
         <div role="list" className="grid grid-cols-2 xl:grid-cols-3 gap-4">
           {visible.map((asset, i) => (
             <div role="listitem" key={asset.id}>
-              <AssetCard asset={asset} index={i} onPublish={onPublish} />
+              <AssetCard
+                asset={asset}
+                index={i}
+                onPublish={onPublish}
+                onEnhance={onEnhance}
+                enhancing={enhancingId === asset.id}
+              />
             </div>
           ))}
         </div>

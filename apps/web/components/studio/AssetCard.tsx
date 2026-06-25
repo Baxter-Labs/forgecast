@@ -9,9 +9,11 @@ interface AssetCardProps {
   index: number;
   compact?: boolean;
   onPublish?: (asset: StudioAsset) => void;
+  onEnhance?: (assetId: string) => void;
+  enhancing?: boolean;
 }
 
-export function AssetCard({ asset, index, compact = false, onPublish }: AssetCardProps) {
+export function AssetCard({ asset, index, compact = false, onPublish, onEnhance, enhancing = false }: AssetCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const prompt = asset.params.prompt ?? '';
   const isVideo = asset.type === 'video';
@@ -70,17 +72,31 @@ export function AssetCard({ asset, index, compact = false, onPublish }: AssetCar
                 )}
                 <span className="font-mono text-[10px] text-[var(--forge-faint)] truncate">{modelId}</span>
               </div>
-              {onPublish && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
-                  title="Publish this asset"
-                  className="shrink-0 flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)]"
-                  style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                >
-                  <Send size={10} />
-                  Cast
-                </button>
-              )}
+              <div className="flex items-center gap-1 shrink-0">
+                {!isVideo && onEnhance && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onEnhance(asset.id); }}
+                    disabled={enhancing}
+                    title="Enhance this image"
+                    aria-label="Enhance image"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    {enhancing ? 'enhancing…' : '✨ Enhance'}
+                  </button>
+                )}
+                {onPublish && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
+                    title="Publish this asset"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)]"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    <Send size={10} />
+                    Cast
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
