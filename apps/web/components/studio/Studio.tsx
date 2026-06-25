@@ -89,8 +89,8 @@ export function Studio() {
   const {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
-    composeVideo, animateAsset,
-    publishAsset, uploadAsset, enhanceAsset, editAsset, cutoutAsset, narrateVideo,
+    composeVideo,
+    publishAsset, uploadAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -105,11 +105,6 @@ export function Studio() {
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
-  const [enhancingId, setEnhancingId] = useState<string | null>(null);
-  const [animatingId, setAnimatingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [cuttingId, setCuttingId] = useState<string | null>(null);
-  const [narratingId, setNarratingId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -195,42 +190,6 @@ export function Studio() {
     });
   }
 
-  // ── Enhance handler ────────────────────────────────────────────────────────────
-  function handleEnhance(assetId: string) {
-    setEnhancingId(assetId);
-    void enhanceAsset(assetId).then((newId) => {
-      setEnhancingId(null);
-      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
-    });
-  }
-
-  // ── Edit handler (image-to-image edit with prompt) ────────────────────────────
-  function handleEdit(assetId: string, prompt: string) {
-    setEditingId(assetId);
-    void editAsset(assetId, prompt).then((newId) => {
-      setEditingId(null);
-      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
-    });
-  }
-
-  // ── Cutout handler (remove background → transparent product cutout) ──────────
-  function handleCutout(assetId: string) {
-    setCuttingId(assetId);
-    void cutoutAsset(assetId).then((newId) => {
-      setCuttingId(null);
-      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
-    });
-  }
-
-  // ── Narrate handler (add an AI voice-over to a video) ────────────────────────
-  function handleNarrate(assetId: string, text: string) {
-    setNarratingId(assetId);
-    void narrateVideo({ videoAssetId: assetId, text }).then((newId) => {
-      setNarratingId(null);
-      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
-    });
-  }
-
   // ── Compose handler (Gallery multi-select → montage) ────────────────────────
   async function handleCompose(ids: string[], ar: string, dur: number) {
     const attach = (assetId: string | null | undefined) => {
@@ -238,15 +197,6 @@ export function Studio() {
     };
     const result = await composeVideo({ assetIds: ids, aspectRatio: ar, durationSec: dur });
     attach(result);
-  }
-
-  // ── Animate handler (image → video on asset card) ────────────────────────────
-  function handleAnimate(assetId: string) {
-    setAnimatingId(assetId);
-    void animateAsset(assetId).then((newId) => {
-      setAnimatingId(null);
-      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
-    });
   }
 
   // ── Forge handler ────────────────────────────────────────────────────────────
@@ -339,18 +289,6 @@ export function Studio() {
                 assets={assets}
                 onPublish={(asset) => setPublishingAsset(asset)}
                 onUpload={handleUpload}
-                onEnhance={handleEnhance}
-                enhancingId={enhancingId}
-                onAnimate={handleAnimate}
-                animatingId={animatingId}
-                onEdit={handleEdit}
-                editingId={editingId}
-                onCutout={handleCutout}
-                cuttingId={cuttingId}
-                onNarrate={handleNarrate}
-                narratingId={narratingId}
-                voiceAvailable={availability.voice}
-                videoAvailable={availability.video}
                 onCompose={handleCompose}
                 montageAvailable={availability.montage}
               />
