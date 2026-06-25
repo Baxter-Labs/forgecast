@@ -56,13 +56,32 @@ describe('api: enhanceAsset', () => {
     expect((r.body as { error: string }).error).toBe('only image assets can be enhanced');
   });
 
-  it('returns 503 when FORGECAST_BASE_URL is not set', async () => {
+  it('works without FORGECAST_BASE_URL by inlining the source as a data URI', async () => {
     delete process.env.FORGECAST_BASE_URL;
-    const { svc, pid } = await setup();
+
+    let sentImageUrl: unknown;
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('fal.run')) {
+        sentImageUrl = (JSON.parse(String(init?.body)) as { image_url?: unknown }).image_url;
+        return new Response(JSON.stringify({ image: { url: 'https://cdn.fal/enhanced.png' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(new Uint8Array([9, 9, 9, 9]), { status: 200, headers: { 'content-type': 'image/png' } });
+    });
+
+    const { svc, pid } = await setup(fetchFn);
     const assetId = await createImageAsset(svc, pid);
     const r = await enhanceAsset(svc, pid, { assetId });
-    expect(r.status).toBe(503);
-    expect((r.body as { error: string }).error).toMatch(/FORGECAST_BASE_URL/);
+
+    expect(r.status).toBe(200);
+    // fal received the bytes inline — no public URL required.
+    expect(String(sentImageUrl)).toMatch(/^data:image\/png;base64,/);
+    const body = r.body as { job: { status: string }; asset: { provider: string } };
+    expect(body.job.status).toBe('done');
+    expect(body.asset.provider).toBe('enhance');
   });
 
   it('returns 200 with enhanced image asset when fal provider is configured', async () => {
