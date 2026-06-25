@@ -42,6 +42,8 @@ interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?:
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
 interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
+interface ComposeVideoArgs { assetIds: string[]; aspectRatio?: string; durationSec?: number }
+interface AnimateAssetOpts { aspectRatio?: string; model?: string }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_TRIES = 200;
@@ -372,6 +374,48 @@ export function useForgecast() {
     }
   }, []);
 
+  const composeVideo = useCallback(async ({ assetIds, aspectRatio, durationSec }: ComposeVideoArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    if (assetIds.length < 1) { setError('Select at least 1 asset to compose a video'); setStatus('error'); return null; }
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-montage`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assetIds, aspectRatio: aspectRatio ?? '9:16', durationSec: durationSec ?? 4 }),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start compose')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const animateAsset = useCallback(async (assetId: string, opts?: AnimateAssetOpts): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          prompt: 'subtle natural cinematic motion, gentle camera move',
+          model: opts?.model ?? 'fal-ai/wan-pro/image-to-video',
+          aspectRatio: opts?.aspectRatio ?? '9:16',
+          imageAssetId: assetId,
+        }),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start animation')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId: resultAssetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return resultAssetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -431,6 +475,7 @@ export function useForgecast() {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
+    composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
     publishAsset, uploadAsset, enhanceAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,

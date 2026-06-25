@@ -89,6 +89,7 @@ export function Studio() {
   const {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
+    composeVideo, animateAsset,
     publishAsset, uploadAsset, enhanceAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
@@ -105,6 +106,7 @@ export function Studio() {
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
   const [enhancingId, setEnhancingId] = useState<string | null>(null);
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -195,6 +197,24 @@ export function Studio() {
     setEnhancingId(assetId);
     void enhanceAsset(assetId).then((newId) => {
       setEnhancingId(null);
+      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
+    });
+  }
+
+  // ── Compose handler (Gallery multi-select → montage) ────────────────────────
+  async function handleCompose(ids: string[], ar: string, dur: number) {
+    const attach = (assetId: string | null | undefined) => {
+      if (assetId && activeCampaignId) appendVideoAssets(activeCampaignId, [assetId]);
+    };
+    const result = await composeVideo({ assetIds: ids, aspectRatio: ar, durationSec: dur });
+    attach(result);
+  }
+
+  // ── Animate handler (image → video on asset card) ────────────────────────────
+  function handleAnimate(assetId: string) {
+    setAnimatingId(assetId);
+    void animateAsset(assetId).then((newId) => {
+      setAnimatingId(null);
       if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
     });
   }
@@ -291,6 +311,11 @@ export function Studio() {
                 onUpload={handleUpload}
                 onEnhance={handleEnhance}
                 enhancingId={enhancingId}
+                onAnimate={handleAnimate}
+                animatingId={animatingId}
+                videoAvailable={availability.video}
+                onCompose={handleCompose}
+                montageAvailable={availability.montage}
               />
             </div>
 
