@@ -79,6 +79,22 @@ export class SpineClient {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
+  enhanceAsset(projectId: string, assetId: string): Promise<{ job: Job; asset: Asset | null }> {
+    return this.req(`/api/projects/${projectId}/assets/${assetId}/enhance`, { method: 'POST' });
+  }
+  editAsset(projectId: string, assetId: string, prompt: string): Promise<{ job: Job; asset: Asset | null }> {
+    return this.req(`/api/projects/${projectId}/assets/${assetId}/edit`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt }),
+    });
+  }
+  cutoutAsset(projectId: string, assetId: string): Promise<{ job: Job; asset: Asset | null }> {
+    return this.req(`/api/projects/${projectId}/assets/${assetId}/cutout`, { method: 'POST' });
+  }
+  narrateVideo(projectId: string, input: { videoAssetId: string; text: string; voice?: string }): Promise<{ job: Job }> {
+    return this.req(`/api/projects/${projectId}/narrate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
   getJob(jobId: string): Promise<{ job: Job }> { return this.req(`/api/jobs/${jobId}`); }
   listAssets(projectId: string): Promise<{ assets: Asset[] }> { return this.req(`/api/projects/${projectId}/assets`); }
   publishAsset(assetId: string, input: { content: string; channels?: string[]; publisher?: string }): Promise<{ published: { postId: string; status: string } }> {
