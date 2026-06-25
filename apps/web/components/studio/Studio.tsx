@@ -90,7 +90,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
-    publishAsset, uploadAsset, enhanceAsset, editAsset,
+    publishAsset, uploadAsset, enhanceAsset, editAsset, narrateVideo,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -108,6 +108,7 @@ export function Studio() {
   const [enhancingId, setEnhancingId] = useState<string | null>(null);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [narratingId, setNarratingId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -207,6 +208,15 @@ export function Studio() {
     setEditingId(assetId);
     void editAsset(assetId, prompt).then((newId) => {
       setEditingId(null);
+      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
+    });
+  }
+
+  // ── Narrate handler (add an AI voice-over to a video) ────────────────────────
+  function handleNarrate(assetId: string, text: string) {
+    setNarratingId(assetId);
+    void narrateVideo({ videoAssetId: assetId, text }).then((newId) => {
+      setNarratingId(null);
       if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
     });
   }
@@ -325,6 +335,9 @@ export function Studio() {
                 animatingId={animatingId}
                 onEdit={handleEdit}
                 editingId={editingId}
+                onNarrate={handleNarrate}
+                narratingId={narratingId}
+                voiceAvailable={availability.voice}
                 videoAvailable={availability.video}
                 onCompose={handleCompose}
                 montageAvailable={availability.montage}

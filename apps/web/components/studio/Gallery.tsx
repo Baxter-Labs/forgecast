@@ -14,6 +14,9 @@ interface GalleryProps {
   animatingId?: string | null;
   onEdit?: (assetId: string, prompt: string) => void;
   editingId?: string | null;
+  onNarrate?: (assetId: string, text: string) => void;
+  narratingId?: string | null;
+  voiceAvailable?: boolean;
   videoAvailable?: boolean;
   onCompose?: (assetIds: string[], aspectRatio: string, durationSec: number) => Promise<void>;
   montageAvailable?: boolean;
@@ -130,6 +133,7 @@ export function Gallery({
   assets, onPublish, onUpload, onEnhance, enhancingId,
   onAnimate, animatingId,
   onEdit, editingId,
+  onNarrate, narratingId, voiceAvailable,
   videoAvailable,
   onCompose, montageAvailable = false,
 }: GalleryProps) {
@@ -303,6 +307,9 @@ export function Gallery({
                 animating={animatingId === asset.id}
                 onEdit={selectMode ? undefined : onEdit}
                 editing={editingId === asset.id}
+                onNarrate={selectMode ? undefined : onNarrate}
+                narrating={narratingId === asset.id}
+                narrateAvailable={voiceAvailable}
                 videoAvailable={videoAvailable}
                 selectable={selectMode}
                 selected={selectedIds.includes(asset.id)}
