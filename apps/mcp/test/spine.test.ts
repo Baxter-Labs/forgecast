@@ -187,4 +187,23 @@ describe('SpineClient', () => {
     expect(url).toBe('http://api/api/projects/p1/from-website');
     expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({ url: 'https://acme.com', generateCount: 2 });
   });
+
+  it('drives the agent: plan, execute, and auto-run', async () => {
+    const planFetch = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ plan: { concept: 'eco drop' } }));
+    const c1 = new SpineClient({ baseUrl: 'http://api', fetchFn: planFetch });
+    expect((await c1.agentPlan('eco sneaker', ['instagram'])).plan).toEqual({ concept: 'eco drop' });
+    const [purl, pinit] = planFetch.mock.calls[0]!;
+    expect(purl).toBe('http://api/api/agent');
+    expect(JSON.parse((pinit as RequestInit).body as string)).toEqual({ mode: 'plan', brief: 'eco sneaker', platforms: ['instagram'] });
+
+    const execFetch = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ result: { projectId: 'p1', assetIds: ['a1'] } }));
+    const c2 = new SpineClient({ baseUrl: 'http://api', fetchFn: execFetch });
+    await c2.agentExecute({ plan: { concept: 'x' }, projectId: 'p1', publish: true });
+    expect(JSON.parse((execFetch.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ mode: 'execute', plan: { concept: 'x' }, projectId: 'p1', publish: true });
+
+    const runFetch = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ result: { summary: 'done' } }));
+    const c3 = new SpineClient({ baseUrl: 'http://api', fetchFn: runFetch });
+    await c3.agentRun({ brief: 'make a campaign', projectId: 'p1', platforms: ['linkedin'] });
+    expect(JSON.parse((runFetch.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ mode: 'agentic', brief: 'make a campaign', projectId: 'p1', platforms: ['linkedin'] });
+  });
 });

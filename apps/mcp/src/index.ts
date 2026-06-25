@@ -573,6 +573,89 @@ server.registerTool(
   },
 );
 
+// 19. forgecast_agent_plan
+server.registerTool(
+  'forgecast_agent_plan',
+  {
+    title: 'Agent — Plan a Campaign',
+    description:
+      'Hands a one-line brief to the Forgecast content agent, which researches and returns a concrete, on-trend ' +
+      'CONTENT PLAN (concept, per-platform captions, and the image/video assets + an optional montage it would ' +
+      'produce). Nothing is generated yet — this is the "PLAN" step you can review, then run with ' +
+      '`forgecast_agent_execute`.\n\n' +
+      'Tip: if the brief contains a product URL or domain, the agent reads the site and grounds the plan in the ' +
+      'real brand.\n\n' +
+      'Args: brief (string — the goal/idea, optionally with a product URL), platforms (string[], optional, e.g. ' +
+      '["instagram","linkedin"]; defaults to instagram).\n' +
+      'Returns: `{ plan }`.\n\n' +
+      'Requires an agent LLM on the server (set OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ' +
+      'ANTHROPIC_API_KEY). A 503 means none is configured.',
+    inputSchema: z.object({ brief: z.string().min(1), platforms: z.array(z.string()).optional() }).strict(),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ brief, platforms }) => {
+    try { return ok(await client.agentPlan(brief, platforms)); } catch (e) { return fail(e); }
+  },
+);
+
+// 20. forgecast_agent_execute
+server.registerTool(
+  'forgecast_agent_execute',
+  {
+    title: 'Agent — Execute a Plan',
+    description:
+      'Produces a content plan (from `forgecast_agent_plan`): generates its images and video, and — when ' +
+      '`publish` is true — cross-posts them to the plan\'s platforms. Images come back as assets; video and ' +
+      'montage come back as async jobs to poll with `forgecast_get_job`.\n\n' +
+      'Args: plan (object — pass the `plan` returned by forgecast_agent_plan verbatim), project_id (string, ' +
+      'optional — produce into this existing project; omit to create one), project_name (string, optional), ' +
+      'publish (bool, optional — also cross-post the results).\n' +
+      'Returns: `{ result: { projectId, assetIds, videoJobIds, montageJobIds, published } }`.',
+    inputSchema: z.object({
+      plan: z.record(z.string(), z.unknown()),
+      project_id: z.string().optional(),
+      project_name: z.string().optional(),
+      publish: z.boolean().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ plan, project_id, project_name, publish }) => {
+    try {
+      return ok(await client.agentExecute({ plan, projectId: project_id, projectName: project_name, publish }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 21. forgecast_agent_run
+server.registerTool(
+  'forgecast_agent_run',
+  {
+    title: 'Agent — Auto-run (brief → finished assets)',
+    description:
+      'The autonomous "AUTO-RUN": hand the agent a brief and it brainstorms AND produces in one shot — deciding ' +
+      'per video whether to make b-roll or a talking-head AI presenter, generating the images and clips, and (if ' +
+      'the brief includes a product URL) reading the site first. Best for "just make me a campaign about X".\n\n' +
+      'Args: brief (string), project_id (string, optional — produce into this project; omit to create one), ' +
+      'platforms (string[], optional).\n' +
+      'Returns: `{ result: { imageAssetIds, videoJobIds, presenterJobIds, steps, summary } }`. Images are ready ' +
+      'immediately; poll video/presenter job ids with `forgecast_get_job`, then `forgecast_publish_asset` to ' +
+      'cross-post.\n\n' +
+      'Requires an agent LLM on the server (OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY). ' +
+      'A 503 means none is configured.',
+    inputSchema: z.object({
+      brief: z.string().min(1),
+      project_id: z.string().optional(),
+      platforms: z.array(z.string()).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ brief, project_id, platforms }) => {
+    try { return ok(await client.agentRun({ brief, projectId: project_id, platforms })); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────
