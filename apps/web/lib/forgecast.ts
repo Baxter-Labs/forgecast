@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -156,7 +156,8 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
     montageAvailable = true;
   }
-  const voiceProvider: VoiceProvider = new FalTtsProvider({ fetchFn: opts.fetchFn });
+  const voxcpm = new VoxCpmVoiceProvider({ fetchFn: opts.fetchFn });
+  const voiceProvider: VoiceProvider = voxcpm.isAvailable() ? voxcpm : new FalTtsProvider({ fetchFn: opts.fetchFn });
   if (voiceProvider.isAvailable()) {
     handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
