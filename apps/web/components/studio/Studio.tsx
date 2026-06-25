@@ -90,7 +90,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
-    publishAsset, uploadAsset, enhanceAsset,
+    publishAsset, uploadAsset, enhanceAsset, editAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -107,6 +107,7 @@ export function Studio() {
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
   const [enhancingId, setEnhancingId] = useState<string | null>(null);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -197,6 +198,15 @@ export function Studio() {
     setEnhancingId(assetId);
     void enhanceAsset(assetId).then((newId) => {
       setEnhancingId(null);
+      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
+    });
+  }
+
+  // ── Edit handler (image-to-image edit with prompt) ────────────────────────────
+  function handleEdit(assetId: string, prompt: string) {
+    setEditingId(assetId);
+    void editAsset(assetId, prompt).then((newId) => {
+      setEditingId(null);
       if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
     });
   }
@@ -313,6 +323,8 @@ export function Studio() {
                 enhancingId={enhancingId}
                 onAnimate={handleAnimate}
                 animatingId={animatingId}
+                onEdit={handleEdit}
+                editingId={editingId}
                 videoAvailable={availability.video}
                 onCompose={handleCompose}
                 montageAvailable={availability.montage}

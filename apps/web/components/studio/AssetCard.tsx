@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Send } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { Lightbox } from './Lightbox';
@@ -13,6 +13,8 @@ interface AssetCardProps {
   enhancing?: boolean;
   onAnimate?: (assetId: string) => void;
   animating?: boolean;
+  onEdit?: (assetId: string, prompt: string) => void;
+  editing?: boolean;
   videoAvailable?: boolean;
   /** When true the card shows a selection ring and click selects instead of opening lightbox */
   selectable?: boolean;
@@ -23,10 +25,15 @@ interface AssetCardProps {
 export function AssetCard({
   asset, index, compact = false,
   onPublish, onEnhance, enhancing = false,
-  onAnimate, animating = false, videoAvailable = false,
+  onAnimate, animating = false,
+  onEdit, editing = false,
+  videoAvailable = false,
   selectable = false, selected = false, onSelect,
 }: AssetCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
   const prompt = asset.params.prompt ?? '';
   const isVideo = asset.type === 'video';
   const w = asset.params.width;
@@ -41,6 +48,32 @@ export function AssetCard({
       onSelect(asset.id);
     } else {
       setLightboxOpen(true);
+    }
+  }
+
+  function handleEditButtonClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditOpen(true);
+    setEditPrompt('');
+    setTimeout(() => editInputRef.current?.focus(), 0);
+  }
+
+  function handleEditSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const trimmed = editPrompt.trim();
+    if (!trimmed || !onEdit) return;
+    onEdit(asset.id, trimmed);
+    setEditOpen(false);
+    setEditPrompt('');
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleEditSubmit();
+    } else if (e.key === 'Escape') {
+      setEditOpen(false);
+      setEditPrompt('');
     }
   }
 
@@ -139,6 +172,18 @@ export function AssetCard({
                     {enhancing ? 'enhancing…' : '✨ Enhance'}
                   </button>
                 )}
+                {!isVideo && !selectable && onEdit && (
+                  <button
+                    onClick={editing ? undefined : handleEditButtonClick}
+                    disabled={editing}
+                    title="Edit this image with a text instruction"
+                    aria-label="Edit image"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    {editing ? 'editing…' : '✏️ Edit'}
+                  </button>
+                )}
                 {!isVideo && !selectable && onAnimate && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onAnimate(asset.id); }}
@@ -164,6 +209,44 @@ export function AssetCard({
                 )}
               </div>
             </div>
+            {/* Inline edit prompt form */}
+            {editOpen && !selectable && onEdit && (
+              <form
+                onSubmit={handleEditSubmit}
+                className="mt-2 flex items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editPrompt}
+                  onChange={(e) => setEditPrompt(e.target.value)}
+                  onKeyDown={handleEditKeyDown}
+                  placeholder="describe the edit — e.g. 'make the background a sunset'"
+                  aria-label="Edit instruction"
+                  className="flex-1 font-mono text-[10px] px-2 py-1 rounded border bg-transparent outline-none min-w-0"
+                  style={{ borderColor: 'var(--ember-2)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
+                />
+                <button
+                  type="submit"
+                  disabled={!editPrompt.trim()}
+                  aria-label="Submit edit instruction"
+                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-1)] hover:text-[var(--ember-1)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-2)' }}
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditOpen(false); setEditPrompt(''); }}
+                  aria-label="Cancel edit"
+                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--forge-text)] hover:text-[var(--forge-text)]"
+                  style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                >
+                  ✕
+                </button>
+              </form>
+            )}
           </div>
         )}
       </div>

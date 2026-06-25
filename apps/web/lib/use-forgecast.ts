@@ -357,6 +357,29 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  const editAsset = useCallback(async (assetId: string, prompt: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/edit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Edit failed'); setStatus('error'); return null; }
+      const edited = (body as { job?: { status?: string; error?: string }; asset?: RawAsset });
+      if (edited.job?.status !== 'done' || !edited.asset) {
+        setError(edited.job?.error ?? 'Edit failed'); setStatus('error'); return null;
+      }
+      setAssets((prev) => [normalizeAsset(edited.asset!), ...prev]);
+      setStatus('idle');
+      return edited.asset.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
   const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
     try {
       const form = new FormData();
@@ -477,7 +500,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, uploadAsset, enhanceAsset,
+    publishAsset, uploadAsset, enhanceAsset, editAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };
