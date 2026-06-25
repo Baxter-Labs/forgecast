@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset } from '@forgecast/core';
-import type { MontageSpec, Job, VideoGenTask } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit } from '@forgecast/core';
+import type { MontageSpec, Job, VideoGenTask, BrandKit } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { runBackground } from './cf-env';
@@ -38,7 +38,9 @@ export async function generateImage(services: Services, projectId: string, input
   }
 
   const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
-  const params: Record<string, unknown> = { prompt: fields.prompt };
+  // Ground the generation in the project's brand kit (no-op when none is set).
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+  const params: Record<string, unknown> = { prompt: brandedPrompt };
   if (typeof fields.width === 'number') params.width = fields.width;
   if (typeof fields.height === 'number') params.height = fields.height;
 
@@ -117,6 +119,97 @@ export async function getAsset(services: Services, assetId: string): Promise<Api
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };
   return { status: 200, body: { asset } };
+}
+
+// ── Brand Kit ───────────────────────────────────────────────────────────────
+// Stored per project as a JSON object in the storage driver (no schema change),
+// and folded into generation prompts so outputs come out on-brand.
+const brandKitKey = (projectId: string): string => `projects/${projectId}/brand-kit.json`;
+
+function sanitizeBrandKit(input: unknown): BrandKit {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
+  const strArr = (v: unknown): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()) : undefined;
+
+  const kit: BrandKit = {};
+  const name = str(o.name); if (name) kit.name = name;
+  const tagline = str(o.tagline); if (tagline) kit.tagline = tagline;
+  const palette = strArr(o.palette); if (palette && palette.length) kit.palette = palette.slice(0, 8);
+  const fonts = o.fonts as { display?: unknown; body?: unknown } | undefined;
+  const display = str(fonts?.display); const body = str(fonts?.body);
+  if (display || body) kit.fonts = { ...(display ? { display } : {}), ...(body ? { body } : {}) };
+  const tone = str(o.toneOfVoice); if (tone) kit.toneOfVoice = tone;
+  const keyMessages = strArr(o.keyMessages); if (keyMessages && keyMessages.length) kit.keyMessages = keyMessages.slice(0, 8);
+  const logoAssetId = str(o.logoAssetId); if (logoAssetId) kit.logoAssetId = logoAssetId;
+  const notes = str(o.notes); if (notes) kit.notes = notes;
+  const sourceUrl = str(o.sourceUrl); if (sourceUrl) kit.sourceUrl = sourceUrl;
+  return kit;
+}
+
+/** Loads a project's brand kit from storage, or null if none is set. */
+export async function getBrandKit(services: Services, projectId: string): Promise<BrandKit | null> {
+  const stored = await services.storage.get(brandKitKey(projectId));
+  if (!stored) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(stored.data)) as BrandKit;
+  } catch {
+    return null;
+  }
+}
+
+export async function readBrandKit(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  return { status: 200, body: { brandKit: (await getBrandKit(services, projectId)) ?? {} } };
+}
+
+export async function saveBrandKit(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const kit = sanitizeBrandKit(input);
+  const bytes = new TextEncoder().encode(JSON.stringify(kit));
+  await services.storage.put(brandKitKey(projectId), bytes, 'application/json');
+  return { status: 200, body: { brandKit: kit } };
+}
+
+/** Seeds a brand kit from a website (name/tagline/key-messages/notes), merging
+ * over any existing kit. Colors/fonts are left for the user to fill in. */
+export async function deriveBrandKitFromWebsite(
+  services: Services,
+  projectId: string,
+  input: { url?: unknown },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (typeof input.url !== 'string' || input.url.trim().length === 0) {
+    return { status: 400, body: { error: 'a website url is required' } };
+  }
+
+  let site;
+  try {
+    site = await services.websiteReader.read(input.url);
+  } catch (e) {
+    return { status: 400, body: { error: `could not read website: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const existing = (await getBrandKit(services, projectId)) ?? {};
+  const desc = (site.description ?? '').trim();
+  const firstSentence = desc ? desc.split(/[.!?]/)[0]?.trim() : undefined;
+  const headings = (site.headings ?? []).slice(0, 5);
+
+  const merged: BrandKit = {
+    ...existing,
+    name: existing.name ?? site.siteName ?? site.title,
+    tagline: existing.tagline ?? firstSentence,
+    keyMessages: existing.keyMessages ?? (headings.length ? headings : undefined),
+    notes: existing.notes ?? (desc || undefined),
+    sourceUrl: site.url,
+  };
+  const kit = sanitizeBrandKit(merged);
+  const bytes = new TextEncoder().encode(JSON.stringify(kit));
+  await services.storage.put(brandKitKey(projectId), bytes, 'application/json');
+  return { status: 200, body: { brandKit: kit, derivedFrom: site.url } };
 }
 
 // Base64-encode bytes in a way that works on both Node (Buffer) and the edge
