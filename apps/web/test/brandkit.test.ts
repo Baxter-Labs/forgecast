@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildServices } from '../lib/forgecast';
-import { createProject, saveBrandKit, readBrandKit, deriveBrandKitFromWebsite, getBrandKit, generateImage } from '../lib/api';
+import { createProject, saveBrandKit, readBrandKit, deriveBrandKitFromWebsite, getBrandKit, generateImage, generateVideo } from '../lib/api';
 import type { WebsiteInfo } from '@forgecast/core';
 
 async function project(svc: ReturnType<typeof buildServices>) {
@@ -112,5 +112,21 @@ describe('api: generateImage applies the brand kit', () => {
     const pid = await project(svc);
     const r = await generateImage(svc, pid, { prompt: 'just a fox' });
     expect((r.body as { job: { params: { prompt: string } } }).job.params.prompt).toBe('just a fox');
+  });
+});
+
+describe('api: generateVideo applies the brand kit', () => {
+  it('grounds the video prompt in the brand kit', async () => {
+    // The provider call can fail; we only assert the job carries the branded prompt.
+    const fetchFn = vi.fn(async () => new Response('err', { status: 500 }));
+    const svc = buildServices({ falVideoKey: 'k', fetchFn });
+    const pid = await project(svc);
+    await saveBrandKit(svc, pid, { name: 'Forgecast', toneOfVoice: 'molten, bold' });
+
+    const r = await generateVideo(svc, pid, { prompt: 'a sneaker spinning' });
+    expect(r.status).toBe(202);
+    const sent = (r.body as { job: { params: { prompt: string } } }).job.params.prompt;
+    expect(sent).toContain('On-brand for brand "Forgecast"');
+    expect(sent.endsWith('a sneaker spinning')).toBe(true);
   });
 });

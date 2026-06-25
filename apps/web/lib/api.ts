@@ -256,8 +256,10 @@ export async function generateShortVideo(services: Services, projectId: string, 
     return { status: 503, body: { error: 'short-video worker not configured (set FORGECAST_VIDEO_WORKER_URL)' } };
   }
   const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown };
-  const subject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
-  if (subject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+  const rawSubject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
+  if (rawSubject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+  // Ground the short video in the project's brand kit (no-op when none is set).
+  const subject = applyBrandKit(await getBrandKit(services, projectId), rawSubject);
 
   const job = await services.jobs.create(
     newJob(
@@ -309,7 +311,9 @@ export async function generateVideo(services: Services, projectId: string, input
     }
   }
 
-  const params: Record<string, unknown> = { prompt: fields.prompt };
+  // Ground the video in the project's brand kit (no-op when none is set).
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+  const params: Record<string, unknown> = { prompt: brandedPrompt };
   if (typeof fields.aspectRatio === 'string') params.aspectRatio = fields.aspectRatio;
   if (typeof fields.duration === 'number') params.duration = fields.duration;
   if (typeof fields.quality === 'string') params.quality = fields.quality;
@@ -327,7 +331,7 @@ export async function generateVideo(services: Services, projectId: string, input
   // which kill background work once the response is returned.
   try {
     const { taskId } = await services.videoProvider.create({
-      prompt: fields.prompt,
+      prompt: brandedPrompt,
       aspectRatio: typeof fields.aspectRatio === 'string' ? fields.aspectRatio : undefined,
       duration: typeof fields.duration === 'number' ? fields.duration : undefined,
       quality: typeof fields.quality === 'string' ? fields.quality : undefined,
@@ -466,7 +470,8 @@ export async function generatePresenter(services: Services, projectId: string, i
   if (!hasAudio) return { status: 400, body: { error: 'text or audioUrl is required' } };
 
   const params: Record<string, unknown> = {};
-  if (typeof fields.imagePrompt === 'string') params.imagePrompt = fields.imagePrompt;
+  // Ground the presenter's look in the project's brand kit (no-op when none is set).
+  if (typeof fields.imagePrompt === 'string') params.imagePrompt = applyBrandKit(await getBrandKit(services, projectId), fields.imagePrompt);
   if (typeof fields.imageUrl === 'string') params.imageUrl = fields.imageUrl;
   if (typeof fields.text === 'string') params.text = fields.text;
   if (typeof fields.audioUrl === 'string') params.audioUrl = fields.audioUrl;
