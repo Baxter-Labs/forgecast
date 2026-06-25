@@ -329,7 +329,112 @@ server.registerTool(
   },
 );
 
-// 10. forgecast_publish_asset
+// 10. forgecast_enhance_image
+server.registerTool(
+  'forgecast_enhance_image',
+  {
+    title: 'Enhance / Upscale Image',
+    description:
+      'Upscales and sharpens an existing image asset (fal clarity-upscaler), producing a new, higher-resolution ' +
+      'image asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to enhance.\n\n' +
+      'Returns: `{ job, asset }` where asset is the new enhanced image (provider "enhance").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means the asset is not an image. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id }) => {
+    try {
+      return ok(await client.enhanceAsset(project_id, asset_id));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 11. forgecast_edit_image
+server.registerTool(
+  'forgecast_edit_image',
+  {
+    title: 'Edit Image (instruction)',
+    description:
+      'Edits an existing image asset from a natural-language instruction (fal flux-kontext), producing a new image ' +
+      'asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to edit.\n' +
+      '  prompt (string): The edit instruction, e.g. "make the background a sunset".\n\n' +
+      'Returns: `{ job, asset }` where asset is the new edited image (provider "edit").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means a missing prompt or non-image asset. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string(), prompt: z.string().min(1) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id, prompt }) => {
+    try {
+      return ok(await client.editAsset(project_id, asset_id, prompt));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 12. forgecast_cutout_image
+server.registerTool(
+  'forgecast_cutout_image',
+  {
+    title: 'Remove Background (cutout)',
+    description:
+      'Removes the background from an existing image asset (fal birefnet), producing a clean transparent-PNG ' +
+      'cutout of the subject as a new image asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to cut out.\n\n' +
+      'Returns: `{ job, asset }` where asset is the new transparent cutout (provider "cutout").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means the asset is not an image. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id }) => {
+    try {
+      return ok(await client.cutoutAsset(project_id, asset_id));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 13. forgecast_narrate_video
+server.registerTool(
+  'forgecast_narrate_video',
+  {
+    title: 'Narrate Video (add voice-over)',
+    description:
+      'Synthesizes a spoken voice-over (VoxCPM-2, or fal TTS) and muxes it onto an existing video asset, producing ' +
+      'a new narrated video asset. This is ASYNC — it returns a queued job; poll `forgecast_get_job`.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  video_asset_id (string): ID of an existing VIDEO asset to narrate.\n' +
+      '  text (string): The voice-over script.\n' +
+      '  voice (string, optional): Voice id/name for the TTS provider.\n\n' +
+      'Returns: `{ job }` with status "queued". Poll `forgecast_get_job({ job_id })` until "done".\n\n' +
+      'Error guidance: 503 means no voice provider is configured (run the VoxCPM-2 worker or set a fal voice key). 400 means a missing script or source. 404 means the project does not exist.',
+    inputSchema: z
+      .object({ project_id: z.string(), video_asset_id: z.string(), text: z.string().min(1), voice: z.string().optional() })
+      .strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, video_asset_id, text, voice }) => {
+    try {
+      return ok(await client.narrateVideo(project_id, { videoAssetId: video_asset_id, text, voice }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 14. forgecast_publish_asset
 server.registerTool(
   'forgecast_publish_asset',
   {
