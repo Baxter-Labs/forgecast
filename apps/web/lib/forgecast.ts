@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -12,7 +12,7 @@ import {
   type D1Like,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding } from './cf-env';
@@ -36,6 +36,7 @@ export interface Services {
   transcribeAvailable: boolean;
   presenterProvider: PresenterProvider;
   presenterAvailable: boolean;
+  websiteReader: WebsiteReader;
 }
 
 export interface BuildServicesOptions {
@@ -208,9 +209,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     }));
   }
 
+  const websiteReader: WebsiteReader = new HttpWebsiteReader({ fetchFn: opts.fetchFn });
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader };
 }
 
 /**

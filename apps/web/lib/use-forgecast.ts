@@ -341,6 +341,26 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  const createFromWebsite = useCallback(async (
+    args: { url: string; generate?: boolean; enhance?: boolean; generateCount?: number },
+  ): Promise<number> => {
+    if (!projectId) return 0;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/from-website`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setError(data?.error ?? 'Failed to build from website'); setStatus('error'); return 0; }
+      await refreshAssets();
+      setStatus('idle');
+      return ((data as { assets?: unknown[] })?.assets ?? []).length;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return 0;
+    }
+  }, [projectId, refreshAssets]);
+
   const enhanceAsset = useCallback(async (assetId: string): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -519,7 +539,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, uploadAsset, enhanceAsset, editAsset, cutoutAsset,
+    publishAsset, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

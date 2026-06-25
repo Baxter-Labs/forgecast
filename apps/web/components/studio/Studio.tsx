@@ -4,6 +4,7 @@ import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalo
 import { useForgecast } from '@/lib/use-forgecast';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
+import { CreatePanel } from './CreatePanel';
 import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
@@ -90,7 +91,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo,
-    publishAsset, uploadAsset,
+    publishAsset, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -105,6 +106,7 @@ export function Studio() {
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
+  const [webBuilding, setWebBuilding] = useState(false);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -190,6 +192,15 @@ export function Studio() {
     });
   }
 
+  // ── From-website handler (import + generate + enhance) ───────────────────────
+  function handleFromWebsite(args: { url: string; generate: boolean; enhance: boolean }) {
+    setWebBuilding(true);
+    void createFromWebsite(args).then((n) => {
+      setWebBuilding(false);
+      if (n > 0) setView('gallery');
+    });
+  }
+
   // ── Compose handler (Gallery multi-select → montage) ────────────────────────
   async function handleCompose(ids: string[], ar: string, dur: number) {
     const attach = (assetId: string | null | undefined) => {
@@ -220,31 +231,39 @@ export function Studio() {
       <Header providers={providers} pro={pro} />
 
       <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
-        {/* Left: Forge panel */}
+        {/* Left: unified Create surface (Idea · Website · Upload) */}
         <section aria-label="Create" className="rise" style={{ animationDelay: '80ms' }}>
-          <ForgePanel
-            mode={mode}
-            setMode={setMode}
-            prompt={prompt}
-            setPrompt={setPrompt}
-            model={model}
-            setModel={setModel}
-            boostQuality={boostQuality}
-            setBoostQuality={setBoostQuality}
-            videoImageAssetId={videoImageAssetId}
-            setVideoImageAssetId={setVideoImageAssetId}
-            ratio={ratio}
-            setRatio={setRatio}
-            onForge={handleForge}
-            forging={status === 'forging'}
-            availability={availability}
-            assets={assets}
-            montagePrompts={montagePrompts}
-            setMontagePrompts={setMontagePrompts}
-            campaigns={campaigns}
-            activeCampaignId={activeCampaignId}
-            setActiveCampaignId={setActiveCampaignId}
-            onCreateCampaign={createManualCampaign}
+          <CreatePanel
+            building={webBuilding}
+            imageAvailable={availability.image}
+            onBuildFromWebsite={handleFromWebsite}
+            onUpload={handleUpload}
+            idea={
+              <ForgePanel
+                mode={mode}
+                setMode={setMode}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                model={model}
+                setModel={setModel}
+                boostQuality={boostQuality}
+                setBoostQuality={setBoostQuality}
+                videoImageAssetId={videoImageAssetId}
+                setVideoImageAssetId={setVideoImageAssetId}
+                ratio={ratio}
+                setRatio={setRatio}
+                onForge={handleForge}
+                forging={status === 'forging'}
+                availability={availability}
+                assets={assets}
+                montagePrompts={montagePrompts}
+                setMontagePrompts={setMontagePrompts}
+                campaigns={campaigns}
+                activeCampaignId={activeCampaignId}
+                setActiveCampaignId={setActiveCampaignId}
+                onCreateCampaign={createManualCampaign}
+              />
+            }
           />
         </section>
 
