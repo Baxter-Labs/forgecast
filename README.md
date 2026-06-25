@@ -4,11 +4,11 @@
 
 ### Speak it. Forge it. Cast it.
 
-**A self-hosted, open-source content studio: generate images, video, and montages — driven by voice or a chat agent — and broadcast to Instagram, LinkedIn, and YouTube.**
+**An open-source, self-hosted content studio you _own_: generate images, video, voice-over and montages — driven by voice or a chat agent — and broadcast to Instagram, LinkedIn, and YouTube. Bring your own keys, swap any model, run it anywhere.**
 
 [![CI](https://github.com/eshwarpk/forgecast/actions/workflows/ci.yml/badge.svg)](https://github.com/eshwarpk/forgecast/actions/workflows/ci.yml)
 
-`MIT licensed` · `runs on any laptop (no GPU)` · `provider-agnostic` · `agent-native`
+`MIT licensed` · `self-hosted` · `provider-agnostic — no lock-in` · `agent-native`
 
 </div>
 
@@ -16,33 +16,52 @@
 
 ## What is Forgecast?
 
-Forgecast is a **content studio you own**. Describe what you want — by text or voice — and a planning agent checks what's trending, generates images and video, stitches a montage, and publishes across platforms. Every step is a swappable adapter, and the whole system runs on **any machine with no GPU** (cloud-default, bring-your-own-keys).
+Forgecast is a **content studio you own** — not another hosted tool you rent. Describe what you want (by text or voice) and a planning agent reads your product, generates images and video, voices it over, stitches a montage, and publishes across platforms.
 
-It's MIT-licensed, `git clone`-and-run, and never locks you to one vendor or model.
+It's **MIT-licensed**, `git clone`-and-run, and built on a **provider-agnostic spine**: image, video, voice, montage, storage and publishing are all *swappable adapters*. No vendor, no model, and no cloud is hard-wired — run it on your laptop, your server, or the edge, with the open-source engines below or a cloud key when you want one.
 
-> **Status:** full end-to-end pipeline — image, video, montage, voice, agent, publishing — is built and tested. See [What's built](#whats-built) and the [BUILDLOG](BUILDLOG.md).
+> **Status:** the full pipeline — image, video, voice-over, montage, AI presenter, agent, publishing — is built and tested (260 tests, all offline). See [What's built](#whats-built) and the [BUILDLOG](BUILDLOG.md).
+
+---
+
+## Built on open-source engines
+
+Forgecast stands on proven, permissively-licensed open-source projects, wrapped in one cohesive architecture it owns — deliberately avoiding copyleft entanglements so anyone can build on it:
+
+| Engine | Used for | License |
+|---|---|---|
+| **[VoxCPM-2](https://github.com/OpenBMB/VoxCPM)** (OpenBMB) | **Self-hosted voice-over / TTS** — 30 languages, voice design + cloning, 48 kHz | Apache-2.0 |
+| **[Remotion](https://github.com/remotion-dev/remotion)** | Longer-form montage render worker | (free for many uses) |
+| **ffmpeg** | In-process montage + voice-over muxing — no Chromium needed | LGPL/GPL |
+| **[MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)** | Short-form stock-footage video worker | MIT |
+| **[Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI)** | The text-to-image model catalog metadata | MIT |
+| **[MCP SDK](https://github.com/modelcontextprotocol)** | The agent-drivable tool surface | MIT |
+
+**Voice-over is open-source by default.** Run [`workers/voice`](workers/voice/) (VoxCPM-2) and Forgecast uses it for all TTS, narrated video, and AI-presenter audio — no cloud TTS, no per-character bill. A cloud TTS (fal.ai) is only a *fallback* when you don't run the self-hosted engine.
+
+Cloud model APIs (fal.ai for image/video) are optional providers behind the same interface — bring a key when you want them, swap in a local model when you don't.
 
 ---
 
 ## What's built
 
-| Capability | Status |
-|---|---|
-| AI image generation (fal.ai) | ✅ |
-| AI video generation (fal.ai Veo3.1, PixVerse) | ✅ |
-| Short-form video via MoneyPrinterTurbo worker | ✅ |
-| Montage stitching via Remotion worker | ✅ |
-| Voice interface (Vapi webhook + WisprFlow transcription) | ✅ |
-| TTS voiceover (fal.ai) | ✅ |
-| AI presenter / avatar (OmniHuman) | ✅ |
-| Content agent (LLM plan → generate → publish) | ✅ |
-| Trend intelligence (Agent-Reach) | ✅ |
-| Publishing: Instagram, LinkedIn, YouTube, OmniSocials | ✅ |
-| Pro tier billing (Mollie) | ✅ |
-| MCP server (agent-drivable tools) | ✅ |
-| Durable storage: SQLite + filesystem, Cloudflare D1 + R2 | ✅ |
-| Cloudflare Workers deployment (OpenNext) | ✅ |
-| 141 tests, strict TypeScript, CI on Node 24 | ✅ |
+| Capability | Engine | Status |
+|---|---|:--:|
+| AI image generation | fal.ai (50+ models, model-agnostic) | ✅ |
+| AI video — text→video & image→video | fal.ai (WAN, Veo 3.1, PixVerse, Kling, Seedance, Hailuo) | ✅ |
+| Short-form video | MoneyPrinterTurbo worker (self-hosted) | ✅ |
+| Montage stitching | Remotion worker **or** in-process ffmpeg | ✅ |
+| **Voice-over / TTS** | **VoxCPM-2 (self-hosted, open-source)** · fal TTS fallback | ✅ |
+| Narrated video (voice-over muxed onto a clip) | ffmpeg | ✅ |
+| AI presenter / talking-head avatar | OmniHuman | ✅ |
+| Tool-calling content agent | OpenAI function-calling — reads your website, decides b-roll vs presenter | ✅ |
+| Voice input (talk into the agent) | Wispr Flow (+ browser-speech fallback) | ✅ |
+| Trend intelligence | Agent-Reach | ✅ |
+| Publishing | Instagram · LinkedIn · YouTube · OmniSocials | ✅ |
+| Pro-tier billing | Mollie | ✅ |
+| Agent-drivable tools | MCP server | ✅ |
+| Durable storage | SQLite + filesystem (default) · Cloudflare D1 + R2 (optional) | ✅ |
+| 260 tests, strict TypeScript, CI on Node 24 | | ✅ |
 
 ---
 
@@ -55,14 +74,15 @@ forgecast/
 │  └─ mcp/              # MCP server — agent-drivable tool surface
 ├─ packages/
 │  ├─ core/             # pure types + contracts (no I/O)
-│  ├─ providers/        # all adapters: image, video, TTS, montage, publish, presenter
+│  ├─ providers/        # all adapters: image, video, TTS, montage, publish, presenter, transcribe
 │  ├─ store/            # repositories + storage (in-memory, SQLite/FS, D1/R2)
 │  ├─ jobs/             # JobRunner + all JobHandlers
-│  ├─ catalog/          # typed text-to-image model catalog
-│  └─ agent/            # ContentAgent: LLM plan + execute + publish
-├─ workers/
-│  ├─ montage/          # Remotion render service (Docker, for long montages)
-│  └─ shorts/           # MoneyPrinterTurbo setup (Docker, for short-form video)
+│  ├─ catalog/          # typed image + video model catalogs
+│  └─ agent/            # the tool-calling content agent
+├─ workers/             # self-hosted, optional, language-agnostic services
+│  ├─ voice/            # VoxCPM-2 voice-over (Python/FastAPI) — open-source TTS
+│  ├─ montage/          # Remotion render service (Docker)
+│  └─ shorts/           # MoneyPrinterTurbo setup (Docker)
 ├─ docs/                # architecture, deploy, integration setup guides
 ├─ LICENSE              # MIT
 └─ NOTICE               # third-party attributions
@@ -77,10 +97,10 @@ Two front doors over one dependency-inverted core:
 ```
   Humans ──▶ Studio UI (Next.js) ──┐
                                     ├──▶ Spine HTTP API ──▶ Job Engine ──▶ Provider Adapters
-  Agents ──▶ MCP Server ───────────┘   (projects, assets,   (image | video |   ├─ fal.ai (image, video, TTS)
-  Voice  ──▶ Vapi Webhook ─────────┘    jobs, voice,         short_video |      ├─ PixVerse (video)
+  Agents ──▶ MCP Server ───────────┤   (projects, assets,   (image | video |   ├─ VoxCPM-2 (voice-over, self-hosted)
+  Voice  ──▶ Wispr / Vapi ─────────┘    jobs, voice,         short_video |      ├─ fal.ai (image, video, TTS fallback)
                                          agent, billing)      montage |          ├─ MoneyPrinterTurbo (shorts)
-                                               │              voiceover |        ├─ Remotion (montage)
+                                               │              voiceover |        ├─ Remotion / ffmpeg (montage)
                                         SQLite / D1           narrate |          ├─ OmniHuman (presenter)
                                         (metadata)            presenter)         └─ OmniSocials / IG / LI / YT
                                                │
@@ -102,7 +122,7 @@ Two front doors over one dependency-inverted core:
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 141 tests, all offline
+pnpm test          # 260 tests, all offline
 pnpm typecheck     # strict tsc across every package
 ```
 
@@ -113,7 +133,7 @@ cp apps/web/.env.example apps/web/.env   # fill in keys (see below)
 pnpm -C apps/web dev                      # http://localhost:3210
 ```
 
-Without any API keys the Studio starts and shows graceful "not configured" states. Add keys to unlock each capability.
+Without any API keys the Studio starts and shows graceful "not configured" states. Add keys to unlock each capability — or run the self-hosted workers for the open-source path.
 
 ---
 
@@ -121,12 +141,14 @@ Without any API keys the Studio starts and shows graceful "not configured" state
 
 | Variable | Required for |
 |---|---|
+| `VOXCPM_URL` | **Self-hosted open-source voice-over (VoxCPM-2).** When set, it's preferred over cloud TTS. See [`workers/voice`](workers/voice/) |
 | `FAL_KEY` | AI image generation (fal.ai) |
 | `FAL_KEY_VIDEO` | AI video generation via fal.ai (falls back to `FAL_KEY`) |
-| `PIXVERSE_API_KEY` | Video generation via PixVerse |
-| `OPENAI_API_KEY` | Content agent (LLM planning) |
+| `FAL_KEY_VOICE` | Cloud TTS fallback when `VOXCPM_URL` is unset (falls back to `FAL_KEY`) |
+| `OPENAI_API_KEY` | The tool-calling content agent |
 | `FORGECAST_BASE_URL` | Public URL — needed for publishers and media URLs |
-| `FORGECAST_DATA_DIR` | Filesystem path for durable asset storage (omit → in-memory) |
+| `FORGECAST_DB` / `FORGECAST_DATA_DIR` | Durable local persistence (SQLite + filesystem; omit → in-memory) |
+| `WISPRFLOW_API_KEY` | Voice input — talk into the agent (browser-speech fallback otherwise) |
 | `OMNISOCIALS_API_KEY` | Publishing to 10+ platforms via OmniSocials |
 | `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_IG_USER_ID` | Native Instagram publishing |
 | `LINKEDIN_ACCESS_TOKEN` / `LINKEDIN_AUTHOR_URN` | Native LinkedIn publishing |
@@ -134,15 +156,22 @@ Without any API keys the Studio starts and shows graceful "not configured" state
 | `MOLLIE_API_KEY` | Mollie Pro-tier billing |
 | `AGENT_REACH_ENABLED` / `AGENT_REACH_BIN` | Trend intelligence (Agent-Reach) |
 | `FORGECAST_VIDEO_WORKER_URL` | MoneyPrinterTurbo short-video worker URL |
-| `MONTAGE_WORKER_URL` | Remotion montage worker URL |
-
-**Cloudflare deployment:** replace filesystem/SQLite with R2 + D1 — see [`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md).
+| `MONTAGE_WORKER_URL` | Remotion montage worker URL (omit → in-process ffmpeg) |
 
 ---
 
-## Optional workers (Docker)
+## Self-hosted workers (the open-source path)
 
-Forgecast's job engine calls these workers over HTTP. The main app is fully functional without them — the relevant job types return a clear 503 when a worker isn't configured.
+Forgecast's job engine calls these workers over HTTP. The main app runs fine without them — the relevant job types return a clear 503 when a worker isn't configured.
+
+### Voice-over (VoxCPM-2) — open-source TTS, no cloud
+
+```bash
+cd workers/voice
+docker compose up --build         # or: pip install -r requirements.txt && python server.py
+```
+
+Then set `VOXCPM_URL=http://localhost:8770` and restart the app. Forgecast now uses self-hosted VoxCPM-2 for every voice-over, narrated video, and AI-presenter — no cloud TTS key needed. See [`workers/voice/README.md`](workers/voice/README.md).
 
 ### Short-form video (MoneyPrinterTurbo)
 
@@ -153,16 +182,16 @@ cp moneyprinter/config.example.toml config.toml   # add LLM + Pexels keys
 docker compose up --build                          # FastAPI on :8080
 ```
 
-Then set `FORGECAST_VIDEO_WORKER_URL=http://localhost:8080` and restart the app.
+Then set `FORGECAST_VIDEO_WORKER_URL=http://localhost:8080`.
 
 ### Montage (Remotion)
 
 ```bash
 cd workers/montage
-docker compose up --build   # HTTP render service on :3000
+docker compose up --build   # HTTP render service
 ```
 
-Then set `MONTAGE_WORKER_URL=http://localhost:3000`.
+Then set `MONTAGE_WORKER_URL=http://localhost:3000`. (Or skip it — montages render in-process with the bundled ffmpeg by default.)
 
 ---
 
@@ -189,21 +218,21 @@ See [`apps/mcp/README.md`](apps/mcp/README.md) for the full tool list.
 ## Integration setup
 
 - **Social publishing:** [`docs/social-setup.md`](docs/social-setup.md)
-- **Voice (Vapi):** [`docs/vapi-setup.md`](docs/vapi-setup.md)
+- **Voice input (Wispr):** [`apps/web/.env.example`](apps/web/.env.example)
 - **Trend intelligence (Agent-Reach):** [`docs/agent-reach-setup.md`](docs/agent-reach-setup.md)
-- **Cloudflare deployment:** [`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md)
+- **Optional edge deploy (Cloudflare):** [`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md) — R2 + D1 swap in behind the same storage interface; the open-source core never depends on it.
 
 ---
 
 ## Tech stack
 
-**TypeScript** monorepo (pnpm workspaces, `strict` + `noUncheckedIndexedAccess`, Vitest) · **Next.js 16** (App Router) + **Tailwind v4** + **shadcn/ui** · **SQLite** (`node:sqlite`, zero extra deps) + **Filesystem** for durable local storage · **Cloudflare Workers** (OpenNext) + **D1** + **R2** for edge deployment · **MCP SDK** (`@modelcontextprotocol/sdk`) · **Remotion** montage worker · **MoneyPrinterTurbo** short-video worker · **Mollie** payments · **Vapi** voice.
+**TypeScript** monorepo (pnpm workspaces, `strict` + `noUncheckedIndexedAccess`, Vitest) · **Next.js 16** (App Router) + **Tailwind v4** + **shadcn/ui** · **SQLite** (`node:sqlite`, zero extra deps) + **Filesystem** for durable local storage · **VoxCPM-2** (Python/FastAPI worker) for self-hosted voice · **Remotion** + **ffmpeg** for montage · **MoneyPrinterTurbo** for short-video · **MCP SDK** for the agent surface · optional **Cloudflare Workers** (OpenNext) + **D1** + **R2** for edge deployment.
 
 ---
 
 ## Contributing
 
-The fastest way to contribute: add a **provider adapter**. Each is a small class implementing one interface in `@forgecast/core`. Nothing upstream changes — the registry picks it up by name, and `isAvailable()` makes it degrade gracefully when unconfigured.
+The fastest way to contribute: add a **provider adapter**. Each is a small class implementing one interface in `@forgecast/core` — a local Stable Diffusion image provider, an Ollama LLM, a Piper or local-VoxCPM voice. Nothing upstream changes — the registry picks it up by name, and `isAvailable()` makes it degrade gracefully when unconfigured.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide.
 
