@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, a tool-calling agent, and cross-platform publishing — is built, tested, and live. **260 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, a tool-calling agent, and cross-platform publishing — is built, tested, and live. **294 tests, strict TypeScript.**
 
 ---
 
@@ -90,6 +90,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 
 - ✅ **Typed core** — domain model + the pluggable-provider, repository, storage, and job contracts. Zero I/O, fully mock-testable.
 - ✅ **Image generation** — model-agnostic fal.ai adapter (50+ models); graceful "unavailable" when no key.
+- ✅ **Asset Studio** — bring your own product: **upload** an image or clip, then **enhance/upscale** it, **edit** it from a text instruction, **cut out** the background to a transparent PNG, **animate** it to video (image→video), **compose** a montage from any selection, **narrate** any clip with a voice-over, and **download** the result. Every step works with just a fal key — no public URL (assets resolve to a `data:` URI when no `FORGECAST_BASE_URL` is set).
 - ✅ **Video generation** — text→video **and** image→video, model-agnostic (WAN, Veo 3.1, PixVerse, Kling, Seedance, Hailuo).
 - ✅ **Voice-over** — self-hosted **VoxCPM-2** (open-source, Apache-2.0); cloud fal TTS only as a fallback.
 - ✅ **Narrated video** — voice-over muxed onto a clip via in-process ffmpeg. **AI presenter** — talking-head avatar (OmniHuman).
@@ -101,7 +102,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**260 tests, strict TypeScript, every commit a passing TDD cycle.**
+**294 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -138,7 +139,7 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 260 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 294 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
