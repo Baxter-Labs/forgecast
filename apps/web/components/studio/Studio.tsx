@@ -1,7 +1,10 @@
 'use client';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
+import { Palette } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
+import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
+import { BrandKitModal } from './BrandKitModal';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
 import { CreatePanel } from './CreatePanel';
@@ -88,6 +91,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
 // ─── Studio ───────────────────────────────────────────────────────────────────
 export function Studio() {
   const {
+    projectId,
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo,
@@ -95,6 +99,9 @@ export function Studio() {
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
+
+  const brand = useBrandKit(projectId);
+  const [brandKitOpen, setBrandKitOpen] = useState(false);
 
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
@@ -232,7 +239,29 @@ export function Studio() {
 
       <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
         {/* Left: unified Create surface (Idea · Website · Upload) */}
-        <section aria-label="Create" className="rise" style={{ animationDelay: '80ms' }}>
+        <section aria-label="Create" className="rise flex flex-col gap-3" style={{ animationDelay: '80ms' }}>
+          {/* Brand Kit — grounds every generation */}
+          <button
+            type="button"
+            onClick={() => setBrandKitOpen(true)}
+            aria-label="Open Brand Kit"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-colors cursor-pointer hover:border-[var(--ember-2)]"
+            style={{ borderColor: brandKitIsEmpty(brand.kit) ? 'var(--forge-border)' : 'var(--ember-2)', background: 'var(--forge-surface-2)' }}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Palette size={14} className="text-[var(--ember-1)] shrink-0" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--forge-text)] truncate">
+                Brand Kit{brand.kit.name ? <span className="text-[var(--forge-faint)] normal-case tracking-normal"> · {brand.kit.name}</span> : null}
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              {(brand.kit.palette ?? []).slice(0, 4).map((c) => (
+                <span key={c} className="w-3 h-3 rounded-sm border border-black/30" style={{ background: c }} />
+              ))}
+              <span className="font-mono text-[10px] text-[var(--forge-faint)]">{brandKitIsEmpty(brand.kit) ? 'set up' : 'edit'}</span>
+            </span>
+          </button>
+
           <CreatePanel
             building={webBuilding}
             imageAvailable={availability.image}
@@ -353,6 +382,8 @@ export function Studio() {
           )}
         </div>
       </main>
+
+      <BrandKitModal open={brandKitOpen} onClose={() => setBrandKitOpen(false)} brand={brand} />
     </div>
   );
 }
