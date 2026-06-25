@@ -96,3 +96,149 @@ export class OpenAiLlmClient implements LlmClient {
     };
   }
 }
+
+// ── Anthropic (Claude) ──────────────────────────────────────────────────────────
+
+export interface AnthropicLlmOptions {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  fetchFn?: typeof fetch;
+}
+
+interface AnthropicTextBlock { type: 'text'; text: string }
+interface AnthropicToolUseBlock { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | { type: string };
+interface AnthropicMessageResp { content?: AnthropicContentBlock[] }
+
+const ANTHROPIC_VERSION = '2023-06-01';
+const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';
+const ANTHROPIC_MAX_TOKENS = 16000;
+
+/**
+ * Claude (Anthropic Messages API) implementation of the agent's LlmClient — the
+ * default "brain" for the Forgecast agent.
+ *
+ * Raw injectable fetch, matching every other Forgecast provider, so the agent stays
+ * offline-mock-testable and Cloudflare-Workers friendly (no SDK dependency). Note:
+ * Opus 4.8 removed `temperature`/`top_p`/`top_k` (they return 400), so none is sent;
+ * the `system` prompt is a top-level field and tool results are `tool_result` blocks
+ * inside a user message — both different from OpenAI's chat shape.
+ */
+export class AnthropicLlmClient implements LlmClient {
+  private readonly apiKey: string | undefined;
+  private readonly model: string;
+  private readonly baseUrl: string;
+  private readonly fetchFn: typeof fetch;
+
+  constructor(opts: AnthropicLlmOptions = {}) {
+    this.apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    this.model = opts.model ?? process.env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
+    // Base is the host; the `/v1` lives in the path (matches the official SDK and
+    // tolerates ANTHROPIC_BASE_URL being set with or without a trailing /v1).
+    this.baseUrl = (opts.baseUrl ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com')
+      .replace(/\/+$/, '')
+      .replace(/\/v1$/, '');
+    this.fetchFn = opts.fetchFn ?? fetch;
+  }
+
+  isAvailable(): boolean {
+    return Boolean(this.apiKey);
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      'x-api-key': this.apiKey ?? '',
+      'anthropic-version': ANTHROPIC_VERSION,
+      'content-type': 'application/json',
+    };
+  }
+
+  private textOf(content: AnthropicContentBlock[] | undefined): string {
+    return (content ?? [])
+      .filter((b): b is AnthropicTextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+  }
+
+  async complete(input: { system: string; user: string }): Promise<string> {
+    if (!this.apiKey) throw new Error('LLM not configured (set ANTHROPIC_API_KEY)');
+    const res = await this.fetchFn(`${this.baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: ANTHROPIC_MAX_TOKENS,
+        system: input.system,
+        messages: [{ role: 'user', content: input.user }],
+      }),
+    });
+    if (!res.ok) throw new Error(`LLM request failed (${res.status}): ${await res.text()}`);
+    const data = (await res.json()) as AnthropicMessageResp;
+    return this.textOf(data.content);
+  }
+
+  async chat(input: { messages: LlmChatMessage[]; tools: LlmTool[] }): Promise<{ content: string; toolCalls: LlmToolCall[] }> {
+    if (!this.apiKey) throw new Error('LLM not configured (set ANTHROPIC_API_KEY)');
+
+    // Anthropic tools carry the JSON Schema for their args under `input_schema`.
+    const tools = input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
+
+    // Anthropic has no `system` role inside messages (it's top-level), and a tool
+    // result is a `tool_result` block inside a USER message — so translate.
+    const systemParts: string[] = [];
+    const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [];
+
+    const pushUserBlock = (block: unknown) => {
+      const last = messages[messages.length - 1];
+      if (last && last.role === 'user' && Array.isArray(last.content)) {
+        (last.content as unknown[]).push(block);
+      } else {
+        messages.push({ role: 'user', content: [block] });
+      }
+    };
+
+    for (const m of input.messages) {
+      if (m.role === 'system') {
+        if (m.content) systemParts.push(m.content);
+      } else if (m.role === 'tool') {
+        pushUserBlock({ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content });
+      } else if (m.role === 'assistant') {
+        const blocks: unknown[] = [];
+        if (m.content) blocks.push({ type: 'text', text: m.content });
+        for (const tc of m.toolCalls ?? []) {
+          let parsed: unknown;
+          try { parsed = JSON.parse(tc.argumentsJson); } catch { parsed = {}; }
+          blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: parsed });
+        }
+        messages.push({ role: 'assistant', content: blocks.length > 0 ? blocks : (m.content || '') });
+      } else {
+        pushUserBlock({ type: 'text', text: m.content });
+      }
+    }
+
+    const body: Record<string, unknown> = { model: this.model, max_tokens: ANTHROPIC_MAX_TOKENS, messages, tools };
+    if (systemParts.length > 0) body.system = systemParts.join('\n\n');
+
+    const res = await this.fetchFn(`${this.baseUrl}/v1/messages`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`LLM request failed (${res.status}): ${await res.text()}`);
+    const data = (await res.json()) as AnthropicMessageResp;
+    return {
+      content: this.textOf(data.content),
+      toolCalls: (data.content ?? [])
+        .filter((b): b is AnthropicToolUseBlock => b.type === 'tool_use')
+        .map((b) => ({ id: b.id, name: b.name, argumentsJson: JSON.stringify(b.input ?? {}) })),
+    };
+  }
+}
+
+/**
+ * The agent's LLM: Claude by default (when ANTHROPIC_API_KEY is set), with the
+ * OpenAI client kept as a fallback. So the agent "thinks" with Claude unless only
+ * an OpenAI key is configured.
+ */
+export function makeLlmClient(): LlmClient & { isAvailable(): boolean } {
+  const anthropic = new AnthropicLlmClient();
+  if (anthropic.isAvailable()) return anthropic;
+  return new OpenAiLlmClient();
+}
