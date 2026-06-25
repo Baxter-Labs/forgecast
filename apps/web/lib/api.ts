@@ -214,12 +214,12 @@ export async function generateVideo(services: Services, projectId: string, input
   }
 }
 
-async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string): Promise<MontageSpec | null> {
+async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string, durationSec = 4): Promise<MontageSpec | null> {
   const scenes = [];
   for (const id of assetIds) {
     const asset = await services.assets.get(id);
     if (!asset) continue;
-    scenes.push({ url: `${base.replace(/\/$/, '')}/api/assets/${id}/raw`, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec: 4 });
+    scenes.push({ url: `${base.replace(/\/$/, '')}/api/assets/${id}/raw`, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
 }
@@ -230,15 +230,17 @@ export async function generateMontage(services: Services, projectId: string, inp
   if (!services.montageAvailable) {
     return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
   }
-  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown };
+  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown };
   const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
+  const rawDurationSec = typeof fields.durationSec === 'number' ? fields.durationSec : 4;
+  const durationSec = Math.min(10, Math.max(1, rawDurationSec));
 
   let spec = fields.spec;
   if (!spec && Array.isArray(fields.assetIds)) {
     const base = process.env.FORGECAST_BASE_URL;
     if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the montage worker can fetch your media' } };
     const ids = fields.assetIds.filter((x): x is string => typeof x === 'string');
-    spec = (await buildSpecFromAssets(services, ids, aspectRatio, base)) ?? undefined;
+    spec = (await buildSpecFromAssets(services, ids, aspectRatio, base, durationSec)) ?? undefined;
   }
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length === 0) {
     return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };

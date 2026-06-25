@@ -11,9 +11,21 @@ interface AssetCardProps {
   onPublish?: (asset: StudioAsset) => void;
   onEnhance?: (assetId: string) => void;
   enhancing?: boolean;
+  onAnimate?: (assetId: string) => void;
+  animating?: boolean;
+  videoAvailable?: boolean;
+  /** When true the card shows a selection ring and click selects instead of opening lightbox */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (assetId: string) => void;
 }
 
-export function AssetCard({ asset, index, compact = false, onPublish, onEnhance, enhancing = false }: AssetCardProps) {
+export function AssetCard({
+  asset, index, compact = false,
+  onPublish, onEnhance, enhancing = false,
+  onAnimate, animating = false, videoAvailable = false,
+  selectable = false, selected = false, onSelect,
+}: AssetCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const prompt = asset.params.prompt ?? '';
   const isVideo = asset.type === 'video';
@@ -24,10 +36,30 @@ export function AssetCard({ asset, index, compact = false, onPublish, onEnhance,
   const videoTag = asset.provider === 'remotion' ? 'MONTAGE' : 'VIDEO';
   const dims = w && h ? `${w}×${h}` : ar ? ar : null;
 
+  function handleCardClick() {
+    if (selectable && onSelect) {
+      onSelect(asset.id);
+    } else {
+      setLightboxOpen(true);
+    }
+  }
+
   return (
     <>
-      <div className="panel overflow-hidden rise" style={{ animationDelay: `${index * 60}ms` }}>
-        <div className="relative cursor-zoom-in group" onClick={() => setLightboxOpen(true)}>
+      <div
+        className="panel overflow-hidden rise"
+        style={{
+          animationDelay: `${index * 60}ms`,
+          ...(selected ? {
+            outline: '2px solid var(--ember-2)',
+            boxShadow: '0 0 16px var(--ember-glow)',
+          } : {}),
+        }}
+      >
+        <div
+          className={`relative group ${selectable ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+          onClick={handleCardClick}
+        >
           {isVideo ? (
             <video
               src={`/api/assets/${asset.id}/raw`}
@@ -51,12 +83,34 @@ export function AssetCard({ asset, index, compact = false, onPublish, onEnhance,
               {videoTag}
             </span>
           )}
-          {/* Expand hint */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.3)' }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
-          </div>
+          {/* Expand hint (only in non-selectable mode) */}
+          {!selectable && (
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.3)' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </div>
+          )}
+          {/* Selection check */}
+          {selectable && (
+            <div
+              className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all"
+              style={selected ? {
+                background: 'var(--ember-2)',
+                borderColor: 'var(--ember-2)',
+                boxShadow: '0 0 8px var(--ember-glow)',
+              } : {
+                background: 'rgba(0,0,0,0.5)',
+                borderColor: 'rgba(255,255,255,0.5)',
+              }}
+            >
+              {selected && (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 5l2.5 2.5 4.5-4.5" />
+                </svg>
+              )}
+            </div>
+          )}
         </div>
 
         {!compact && (
@@ -72,8 +126,8 @@ export function AssetCard({ asset, index, compact = false, onPublish, onEnhance,
                 )}
                 <span className="font-mono text-[10px] text-[var(--forge-faint)] truncate">{modelId}</span>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {!isVideo && onEnhance && (
+              <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                {!isVideo && !selectable && onEnhance && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onEnhance(asset.id); }}
                     disabled={enhancing}
@@ -85,7 +139,19 @@ export function AssetCard({ asset, index, compact = false, onPublish, onEnhance,
                     {enhancing ? 'enhancing…' : '✨ Enhance'}
                   </button>
                 )}
-                {onPublish && (
+                {!isVideo && !selectable && onAnimate && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAnimate(asset.id); }}
+                    disabled={animating || !videoAvailable}
+                    title={!videoAvailable ? 'Video provider not configured (set FAL_KEY_VIDEO)' : 'Animate this image'}
+                    aria-label="Animate image"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    {animating ? 'animating…' : '▶ Animate'}
+                  </button>
+                )}
+                {!selectable && onPublish && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
                     title="Publish this asset"
@@ -102,7 +168,7 @@ export function AssetCard({ asset, index, compact = false, onPublish, onEnhance,
         )}
       </div>
 
-      {lightboxOpen && <Lightbox asset={asset} onClose={() => setLightboxOpen(false)} />}
+      {!selectable && lightboxOpen && <Lightbox asset={asset} onClose={() => setLightboxOpen(false)} />}
     </>
   );
 }
