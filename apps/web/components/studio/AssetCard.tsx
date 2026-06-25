@@ -15,6 +15,8 @@ interface AssetCardProps {
   animating?: boolean;
   onEdit?: (assetId: string, prompt: string) => void;
   editing?: boolean;
+  onCutout?: (assetId: string) => void;
+  cutting?: boolean;
   onNarrate?: (assetId: string, text: string) => void;
   narrating?: boolean;
   narrateAvailable?: boolean;
@@ -30,6 +32,7 @@ export function AssetCard({
   onPublish, onEnhance, enhancing = false,
   onAnimate, animating = false,
   onEdit, editing = false,
+  onCutout, cutting = false,
   onNarrate, narrating = false, narrateAvailable = false,
   videoAvailable = false,
   selectable = false, selected = false, onSelect,
@@ -217,6 +220,18 @@ export function AssetCard({
                     style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
                   >
                     {enhancing ? 'enhancing…' : '✨ Enhance'}
+                  </button>
+                )}
+                {!isVideo && !selectable && onCutout && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onCutout(asset.id); }}
+                    disabled={cutting}
+                    title="Remove the background — clean product cutout"
+                    aria-label="Remove background"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    {cutting ? 'cutting…' : '✂️ Cutout'}
                   </button>
                 )}
                 {!isVideo && !selectable && onEdit && (

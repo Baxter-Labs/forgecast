@@ -90,7 +90,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
-    publishAsset, uploadAsset, enhanceAsset, editAsset, narrateVideo,
+    publishAsset, uploadAsset, enhanceAsset, editAsset, cutoutAsset, narrateVideo,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -108,6 +108,7 @@ export function Studio() {
   const [enhancingId, setEnhancingId] = useState<string | null>(null);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [cuttingId, setCuttingId] = useState<string | null>(null);
   const [narratingId, setNarratingId] = useState<string | null>(null);
 
   // Campaign history
@@ -208,6 +209,15 @@ export function Studio() {
     setEditingId(assetId);
     void editAsset(assetId, prompt).then((newId) => {
       setEditingId(null);
+      if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
+    });
+  }
+
+  // ── Cutout handler (remove background → transparent product cutout) ──────────
+  function handleCutout(assetId: string) {
+    setCuttingId(assetId);
+    void cutoutAsset(assetId).then((newId) => {
+      setCuttingId(null);
       if (newId && activeCampaignId) appendVideoAssets(activeCampaignId, [newId]);
     });
   }
@@ -335,6 +345,8 @@ export function Studio() {
                 animatingId={animatingId}
                 onEdit={handleEdit}
                 editingId={editingId}
+                onCutout={handleCutout}
+                cuttingId={cuttingId}
                 onNarrate={handleNarrate}
                 narratingId={narratingId}
                 voiceAvailable={availability.voice}

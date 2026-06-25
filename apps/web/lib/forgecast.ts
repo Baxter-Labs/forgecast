@@ -11,7 +11,7 @@ import {
   r2OptionsFromEnv,
   type D1Like,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
+import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
@@ -150,9 +150,17 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     clock: nowIso,
     fetchFn: opts.fetchFn,
   });
+  const cutoutHandler = new CutoutJobHandler({
+    registry: imageRegistry,
+    storage,
+    assets,
+    idGen: randomId,
+    clock: nowIso,
+    fetchFn: opts.fetchFn,
+  });
   const videoWorker = new MoneyPrinterWorker();
   const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
-  const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler];
+  const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
       new ShortVideoJobHandler({ worker: videoWorker, storage, assets, idGen: randomId, clock: nowIso }),
