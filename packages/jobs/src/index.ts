@@ -1,6 +1,7 @@
 export * from './runner';
 export * from './handlers/image';
 export * from './handlers/enhance';
+export * from './handlers/editImage';
 export * from './handlers/shortVideo';
 export * from './handlers/video';
 export * from './handlers/montage';

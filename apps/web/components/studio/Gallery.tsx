@@ -12,6 +12,8 @@ interface GalleryProps {
   enhancingId?: string | null;
   onAnimate?: (assetId: string) => void;
   animatingId?: string | null;
+  onEdit?: (assetId: string, prompt: string) => void;
+  editingId?: string | null;
   videoAvailable?: boolean;
   onCompose?: (assetIds: string[], aspectRatio: string, durationSec: number) => Promise<void>;
   montageAvailable?: boolean;
@@ -126,7 +128,9 @@ function ComposeBar({
 // ── Gallery ───────────────────────────────────────────────────────────────────
 export function Gallery({
   assets, onPublish, onUpload, onEnhance, enhancingId,
-  onAnimate, animatingId, videoAvailable,
+  onAnimate, animatingId,
+  onEdit, editingId,
+  videoAvailable,
   onCompose, montageAvailable = false,
 }: GalleryProps) {
   const [filter, setFilter] = useState<Filter>('all');
@@ -297,6 +301,8 @@ export function Gallery({
                 enhancing={enhancingId === asset.id}
                 onAnimate={selectMode ? undefined : onAnimate}
                 animating={animatingId === asset.id}
+                onEdit={selectMode ? undefined : onEdit}
+                editing={editingId === asset.id}
                 videoAvailable={videoAvailable}
                 selectable={selectMode}
                 selected={selectedIds.includes(asset.id)}

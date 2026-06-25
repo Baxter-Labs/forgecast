@@ -427,6 +427,43 @@ export async function enhanceAsset(
   return { status: 200, body: { job: finished, asset: newAssetResult } };
 }
 
+export async function editAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; prompt?: unknown },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can be edited' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const base = process.env.FORGECAST_BASE_URL;
+  if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the editor can fetch your image' } };
+
+  if (typeof input.prompt !== 'string' || input.prompt.trim().length === 0) {
+    return { status: 400, body: { error: 'an edit instruction (prompt) is required' } };
+  }
+
+  const imageUrl = `${base.replace(/\/$/, '')}/api/assets/${input.assetId}/raw`;
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'edit', provider: 'fal', params: { imageUrl, prompt: input.prompt, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };
