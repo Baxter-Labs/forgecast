@@ -7,6 +7,7 @@ import {
   ExternalLink, Check, X, AlertCircle,
 } from 'lucide-react';
 import { useAssetEditor } from '@/lib/use-asset-editor';
+import { BeforeAfter } from './BeforeAfter';
 
 interface Props {
   assetId: string;
@@ -23,15 +24,15 @@ export function AssetEditor({ assetId }: Props) {
   const [editPrompt, setEditPrompt] = useState('');
   const [narrateOpen, setNarrateOpen] = useState(false);
   const [narrateText, setNarrateText] = useState('');
-  const [resultId, setResultId] = useState<string | null>(null);
+  const [result, setResult] = useState<{ id: string; kind: 'image' | 'video' } | null>(null);
 
   const isImage = asset?.type === 'image';
   const isVideo = asset?.type === 'video';
   const src = `/api/assets/${assetId}/raw`;
 
-  async function run(fn: () => Promise<string | null>) {
+  async function run(fn: () => Promise<string | null>, kind: 'image' | 'video') {
     const id = await fn();
-    if (id) setResultId(id);
+    if (id) setResult({ id, kind });
   }
 
   function railStyle(): React.CSSProperties {
@@ -97,15 +98,19 @@ export function AssetEditor({ assetId }: Props) {
       <div className="grid lg:grid-cols-[1fr_320px] gap-6">
         {/* Preview / compare */}
         <section className="panel overflow-hidden relative">
-          {resultId ? (
+          {result && result.kind === 'image' && isImage ? (
+            <div className="p-3">
+              <BeforeAfter beforeId={assetId} afterId={result.id} />
+            </div>
+          ) : result ? (
             <div className="grid grid-cols-2 divide-x divide-[var(--forge-border)]">
               <figure className="m-0">
-                <figcaption className="font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--forge-faint)] px-3 py-2 border-b border-[var(--forge-border)]">Before</figcaption>
+                <figcaption className="font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--forge-faint)] px-3 py-2 border-b border-[var(--forge-border)]">Source</figcaption>
                 <Media id={assetId} type={asset.type} />
               </figure>
               <figure className="m-0">
-                <figcaption className="font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--ember-1)] px-3 py-2 border-b border-[var(--forge-border)]">After</figcaption>
-                <Media id={resultId} type="image" />
+                <figcaption className="font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--ember-1)] px-3 py-2 border-b border-[var(--forge-border)]">Result</figcaption>
+                <Media id={result.id} type={result.kind} />
               </figure>
             </div>
           ) : (
@@ -122,18 +127,18 @@ export function AssetEditor({ assetId }: Props) {
 
         {/* Ops rail */}
         <aside className="flex flex-col gap-2.5">
-          {resultId && (
+          {result && (
             <div className="panel p-3 flex flex-col gap-2" style={{ borderColor: 'var(--ember-2)' }}>
               <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--ember-1)]">Result ready</p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => router.push(`/edit/${resultId}`)}
+                  onClick={() => router.push(`/edit/${result.id}`)}
                   className="flex-1 btn-forge font-mono text-[10px] uppercase tracking-[0.1em] px-2 py-1.5 inline-flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <ExternalLink size={12} /> Open result
                 </button>
                 <button
-                  onClick={() => setResultId(null)}
+                  onClick={() => setResult(null)}
                   aria-label="Dismiss result"
                   className="px-2.5 py-1.5 rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer"
                 >
@@ -147,7 +152,7 @@ export function AssetEditor({ assetId }: Props) {
 
           {isImage && (
             <>
-              <button onClick={() => run(ed.enhance)} disabled={!!busy || !availability.image} className={RAIL} style={railStyle()} aria-label="Enhance and upscale">
+              <button onClick={() => run(ed.enhance, 'image')} disabled={!!busy || !availability.image} className={RAIL} style={railStyle()} aria-label="Enhance and upscale">
                 <Sparkles size={15} className="text-[var(--ember-1)]" /> Enhance · Upscale
               </button>
 
@@ -159,17 +164,17 @@ export function AssetEditor({ assetId }: Props) {
                   placeholder="describe the edit — e.g. 'make the background a sunset'"
                   value={editPrompt}
                   setValue={setEditPrompt}
-                  onSubmit={async () => { const p = editPrompt.trim(); if (!p) return; setEditOpen(false); setEditPrompt(''); await run(() => ed.edit(p)); }}
+                  onSubmit={async () => { const p = editPrompt.trim(); if (!p) return; setEditOpen(false); setEditPrompt(''); await run(() => ed.edit(p), 'image'); }}
                   onCancel={() => { setEditOpen(false); setEditPrompt(''); }}
                   disabled={!!busy}
                 />
               )}
 
-              <button onClick={() => run(ed.cutout)} disabled={!!busy || !availability.image} className={RAIL} style={railStyle()} aria-label="Remove background">
+              <button onClick={() => run(ed.cutout, 'image')} disabled={!!busy || !availability.image} className={RAIL} style={railStyle()} aria-label="Remove background">
                 <Scissors size={15} className="text-[var(--ember-1)]" /> Remove background
               </button>
 
-              <button onClick={() => run(ed.animate)} disabled={!!busy || !availability.video} className={RAIL} style={railStyle()} aria-label="Animate to video" title={!availability.video ? 'Video provider not configured (set FAL_KEY_VIDEO)' : 'Animate this image into a video'}>
+              <button onClick={() => run(ed.animate, 'video')} disabled={!!busy || !availability.video} className={RAIL} style={railStyle()} aria-label="Animate to video" title={!availability.video ? 'Video provider not configured (set FAL_KEY_VIDEO)' : 'Animate this image into a video'}>
                 <Film size={15} className="text-[var(--ember-1)]" /> Animate → video
               </button>
 
@@ -189,7 +194,7 @@ export function AssetEditor({ assetId }: Props) {
                   placeholder="voice-over script — what should the narrator say?"
                   value={narrateText}
                   setValue={setNarrateText}
-                  onSubmit={async () => { const t = narrateText.trim(); if (!t) return; setNarrateOpen(false); setNarrateText(''); await run(() => ed.narrate(t)); }}
+                  onSubmit={async () => { const t = narrateText.trim(); if (!t) return; setNarrateOpen(false); setNarrateText(''); await run(() => ed.narrate(t), 'video'); }}
                   onCancel={() => { setNarrateOpen(false); setNarrateText(''); }}
                   disabled={!!busy}
                 />
