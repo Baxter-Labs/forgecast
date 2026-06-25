@@ -15,6 +15,9 @@ interface AssetCardProps {
   animating?: boolean;
   onEdit?: (assetId: string, prompt: string) => void;
   editing?: boolean;
+  onNarrate?: (assetId: string, text: string) => void;
+  narrating?: boolean;
+  narrateAvailable?: boolean;
   videoAvailable?: boolean;
   /** When true the card shows a selection ring and click selects instead of opening lightbox */
   selectable?: boolean;
@@ -27,6 +30,7 @@ export function AssetCard({
   onPublish, onEnhance, enhancing = false,
   onAnimate, animating = false,
   onEdit, editing = false,
+  onNarrate, narrating = false, narrateAvailable = false,
   videoAvailable = false,
   selectable = false, selected = false, onSelect,
 }: AssetCardProps) {
@@ -34,6 +38,9 @@ export function AssetCard({
   const [editOpen, setEditOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [narrateOpen, setNarrateOpen] = useState(false);
+  const [narrateText, setNarrateText] = useState('');
+  const narrateInputRef = useRef<HTMLInputElement>(null);
   const prompt = asset.params.prompt ?? '';
   const isVideo = asset.type === 'video';
   const w = asset.params.width;
@@ -74,6 +81,32 @@ export function AssetCard({
     } else if (e.key === 'Escape') {
       setEditOpen(false);
       setEditPrompt('');
+    }
+  }
+
+  function handleNarrateButtonClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setNarrateOpen(true);
+    setNarrateText('');
+    setTimeout(() => narrateInputRef.current?.focus(), 0);
+  }
+
+  function handleNarrateSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const trimmed = narrateText.trim();
+    if (!trimmed || !onNarrate) return;
+    onNarrate(asset.id, trimmed);
+    setNarrateOpen(false);
+    setNarrateText('');
+  }
+
+  function handleNarrateKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleNarrateSubmit();
+    } else if (e.key === 'Escape') {
+      setNarrateOpen(false);
+      setNarrateText('');
     }
   }
 
@@ -210,6 +243,18 @@ export function AssetCard({
                     {animating ? 'animating…' : '▶ Animate'}
                   </button>
                 )}
+                {isVideo && !selectable && onNarrate && (
+                  <button
+                    onClick={narrating ? undefined : handleNarrateButtonClick}
+                    disabled={narrating || !narrateAvailable}
+                    title={!narrateAvailable ? 'Voice provider not configured (run the VoxCPM-2 worker or set a fal voice key)' : 'Add an AI voice-over to this video'}
+                    aria-label="Narrate video"
+                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                  >
+                    {narrating ? 'narrating…' : '🎙 Narrate'}
+                  </button>
+                )}
                 {!selectable && onPublish && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onPublish(asset); }}
@@ -254,6 +299,44 @@ export function AssetCard({
                   type="button"
                   onClick={() => { setEditOpen(false); setEditPrompt(''); }}
                   aria-label="Cancel edit"
+                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--forge-text)] hover:text-[var(--forge-text)]"
+                  style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                >
+                  ✕
+                </button>
+              </form>
+            )}
+            {/* Inline narration script form */}
+            {narrateOpen && !selectable && onNarrate && (
+              <form
+                onSubmit={handleNarrateSubmit}
+                className="mt-2 flex items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={narrateInputRef}
+                  type="text"
+                  value={narrateText}
+                  onChange={(e) => setNarrateText(e.target.value)}
+                  onKeyDown={handleNarrateKeyDown}
+                  placeholder="voice-over script — what should the narrator say?"
+                  aria-label="Narration script"
+                  className="flex-1 font-mono text-[10px] px-2 py-1 rounded border bg-transparent outline-none min-w-0"
+                  style={{ borderColor: 'var(--ember-2)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
+                />
+                <button
+                  type="submit"
+                  disabled={!narrateText.trim()}
+                  aria-label="Submit narration script"
+                  className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--ember-1)] hover:text-[var(--ember-1)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-2)' }}
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setNarrateOpen(false); setNarrateText(''); }}
+                  aria-label="Cancel narration"
                   className="font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-all hover:border-[var(--forge-text)] hover:text-[var(--forge-text)]"
                   style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
                 >
