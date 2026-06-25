@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Download } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { Lightbox } from './Lightbox';
 
@@ -123,6 +123,20 @@ export function AssetCard({
                 <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
               </svg>
             </div>
+          )}
+          {/* Quick download (only in non-selectable mode) */}
+          {!selectable && (
+            <a
+              href={`/api/assets/${asset.id}/raw?download=1`}
+              download
+              onClick={(e) => e.stopPropagation()}
+              title="Download"
+              aria-label="Download asset"
+              className="absolute top-2 right-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: 'rgba(0,0,0,0.55)', color: 'white' }}
+            >
+              <Download size={13} />
+            </a>
           )}
           {/* Selection check */}
           {selectable && (
