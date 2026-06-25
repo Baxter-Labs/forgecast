@@ -10,6 +10,7 @@ export * from './publish/linkedin';
 export * from './publish/youtube';
 export * from './montage/remotion';
 export * from './voice/falTts';
+export * from './voice/voxcpm';
 export * from './transcribe/wisprflow';
 export * from './presenter/omnihuman';
 export * from './website/http';

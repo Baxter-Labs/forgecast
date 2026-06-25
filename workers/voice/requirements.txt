@@ -1,0 +1,9 @@
+# VoxCPM-2 voice-over worker dependencies
+# GPU is strongly recommended for real-time synthesis; CPU works but is slow.
+# PyTorch + the VoxCPM-2 model weights (~2 GB) are pulled in transitively by
+# the `voxcpm` package on first run (or on `pip install voxcpm`).
+fastapi
+uvicorn[standard]
+voxcpm
+soundfile
+numpy

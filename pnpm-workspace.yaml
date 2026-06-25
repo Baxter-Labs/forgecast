@@ -3,6 +3,7 @@ packages:
   - apps/*
   - workers/*
   - "!workers/montage"
+  - "!workers/voice"
 allowBuilds:
   esbuild: true
   ffmpeg-static: true
