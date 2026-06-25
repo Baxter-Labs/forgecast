@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, a tool-calling agent, and cross-platform publishing — is built, tested, and live. **294 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, a tool-calling agent, and cross-platform publishing — is built, tested, and live. **320 tests, strict TypeScript.**
 
 ---
 
@@ -102,7 +102,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**294 tests, strict TypeScript, every commit a passing TDD cycle.**
+**320 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -139,18 +139,117 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 294 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 320 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
 **Run the Studio:**
 
 ```bash
-cp apps/web/.env.example apps/web/.env    # add the keys you have (all optional)
+cp .env.example apps/web/.env.local        # add the keys you have (all optional)
 pnpm -C apps/web dev                       # http://localhost:3210
 ```
 
-Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. Add a [fal.ai](https://fal.ai) key for image/video, run [`workers/voice`](workers/voice/) (VoxCPM-2) for open-source voice-over, and an `OPENAI_API_KEY` for the agent. Set `FORGECAST_DB` + `FORGECAST_DATA_DIR` for durable on-disk storage.
+Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. The next section is the wiring cheat sheet.
+
+---
+
+## Configure it — API keys (cheat sheet)
+
+Every capability is a swappable adapter. **You set keys once, as server-side environment variables** — they live on the server and are never sent to the browser. Set only the ones you want; anything missing degrades to a clean "not configured" state in the UI. Locally they go in `apps/web/.env.local`; in the cloud they go in your host's secrets (see [Deploy](#deploy-to-the-cloud)).
+
+### Generation — the core
+
+| Env var | Unlocks | Where to get it | Need it? |
+|---|---|---|---|
+| `FAL_KEY` | Image generation + **Enhance / Edit / Cutout / Variations**, From-Website & Brand-Kit images | [fal.ai → keys](https://fal.ai/dashboard/keys) | **Start here** |
+| `FAL_KEY_VIDEO` | Text→video, image→video (**Animate**), **AI presenter** | same fal.ai dashboard | for video |
+| `VOXCPM_URL` | Self-hosted open-source **voice-over** (VoxCPM-2, preferred) | run [`workers/voice`](workers/voice/) | optional |
+| `FAL_KEY_VOICE` | Cloud voice-over fallback (if you don't run VoxCPM) | fal.ai | optional |
+
+### Agent brain — the PLAN / AUTO-RUN agent
+
+| Env var | Unlocks | Where to get it | Need it? |
+|---|---|---|---|
+| `OPENAI_API_KEY` | The tool-calling agent (**default**) | [platform.openai.com](https://platform.openai.com/api-keys) | for the agent |
+| `FORGECAST_AGENT_LLM=anthropic` + `ANTHROPIC_API_KEY` | Switch the agent to **Claude** | [console.anthropic.com](https://console.anthropic.com) | optional |
+
+### Voice input & publishing
+
+| Env var | Unlocks | Where to get it |
+|---|---|---|
+| `WISPRFLOW_API_KEY` | Talk into the agent (speech→text; browser-speech fallback otherwise) | [wisprflow.ai/developers](https://wisprflow.ai/developers) |
+| `OMNISOCIALS_API_KEY` | One key → 10+ platforms (the fast path to publish) | OmniSocials |
+| `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_IG_USER_ID` | Instagram posting | Meta for Developers |
+| `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_AUTHOR_URN` | LinkedIn posting | LinkedIn Developers |
+| `YOUTUBE_ACCESS_TOKEN` | YouTube upload | Google Cloud Console |
+
+### Make money & host
+
+| Env var | Unlocks | Where to get it |
+|---|---|---|
+| `MOLLIE_API_KEY` | **Pro tier billing** — free/Pro gating, checkout, webhook | [mollie.com](https://www.mollie.com) |
+| `FORGECAST_BASE_URL` | Public URL of your deployment (lets providers/the montage worker fetch your assets; without it Forgecast inlines bytes as data-URIs) | your domain |
+| `FORGECAST_DB` + `FORGECAST_DATA_DIR` | Durable on-disk storage (SQLite metadata + filesystem bytes) | local paths / a mounted volume |
+| `FORGECAST_PROFILE=baxter-cloud` + `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Cloudflare **R2** asset storage + **D1** metadata at the edge | Cloudflare dashboard |
+| `MONTAGE_WORKER_URL` / `FORGECAST_VIDEO_WORKER_URL` | Remotion render worker / MoneyPrinter short-video worker (else bundled ffmpeg) | [`workers/`](workers/) |
+
+### 60-second wiring — copy-paste `.env.local`
+
+```bash
+# 1) minimum to make anything — images + enhance/edit/cutout/variations
+FAL_KEY=...
+# 2) add video — animate / text→video / AI presenter
+FAL_KEY_VIDEO=...
+# 3) add the agent (PLAN / AUTO-RUN)
+OPENAI_API_KEY=...              # or: FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY=...
+# 4) turn it into a business — Pro tier
+MOLLIE_API_KEY=...
+# 5) production essentials
+FORGECAST_BASE_URL=https://your-domain.com
+FORGECAST_DB=./.forgecast/forgecast.db
+FORGECAST_DATA_DIR=./.forgecast/objects
+```
+
+> **Tip:** add `FAL_KEY` first and you've got the whole image studio (generate → enhance → edit → cutout → variations → brand-kit), working locally with no public URL.
+
+---
+
+## Deploy to the cloud
+
+Forgecast is a standard **Next.js 16** app, so it runs anywhere Next runs. Two supported paths:
+
+### A) Cloudflare Workers (built-in edge path) — recommended
+
+OpenNext is already wired (`@opennextjs/cloudflare`). From `apps/web/`:
+
+```bash
+pnpm -C apps/web cf:preview     # build + preview on the real Workers runtime
+pnpm -C apps/web cf:deploy      # build + deploy to your Cloudflare account
+```
+
+- **Keys** → store as Worker secrets: `wrangler secret put FAL_KEY` (repeat per key), or paste them in the Cloudflare dashboard.
+- **Durable edge storage** → set `FORGECAST_PROFILE=baxter-cloud`, bind an **R2** bucket (the `R2_*` vars) and a **D1** database named `DB` in `wrangler.jsonc`. Without them, metadata is ephemeral in-memory — fine for a demo, not for production.
+- Set **`FORGECAST_BASE_URL`** to your Worker's public URL so publishing and the montage worker can fetch generated assets.
+
+### B) Any Node host (Vercel, Fly, a VPS, Docker)
+
+```bash
+pnpm -C apps/web build && pnpm -C apps/web start    # serves on :3000
+```
+
+Set the env vars in your host's dashboard. For durable storage, point `FORGECAST_DB` + `FORGECAST_DATA_DIR` at a mounted volume (don't use ephemeral container disk for production).
+
+---
+
+## Ship it as a product — and make money
+
+Forgecast is built to be **handed to non-technical users as a hosted website** — nobody edits code or env files but you.
+
+- **You wire the keys once.** As the operator you set the keys (above) at deploy time. **Your users never see, enter, or touch a key or a line of code** — they just open the Studio, type a prompt or paste a URL, and create. Whatever you haven't configured simply shows a graceful "not configured" badge, so you light up exactly the capabilities you're paying for.
+- **Monetize with the built-in Pro tier.** Set `MOLLIE_API_KEY` and the Studio gains a free/Pro split out of the box: a "GO PRO" call-to-action and Pro badge in the header, a Mollie checkout (`POST /api/billing/checkout`), entitlement status (`GET /api/billing/status`), and a payment webhook (`POST /api/billing/webhook`). Gate your premium features behind Pro and charge for it.
+- **Resell the agent surface.** Every action also exists as an **MCP tool** ([`apps/mcp`](apps/mcp/)), so you can offer Forgecast as an agent-drivable API to other builders, not just a UI.
+- **What's deliberately yours to add.** Forgecast ships as a single hosted instance with one global key set + a Pro gate — *not* a multi-tenant SaaS. Per-user accounts/auth, per-user API keys, and team workspaces are intentionally left out so they can be your differentiation layer. (The MIT license lets you build and sell all of it.)
 
 ---
 
