@@ -69,6 +69,16 @@ A typical agent flow to create something and fan it out across your networks:
 
 > Example prompt to your agent: *"Set the brand kit from acme.com, generate a launch image, then cross-post it to Instagram and LinkedIn with a punchy caption."*
 
+### …or hand off the whole job
+
+Instead of orchestrating the granular tools, delegate to **Forgecast's own agent**:
+
+- `forgecast_agent_plan(brief, platforms)` → a reviewable campaign plan (it researches a URL in the brief).
+- `forgecast_agent_execute(plan, …, publish)` → produces the plan's assets and (with `publish: true`) cross-posts them.
+- `forgecast_agent_run(brief, …)` → the autonomous one-shot: brainstorm **and** produce in a single call.
+
+These need an LLM key on the web app (`OPENAI_API_KEY`, or `FORGECAST_AGENT_LLM=anthropic` + `ANTHROPIC_API_KEY`).
+
 ---
 
 ## Tools
@@ -88,8 +98,11 @@ A typical agent flow to create something and fan it out across your networks:
 | `forgecast_list_assets` | List a project's assets, each with a direct media URL |
 | `forgecast_get_job` | Poll any async job by id |
 | `forgecast_publish_asset` | **Publish / cross-post** an asset's media + caption to one or more channels at once |
+| `forgecast_agent_plan` | **Agent — Plan:** brief → a reviewable campaign plan (researches a URL in the brief) |
+| `forgecast_agent_execute` | **Agent — Execute:** produce a plan's assets and (with `publish`) cross-post them |
+| `forgecast_agent_run` | **Agent — Auto-run:** brief → brainstorm **and** produce in one shot |
 
-Every tool returns structured JSON; async ones return a job to poll with `forgecast_get_job`.
+Every tool returns structured JSON; async ones return a job to poll with `forgecast_get_job`. The three agent tools need an LLM key on the web app.
 
 ---
 

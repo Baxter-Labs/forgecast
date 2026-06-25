@@ -141,4 +141,21 @@ export class SpineClient {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
+
+  // ── The Forgecast agent (PLAN / EXECUTE / AUTO-RUN) ───────────────────────
+  agentPlan(brief: string, platforms?: string[]): Promise<{ plan: unknown }> {
+    return this.req('/api/agent', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'plan', brief, platforms }),
+    });
+  }
+  agentExecute(input: { plan: unknown; projectId?: string; projectName?: string; publish?: boolean }): Promise<{ result: unknown }> {
+    return this.req('/api/agent', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'execute', ...input }),
+    });
+  }
+  agentRun(input: { brief: string; projectId?: string; platforms?: string[] }): Promise<{ result: unknown }> {
+    return this.req('/api/agent', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'agentic', ...input }),
+    });
+  }
 }
