@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { StudioAsset } from '@/lib/use-forgecast';
 
@@ -30,6 +30,17 @@ export function Lightbox({ asset, onClose }: LightboxProps) {
       style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
+      <a
+        href={`/api/assets/${asset.id}/raw?download=1`}
+        download
+        onClick={(e) => e.stopPropagation()}
+        title="Download"
+        aria-label="Download asset"
+        className="absolute top-4 right-16 flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-[10px] uppercase tracking-[0.12em] text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+      >
+        <Download size={16} />
+        Download
+      </a>
       <button
         onClick={onClose}
         className="absolute top-4 right-4 p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
