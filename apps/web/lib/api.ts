@@ -111,6 +111,43 @@ export async function getAssetBytes(
   return services.storage.get(asset.storageKey);
 }
 
+// Base64-encode bytes in a way that works on both Node (Buffer) and the edge
+// runtime (no Buffer — chunked String.fromCharCode + btoa, chunked to avoid the
+// arg-count limit on very large assets).
+function toBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Resolves an asset to a URL an external consumer (fal.ai models, the montage
+ * worker, ffmpeg) can actually fetch.
+ *
+ * - When FORGECAST_BASE_URL points at a publicly reachable deployment, we hand
+ *   out `${base}/api/assets/{id}/raw` so the provider streams the bytes from us
+ *   (cheapest — no re-upload).
+ * - Otherwise (the common local-dev case, where fal's servers can't reach your
+ *   laptop) we inline the bytes as a `data:` URI. fal's image models, the
+ *   image-to-video endpoint, and ffmpeg all accept data URIs, so enhance / edit
+ *   / animate / montage work with nothing but a fal key — no public tunnel.
+ *
+ * Returns null only when the asset has no stored bytes.
+ */
+async function resolveAssetUrl(services: Services, assetId: string): Promise<string | null> {
+  const base = process.env.FORGECAST_BASE_URL;
+  if (base && base.trim().length > 0) {
+    return `${base.replace(/\/$/, '')}/api/assets/${assetId}/raw`;
+  }
+  const got = await getAssetBytes(services, assetId);
+  if (!got) return null;
+  return `data:${got.contentType};base64,${toBase64(got.data)}`;
+}
+
 export async function generateShortVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
@@ -159,11 +196,11 @@ export async function generateVideo(services: Services, projectId: string, input
   let resolvedImageUrl: string | undefined;
   if (modelDef?.mode === 'image-to-video') {
     if (typeof fields.imageAssetId === 'string' && fields.imageAssetId.length > 0) {
-      const base = process.env.FORGECAST_BASE_URL;
-      if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so image-to-video can resolve asset URLs' } };
       const asset = await services.assets.get(fields.imageAssetId);
       if (!asset) return { status: 404, body: { error: `asset ${fields.imageAssetId} not found` } };
-      resolvedImageUrl = `${base.replace(/\/$/, '')}/api/assets/${fields.imageAssetId}/raw`;
+      const url = await resolveAssetUrl(services, fields.imageAssetId);
+      if (!url) return { status: 404, body: { error: `asset ${fields.imageAssetId} has no stored bytes` } };
+      resolvedImageUrl = url;
     } else if (typeof fields.imageUrl === 'string' && fields.imageUrl.length > 0) {
       resolvedImageUrl = fields.imageUrl;
     } else {
@@ -214,12 +251,14 @@ export async function generateVideo(services: Services, projectId: string, input
   }
 }
 
-async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string, durationSec = 4): Promise<MontageSpec | null> {
+async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, durationSec = 4): Promise<MontageSpec | null> {
   const scenes = [];
   for (const id of assetIds) {
     const asset = await services.assets.get(id);
     if (!asset) continue;
-    scenes.push({ url: `${base.replace(/\/$/, '')}/api/assets/${id}/raw`, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
+    const url = await resolveAssetUrl(services, id);
+    if (!url) continue;
+    scenes.push({ url, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
 }
@@ -237,10 +276,8 @@ export async function generateMontage(services: Services, projectId: string, inp
 
   let spec = fields.spec;
   if (!spec && Array.isArray(fields.assetIds)) {
-    const base = process.env.FORGECAST_BASE_URL;
-    if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the montage worker can fetch your media' } };
     const ids = fields.assetIds.filter((x): x is string => typeof x === 'string');
-    spec = (await buildSpecFromAssets(services, ids, aspectRatio, base, durationSec)) ?? undefined;
+    spec = (await buildSpecFromAssets(services, ids, aspectRatio, durationSec)) ?? undefined;
   }
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length === 0) {
     return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };
@@ -411,10 +448,8 @@ export async function enhanceAsset(
     return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
   }
 
-  const base = process.env.FORGECAST_BASE_URL;
-  if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the enhancer can fetch your image' } };
-
-  const imageUrl = `${base.replace(/\/$/, '')}/api/assets/${input.assetId}/raw`;
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
 
   const job = await services.jobs.create(
     newJob(
@@ -444,14 +479,12 @@ export async function editAsset(
     return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
   }
 
-  const base = process.env.FORGECAST_BASE_URL;
-  if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the editor can fetch your image' } };
-
   if (typeof input.prompt !== 'string' || input.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'an edit instruction (prompt) is required' } };
   }
 
-  const imageUrl = `${base.replace(/\/$/, '')}/api/assets/${input.assetId}/raw`;
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
 
   const job = await services.jobs.create(
     newJob(

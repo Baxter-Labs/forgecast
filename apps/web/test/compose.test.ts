@@ -93,6 +93,23 @@ describe('api: compose video — durationSec wiring', () => {
     expect(body.job.params.spec.scenes[0]?.durationSec).toBe(10);
   });
 
+  it('inlines scenes as data URIs when FORGECAST_BASE_URL is unset', async () => {
+    delete process.env.FORGECAST_BASE_URL;
+    delete process.env.MONTAGE_WORKER_URL;
+
+    const svc = makeServices();
+    const { projectId, assetId } = await seedProject(svc);
+
+    const r = await generateMontage(svc, projectId, { assetIds: [assetId] });
+    expect(r.status).toBe(202);
+
+    const body = r.body as { job: { params: { spec: { scenes: { url: string }[] } } } };
+    const scenes = body.job.params.spec.scenes;
+    expect(scenes.length).toBeGreaterThan(0);
+    // No public base URL → the montage worker gets the bytes inline, not a localhost URL it can't reach.
+    expect(scenes[0]?.url).toMatch(/^data:image\//);
+  });
+
   it('clamps durationSec < 1 to 1', async () => {
     process.env.FORGECAST_BASE_URL = 'http://localhost:3000';
     delete process.env.MONTAGE_WORKER_URL;
