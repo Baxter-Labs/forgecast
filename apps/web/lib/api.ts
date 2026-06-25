@@ -439,6 +439,111 @@ export async function uploadAsset(
   return { status: 201, body: { asset } };
 }
 
+// Build a batch of assets from a product website: import the real images found on
+// the page, generate a few on-brand AI images grounded in the site copy, and
+// enhance the (often low-res) imported images. Bounded for serverless: ≤6 imports,
+// ≤4 generations, ≤4 enhancements. The image-download fetch is injectable for tests.
+export async function generateFromWebsite(
+  services: Services,
+  projectId: string,
+  input: { url?: unknown; generate?: unknown; generateCount?: unknown; enhance?: unknown },
+  fetchFn: typeof fetch = fetch,
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (typeof input.url !== 'string' || input.url.trim().length === 0) {
+    return { status: 400, body: { error: 'a website url is required' } };
+  }
+
+  let site;
+  try {
+    site = await services.websiteReader.read(input.url);
+  } catch (e) {
+    return { status: 400, body: { error: `could not read website: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const wantGenerate = input.generate !== false;
+  const generateCount = Math.min(4, Math.max(0, typeof input.generateCount === 'number' ? Math.round(input.generateCount) : 2));
+  const wantEnhance = input.enhance !== false;
+  const falReady = services.imageRegistry.available().includes('fal');
+
+  const created: unknown[] = [];
+  const importedIds: string[] = [];
+
+  // 1. Import the real product images from the site.
+  const extByType = (ct: string): string =>
+    ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : ct.includes('gif') ? 'gif' : 'jpg';
+  for (const imgUrl of (site.images ?? []).slice(0, 6)) {
+    try {
+      const res = await fetchFn(imgUrl);
+      if (!res.ok) continue;
+      const ct = res.headers.get('content-type') ?? 'image/jpeg';
+      if (!ct.startsWith('image/')) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length === 0) continue;
+      const id = services.ids.randomId();
+      const key = `projects/${projectId}/web-import/${id}.${extByType(ct)}`;
+      const stored = await services.storage.put(key, bytes, ct);
+      const asset = await services.assets.create(
+        newAsset(
+          { projectId, type: 'image', provider: 'web-import', storageKey: stored.key, params: { prompt: site.title ?? input.url, sourceUrl: imgUrl, fromWebsite: input.url } },
+          { id, now: services.ids.nowIso() },
+        ),
+      );
+      importedIds.push(asset.id);
+      created.push(asset);
+    } catch {
+      // skip an individual bad image
+    }
+  }
+
+  // 2. Generate on-brand AI images grounded in the site copy.
+  if (wantGenerate && falReady && generateCount > 0) {
+    const brand = site.siteName ?? site.title ?? 'the brand';
+    const desc = (site.description ?? site.text ?? '').slice(0, 240);
+    const angles = [
+      `Hero product shot for ${brand}. ${desc} Clean studio lighting, premium, on-brand.`,
+      `Lifestyle scene featuring ${brand}'s product in use. ${desc} Natural light, aspirational.`,
+      `Bold, social-ready promo image for ${brand}. ${desc} High contrast, scroll-stopping.`,
+      `Minimal flat-lay of ${brand}'s product in brand colors. ${desc}`,
+    ];
+    for (let i = 0; i < generateCount; i++) {
+      const prompt = angles[i % angles.length] ?? `On-brand product image for ${brand}.`;
+      const r = await generateImage(services, projectId, { prompt });
+      const a = (r.body as { asset?: unknown }).asset;
+      if (a) created.push(a);
+    }
+  }
+
+  // 3. Enhance the imported (often low-res) site images.
+  let enhancedCount = 0;
+  if (wantEnhance && falReady) {
+    for (const id of importedIds.slice(0, 4)) {
+      const r = await enhanceAsset(services, projectId, { assetId: id });
+      const a = (r.body as { asset?: unknown }).asset;
+      if (a) { created.push(a); enhancedCount++; }
+    }
+  }
+
+  if (created.length === 0) {
+    return { status: 422, body: { error: 'no assets could be created from that website — no usable images were found; set FAL_KEY to also generate on-brand images' } };
+  }
+
+  return {
+    status: 200,
+    body: {
+      assets: created,
+      summary: {
+        url: site.url,
+        title: site.title ?? null,
+        imported: importedIds.length,
+        generated: wantGenerate && falReady ? generateCount : 0,
+        enhanced: enhancedCount,
+      },
+    },
+  };
+}
+
 export async function enhanceAsset(
   services: Services,
   projectId: string,
