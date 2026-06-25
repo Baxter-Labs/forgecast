@@ -342,6 +342,89 @@ export async function generatePresenter(services: Services, projectId: string, i
   return { status: 202, body: { job } };
 }
 
+export async function uploadAsset(
+  services: Services,
+  projectId: string,
+  input: { bytes: Uint8Array; contentType: string; filename?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (input.bytes.length === 0) return { status: 400, body: { error: 'file is empty' } };
+
+  let type: 'image' | 'video';
+  if (input.contentType.startsWith('image/')) {
+    type = 'image';
+  } else if (input.contentType.startsWith('video/')) {
+    type = 'video';
+  } else {
+    return { status: 400, body: { error: 'only image or video uploads are supported' } };
+  }
+
+  const extMap: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+  };
+  const defaultExt = type === 'video' ? 'mp4' : 'png';
+  const ext = extMap[input.contentType] ?? defaultExt;
+
+  const id = services.ids.randomId();
+  const key = `projects/${projectId}/uploads/${id}.${ext}`;
+  const stored = await services.storage.put(key, input.bytes, input.contentType);
+
+  const asset = await services.assets.create(
+    newAsset(
+      {
+        projectId,
+        type,
+        provider: 'upload',
+        storageKey: stored.key,
+        params: { prompt: input.filename ?? 'uploaded', filename: input.filename, uploaded: true },
+      },
+      { id, now: services.ids.nowIso() },
+    ),
+  );
+  return { status: 201, body: { asset } };
+}
+
+export async function enhanceAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can be enhanced' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const base = process.env.FORGECAST_BASE_URL;
+  if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the enhancer can fetch your image' } };
+
+  const imageUrl = `${base.replace(/\/$/, '')}/api/assets/${input.assetId}/raw`;
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'enhance', provider: 'fal', params: { imageUrl, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {
   const asset = await services.assets.get(assetId);
   if (!asset) return { status: 404, body: { error: 'asset not found' } };

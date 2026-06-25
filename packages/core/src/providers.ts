@@ -2,6 +2,8 @@ export interface GenerateImageInput {
   prompt: string;
   width?: number;
   height?: number;
+  /** Per-call model override; takes precedence over the provider's default model. */
+  model?: string;
   /**
    * Provider-specific extra parameters, passed through verbatim. Spread last by
    * adapters, so a key here takes precedence over mapped fields (e.g. an
