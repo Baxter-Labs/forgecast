@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import { Upload, Film, Check } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { AssetCard } from './AssetCard';
 import { EmptyState } from './EmptyState';
@@ -111,7 +112,7 @@ function ComposeBar({
           aria-label={`Compose video from ${count} selected assets`}
           className="btn-forge font-mono text-[11px] uppercase tracking-[0.12em] px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ▶ Compose video
+          <Film size={12} className="inline-block mr-1 -mt-0.5" /> Compose video
         </button>
       </div>
     </div>
@@ -199,7 +200,7 @@ export function Gallery({
         className="font-mono text-xs px-3 py-1.5 rounded border transition-all"
         style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
       >
-        ⬆ Upload asset
+        <Upload size={12} className="inline-block mr-1 -mt-0.5" /> Upload asset
       </button>
     </div>
   ) : null;
@@ -242,7 +243,7 @@ export function Gallery({
               background: 'transparent',
             }}
           >
-            {selectMode ? `✓ Select (${selectedIds.length})` : 'Select'}
+            {selectMode ? <><Check size={12} className="inline-block mr-1 -mt-0.5" />Select ({selectedIds.length})</> : 'Select'}
           </button>
         </div>
 
