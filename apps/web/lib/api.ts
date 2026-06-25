@@ -462,6 +462,37 @@ export async function enhanceAsset(
   return { status: 200, body: { job: finished, asset: newAssetResult } };
 }
 
+export async function removeBackgroundAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can have their background removed' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'cutout', provider: 'fal', params: { imageUrl, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
 export async function editAsset(
   services: Services,
   projectId: string,

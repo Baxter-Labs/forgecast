@@ -357,6 +357,25 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  const cutoutAsset = useCallback(async (assetId: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/cutout`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Cutout failed'); setStatus('error'); return null; }
+      const cut = (body as { job?: { status?: string; error?: string }; asset?: RawAsset });
+      if (cut.job?.status !== 'done' || !cut.asset) {
+        setError(cut.job?.error ?? 'Cutout failed'); setStatus('error'); return null;
+      }
+      setAssets((prev) => [normalizeAsset(cut.asset!), ...prev]);
+      setStatus('idle');
+      return cut.asset.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
   const editAsset = useCallback(async (assetId: string, prompt: string): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -500,7 +519,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, uploadAsset, enhanceAsset, editAsset,
+    publishAsset, uploadAsset, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };
