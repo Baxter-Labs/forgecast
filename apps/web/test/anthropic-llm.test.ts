@@ -7,9 +7,11 @@ function json(body: unknown, status = 200): Response {
 
 const savedAnthropic = process.env.ANTHROPIC_API_KEY;
 const savedOpenAi = process.env.OPENAI_API_KEY;
+const savedProvider = process.env.FORGECAST_AGENT_LLM;
 afterEach(() => {
   if (savedAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedAnthropic;
   if (savedOpenAi === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedOpenAi;
+  if (savedProvider === undefined) delete process.env.FORGECAST_AGENT_LLM; else process.env.FORGECAST_AGENT_LLM = savedProvider;
 });
 
 describe('AnthropicLlmClient', () => {
@@ -81,14 +83,16 @@ describe('AnthropicLlmClient', () => {
 });
 
 describe('makeLlmClient', () => {
-  it('prefers Claude when ANTHROPIC_API_KEY is set', () => {
-    process.env.ANTHROPIC_API_KEY = 'k';
-    expect(makeLlmClient()).toBeInstanceOf(AnthropicLlmClient);
+  it('defaults to OpenAI — even when ANTHROPIC_API_KEY is present in the env', () => {
+    delete process.env.FORGECAST_AGENT_LLM;
+    process.env.ANTHROPIC_API_KEY = 'ambient-key';
+    expect(makeLlmClient()).toBeInstanceOf(OpenAiLlmClient);
   });
 
-  it('falls back to OpenAI when only OPENAI_API_KEY is set', () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    process.env.OPENAI_API_KEY = 'k';
-    expect(makeLlmClient()).toBeInstanceOf(OpenAiLlmClient);
+  it('uses Claude only when explicitly opted in via FORGECAST_AGENT_LLM', () => {
+    process.env.FORGECAST_AGENT_LLM = 'anthropic';
+    expect(makeLlmClient()).toBeInstanceOf(AnthropicLlmClient);
+    process.env.FORGECAST_AGENT_LLM = 'claude';
+    expect(makeLlmClient()).toBeInstanceOf(AnthropicLlmClient);
   });
 });

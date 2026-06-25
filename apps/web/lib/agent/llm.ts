@@ -233,12 +233,16 @@ export class AnthropicLlmClient implements LlmClient {
 }
 
 /**
- * The agent's LLM: Claude by default (when ANTHROPIC_API_KEY is set), with the
- * OpenAI client kept as a fallback. So the agent "thinks" with Claude unless only
- * an OpenAI key is configured.
+ * The agent's LLM. OpenAI is the default for now; the Claude (Anthropic) adapter
+ * stays available and is opt-in via `FORGECAST_AGENT_LLM=anthropic` (or `claude`).
+ *
+ * Selection is explicit on purpose — we do NOT auto-switch to Claude just because
+ * an `ANTHROPIC_API_KEY` happens to be in the ambient environment, so a key meant
+ * for something else (e.g. a local Claude tool) can't silently start billing the
+ * agent.
  */
 export function makeLlmClient(): LlmClient & { isAvailable(): boolean } {
-  const anthropic = new AnthropicLlmClient();
-  if (anthropic.isAvailable()) return anthropic;
+  const provider = (process.env.FORGECAST_AGENT_LLM ?? '').trim().toLowerCase();
+  if (provider === 'anthropic' || provider === 'claude') return new AnthropicLlmClient();
   return new OpenAiLlmClient();
 }

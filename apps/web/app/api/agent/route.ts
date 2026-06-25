@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
 
   if (body.mode === 'plan') {
-    if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set ANTHROPIC_API_KEY for Claude, or OPENAI_API_KEY)' }, { status: 503 });
+    if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' }, { status: 503 });
     if (typeof body.brief !== 'string' || body.brief.trim().length === 0) return NextResponse.json({ error: 'brief is required' }, { status: 400 });
     try {
       // Detect a URL/domain in the brief and pre-fetch website context to enrich planning.
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
   if (body.mode === 'agentic') {
     if (!llm.isAvailable() || !llm.chat) {
-      return NextResponse.json({ error: 'agent LLM not configured (set ANTHROPIC_API_KEY for Claude, or OPENAI_API_KEY)' }, { status: 503 });
+      return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' }, { status: 503 });
     }
     if (typeof body.brief !== 'string' || body.brief.trim().length === 0) {
       return NextResponse.json({ error: 'brief is required' }, { status: 400 });
