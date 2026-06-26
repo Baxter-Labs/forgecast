@@ -685,6 +685,71 @@ server.registerTool(
   },
 );
 
+const metricsSchema = z
+  .array(
+    z.object({
+      creativeId: z.string(),
+      name: z.string().optional(),
+      platform: z.string().optional(),
+      date: z.string(),
+      impressions: z.number(),
+      clicks: z.number(),
+      spend: z.number(),
+      conversions: z.number().optional(),
+      frequency: z.number().optional(),
+    }),
+  )
+  .optional();
+
+// 23. forgecast_ads_audit
+server.registerTool(
+  'forgecast_ads_audit',
+  {
+    title: 'Audit ad performance (fatigue + health score)',
+    description:
+      'The measure side of the loop: audit ad-account performance and get a 0–100 health score + letter grade ' +
+      'across dimensions (CTR health, creative freshness, spend efficiency, conversion rate, spend ' +
+      'concentration), a per-creative **creative-fatigue** diagnosis (CTR decay + frequency saturation + rising ' +
+      'CPA), and prioritized recommendations.\n\n' +
+      'Two ways to feed it: **(a) keyless** — pass `metrics` (an array of per-creative, per-day rows: ' +
+      'creativeId, date, impressions, clicks, spend, and optionally conversions/frequency/name); or **(b) auto-pull** ' +
+      '— omit `metrics` and set `source` (meta|google) to pull from a connected account (needs META_ADS_* / ' +
+      'GOOGLE_ADS_* on the server).\n' +
+      'Returns: `{ source, audit: { score, grade, totals, dimensions[], fatigue[], recommendations[] } }`. ' +
+      'Pair the fatigue list with `forgecast_generate_image` + `forgecast_publish_asset` to refresh tired creatives.',
+    inputSchema: z.object({
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ metrics, source, sinceDays }) => {
+    try { return ok(await client.adsAudit({ metrics, source, sinceDays })); } catch (e) { return fail(e); }
+  },
+);
+
+// 24. forgecast_ads_insights
+server.registerTool(
+  'forgecast_ads_insights',
+  {
+    title: 'Pull raw ad metrics',
+    description:
+      'Fetch normalized per-creative, per-day ad metrics from a connected account (`source`: meta|google; needs ' +
+      'META_ADS_* / GOOGLE_ADS_* on the server), or echo back `metrics` you pass in. Returns ' +
+      '`{ source, count, metrics[] }`. Use `forgecast_ads_audit` to score and diagnose them.',
+    inputSchema: z.object({
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ metrics, source, sinceDays }) => {
+    try { return ok(await client.adsInsights({ metrics, source, sinceDays })); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────
