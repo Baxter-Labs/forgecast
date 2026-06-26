@@ -16,3 +16,6 @@ workers/shorts/config.toml
 # Montage render worker: standalone service (not a pnpm workspace member)
 workers/montage/out/
 workers/montage/.remotion/
+
+# Pitch deck — generated marketing artifact, not part of the codebase
+forgecast-pitch/
