@@ -1,8 +1,12 @@
-import { newProject, newJob, newAsset, applyBrandKit } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants } from '@forgecast/core';
 import type { MontageSpec, Job, VideoGenTask, BrandKit } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
+import { makeLlmClient } from './agent/llm';
 import { runBackground } from './cf-env';
+
+/** Minimal shape `generateAdCopy` needs from an LLM client (injectable for tests). */
+type AdCopyLlm = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
 
 // Reserved job-param key holding the provider's async task reference (response_url).
 // Stripped before it ever lands on the produced asset's params.
@@ -171,6 +175,53 @@ export async function saveBrandKit(services: Services, projectId: string, input:
   const bytes = new TextEncoder().encode(JSON.stringify(kit));
   await services.storage.put(brandKitKey(projectId), bytes, 'application/json');
   return { status: 200, body: { brandKit: kit } };
+}
+
+/**
+ * Generate N platform-aware, character-limited, A/B-tagged ad-copy variants for a
+ * brief — grounded in the project's brand voice. The create-side complement to
+ * NotFair-style RSA copy: write the caption/copy, ready to drop into a cross-post.
+ * Uses the agent LLM (OpenAI by default; Claude via FORGECAST_AGENT_LLM=anthropic).
+ */
+export async function generateAdCopy(
+  services: Services,
+  projectId: string,
+  input: unknown,
+  llm: AdCopyLlm = makeLlmClient(),
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as { brief?: unknown; platform?: unknown; count?: unknown };
+  if (typeof fields.brief !== 'string' || fields.brief.trim().length === 0) {
+    return { status: 400, body: { error: 'brief is required' } };
+  }
+  if (!llm.isAvailable()) {
+    return {
+      status: 503,
+      body: { error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' },
+    };
+  }
+
+  const spec = platformCopySpec(typeof fields.platform === 'string' ? fields.platform : 'instagram');
+  const count =
+    typeof fields.count === 'number' && Number.isFinite(fields.count)
+      ? Math.min(5, Math.max(1, Math.round(fields.count)))
+      : 3;
+  const brandKit = await getBrandKit(services, projectId);
+  const { system, user } = buildAdCopyPrompt({ brief: fields.brief, spec, count, brandKit });
+
+  let raw: string;
+  try {
+    raw = await llm.complete({ system, user });
+  } catch (e) {
+    return { status: 502, body: { error: `ad-copy generation failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const variants = parseAdCopyVariants(raw, spec, count);
+  if (variants.length === 0) return { status: 502, body: { error: 'no ad-copy variants returned' } };
+
+  return { status: 200, body: { platform: spec.platform, label: spec.label, limit: spec.limit, variants } };
 }
 
 /** Seeds a brand kit from a website (name/tagline/key-messages/notes), merging

@@ -65,7 +65,8 @@ A typical agent flow to create something and fan it out across your networks:
 
 1. **Discover what's wired up** — `forgecast_health` → `publishers` lists the channels you can cross-post to (e.g. `["omnisocials","instagram","linkedin","youtube"]`) and `providers` lists what you can generate.
 2. **Make or pick an asset** — generate one (`forgecast_generate_image` / `forgecast_generate_video` / `forgecast_generate_from_website`) or list existing ones with `forgecast_list_assets`.
-3. **Cross-post it** — `forgecast_publish_asset({ asset_id, content, channels })`, passing the channel names from step 1 to fan one post out across all of them at once.
+3. **Write the caption** *(optional)* — `forgecast_generate_ad_copy({ project_id, brief, platform })` returns A/B-tagged variants that fit the platform's character limit. Pick one and use its `text` as the `content` below.
+4. **Cross-post it** — `forgecast_publish_asset({ asset_id, content, channels })`, passing the channel names from step 1 to fan one post out across all of them at once.
 
 > Example prompt to your agent: *"Set the brand kit from acme.com, generate a launch image, then cross-post it to Instagram and LinkedIn with a punchy caption."*
 
@@ -97,6 +98,7 @@ These need an LLM key on the web app (`OPENAI_API_KEY`, or `FORGECAST_AGENT_LLM=
 | `forgecast_narrate_video` | Add an AI voice-over to a video (async) |
 | `forgecast_list_assets` | List a project's assets, each with a direct media URL |
 | `forgecast_get_job` | Poll any async job by id |
+| `forgecast_generate_ad_copy` | **Write the caption:** N on-brand, A/B-tagged ad-copy variants that fit the platform's char limit (IG/LinkedIn/X/FB/TikTok/YouTube/Google RSA) |
 | `forgecast_publish_asset` | **Publish / cross-post** an asset's media + caption to one or more channels at once |
 | `forgecast_agent_plan` | **Agent — Plan:** brief → a reviewable campaign plan (researches a URL in the brief) |
 | `forgecast_agent_execute` | **Agent — Execute:** produce a plan's assets and (with `publish`) cross-post them |

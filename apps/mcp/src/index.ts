@@ -656,6 +656,35 @@ server.registerTool(
   },
 );
 
+// 22. forgecast_generate_ad_copy
+server.registerTool(
+  'forgecast_generate_ad_copy',
+  {
+    title: 'Generate ad copy (platform-aware, A/B variants)',
+    description:
+      'Write N high-converting, on-brand ad-copy variants for a brief, each tagged A/B/C and guaranteed to fit the ' +
+      "target platform's character limit (Instagram 2200, LinkedIn 3000, X/Twitter 280, Facebook 2200, TikTok " +
+      '2200, YouTube 5000, Google RSA 90). Grounded in the project brand kit (tone of voice, key messages), so the ' +
+      'copy sounds like the brand. Pick a variant and pass its text as `content` to `forgecast_publish_asset` to ' +
+      'cross-post.\n\n' +
+      'Args: project_id (string), brief (string), platform (string, optional — default instagram; x aliases ' +
+      'twitter), count (1–5, optional — default 3).\n' +
+      'Returns: `{ platform, label, limit, variants: [{ id, text, chars }] }`.\n\n' +
+      'Requires an agent LLM on the server (OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY). ' +
+      'A 503 means none is configured.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      brief: z.string().min(1),
+      platform: z.string().optional(),
+      count: z.number().int().min(1).max(5).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, brief, platform, count }) => {
+    try { return ok(await client.generateAdCopy(project_id, { brief, platform, count })); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────

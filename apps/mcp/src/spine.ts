@@ -49,6 +49,11 @@ export interface Health {
   publishers: string[];
 }
 
+/** One generated ad-copy variant (A/B-tagged, within the platform's char limit). */
+export interface AdCopyVariant { id: string; text: string; chars: number }
+/** Result of an ad-copy generation: the resolved platform, its char limit, and the variants. */
+export interface AdCopyResult { platform: string; label: string; limit: number; variants: AdCopyVariant[] }
+
 export class SpineClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -156,6 +161,13 @@ export class SpineClient {
   agentRun(input: { brief: string; projectId?: string; platforms?: string[] }): Promise<{ result: unknown }> {
     return this.req('/api/agent', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'agentic', ...input }),
+    });
+  }
+
+  // ── Ad copy (platform-aware, char-limited, A/B variants) ──────────────────
+  generateAdCopy(projectId: string, input: { brief: string; platform?: string; count?: number }): Promise<AdCopyResult> {
+    return this.req(`/api/projects/${projectId}/ad-copy`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
 }
