@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -86,6 +86,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   imageRegistry.register(falImageProvider);
 
   const publishers = new PublisherRegistry();
+  publishers.register(new WebhookPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new InstagramPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new LinkedInPublisher({ fetchFn: opts.fetchFn }));

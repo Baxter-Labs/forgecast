@@ -179,6 +179,7 @@ Every capability is a swappable adapter. **You set keys once, as server-side env
 | Env var | Unlocks | Where to get it |
 |---|---|---|
 | `WISPRFLOW_API_KEY` | Talk into the agent (speech→text; browser-speech fallback otherwise) | [wisprflow.ai/developers](https://wisprflow.ai/developers) |
+| `WEBHOOK_PUBLISH_URL` (+ `WEBHOOK_PUBLISH_SECRET`) | **Cross-post to any endpoint** — Zapier / Make / n8n / Slack / Discord / your backend (the easiest way to wire up publishing) | your automation tool |
 | `OMNISOCIALS_API_KEY` | One key → 10+ platforms (the fast path to publish) | OmniSocials |
 | `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_IG_USER_ID` | Instagram posting | Meta for Developers |
 | `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_AUTHOR_URN` | LinkedIn posting | LinkedIn Developers |
