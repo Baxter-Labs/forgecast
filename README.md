@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **375 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **380 tests, strict TypeScript.**
 
 ---
 
@@ -103,7 +103,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**375 tests, strict TypeScript, every commit a passing TDD cycle.**
+**380 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -158,7 +158,7 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 375 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 380 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
@@ -259,6 +259,13 @@ pnpm -C apps/web build && pnpm -C apps/web start    # serves on :3000
 ```
 
 Set the env vars in your host's dashboard. For durable storage, point `FORGECAST_DB` + `FORGECAST_DATA_DIR` at a mounted volume (don't use ephemeral container disk for production).
+
+### ⚠️ Before you expose it publicly
+
+Forgecast ships as a **single instance with one global key set and no built-in per-user auth** (intentional — see the next section). So **anyone who can reach the URL can generate, and every generation spends *your* API keys.**
+
+- Private demo / internal tool / small team → deploy as-is, just keep the URL private.
+- Public launch → put an auth layer in front first (Cloudflare Access, reverse-proxy basic-auth, or your own login) and set spend caps on your provider keys. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access itself.
 
 ---
 
