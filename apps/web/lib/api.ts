@@ -1,9 +1,13 @@
-import { newProject, newJob, newAsset } from '@forgecast/core';
-import type { MontageSpec, Job, VideoGenTask } from '@forgecast/core';
-import { videoModelById } from '@forgecast/catalog';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics } from '@forgecast/core';
+import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics } from '@forgecast/core';
+import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
+import { makeLlmClient } from './agent/llm';
 import { runBackground } from './cf-env';
 import { checkContentGuard } from './content-guard';
+
+/** Minimal shape `generateAdCopy` needs from an LLM client (injectable for tests). */
+type AdCopyLlm = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
 
 // Reserved job-param key holding the provider's async task reference (response_url).
 // Stripped before it ever lands on the produced asset's params.
@@ -33,7 +37,7 @@ export async function generateImage(services: Services, projectId: string, input
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
 
-  const fields = (input ?? {}) as { prompt?: unknown; provider?: unknown; width?: unknown; height?: unknown };
+  const fields = (input ?? {}) as { prompt?: unknown; provider?: unknown; model?: unknown; aspectRatio?: unknown; width?: unknown; height?: unknown };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
   }
@@ -44,9 +48,23 @@ export async function generateImage(services: Services, projectId: string, input
   }
 
   const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
-  const params: Record<string, unknown> = { prompt: fields.prompt };
-  if (typeof fields.width === 'number') params.width = fields.width;
-  if (typeof fields.height === 'number') params.height = fields.height;
+  // Ground the generation in the project's brand kit (no-op when none is set).
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+
+  // Resolve the model (default: Nano Banana) and emit the size param its family expects:
+  // an `aspect_ratio` enum for the Gemini/Nano-Banana family, else `image_size` pixels.
+  const modelId = typeof fields.model === 'string' && fields.model.length > 0 ? fields.model : defaultImageModelId;
+  const catalogModel = imageModelById(modelId);
+  const params: Record<string, unknown> = { prompt: brandedPrompt, model: modelId };
+  if (catalogModel?.sizing === 'aspect_ratio') {
+    const ratio = typeof fields.aspectRatio === 'string' && catalogModel.aspectRatios.includes(fields.aspectRatio)
+      ? fields.aspectRatio
+      : '1:1';
+    params.extra = { aspect_ratio: ratio };
+  } else {
+    if (typeof fields.width === 'number') params.width = fields.width;
+    if (typeof fields.height === 'number') params.height = fields.height;
+  }
 
   const job = await services.jobs.create(
     newJob(
@@ -134,6 +152,319 @@ export async function getAssetBytes(
   return services.storage.get(asset.storageKey);
 }
 
+// Single-asset metadata (incl. projectId) so the standalone editor page can load
+// an asset by id from its route without listing a whole project.
+export async function getAsset(services: Services, assetId: string): Promise<ApiResult> {
+  const asset = await services.assets.get(assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  return { status: 200, body: { asset } };
+}
+
+// ── Brand Kit ───────────────────────────────────────────────────────────────
+// Stored per project as a JSON object in the storage driver (no schema change),
+// and folded into generation prompts so outputs come out on-brand.
+const brandKitKey = (projectId: string): string => `projects/${projectId}/brand-kit.json`;
+
+function sanitizeBrandKit(input: unknown): BrandKit {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
+  const strArr = (v: unknown): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()) : undefined;
+
+  const kit: BrandKit = {};
+  const name = str(o.name); if (name) kit.name = name;
+  const tagline = str(o.tagline); if (tagline) kit.tagline = tagline;
+  const palette = strArr(o.palette); if (palette && palette.length) kit.palette = palette.slice(0, 8);
+  const fonts = o.fonts as { display?: unknown; body?: unknown } | undefined;
+  const display = str(fonts?.display); const body = str(fonts?.body);
+  if (display || body) kit.fonts = { ...(display ? { display } : {}), ...(body ? { body } : {}) };
+  const tone = str(o.toneOfVoice); if (tone) kit.toneOfVoice = tone;
+  const keyMessages = strArr(o.keyMessages); if (keyMessages && keyMessages.length) kit.keyMessages = keyMessages.slice(0, 8);
+  const logoAssetId = str(o.logoAssetId); if (logoAssetId) kit.logoAssetId = logoAssetId;
+  const notes = str(o.notes); if (notes) kit.notes = notes;
+  const sourceUrl = str(o.sourceUrl); if (sourceUrl) kit.sourceUrl = sourceUrl;
+  return kit;
+}
+
+/** Loads a project's brand kit from storage, or null if none is set. */
+export async function getBrandKit(services: Services, projectId: string): Promise<BrandKit | null> {
+  const stored = await services.storage.get(brandKitKey(projectId));
+  if (!stored) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(stored.data)) as BrandKit;
+  } catch {
+    return null;
+  }
+}
+
+export async function readBrandKit(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  return { status: 200, body: { brandKit: (await getBrandKit(services, projectId)) ?? {} } };
+}
+
+export async function saveBrandKit(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const kit = sanitizeBrandKit(input);
+  const bytes = new TextEncoder().encode(JSON.stringify(kit));
+  await services.storage.put(brandKitKey(projectId), bytes, 'application/json');
+  return { status: 200, body: { brandKit: kit } };
+}
+
+/**
+ * Generate N platform-aware, character-limited, A/B-tagged ad-copy variants for a
+ * brief — grounded in the project's brand voice. The create-side complement to
+ * NotFair-style RSA copy: write the caption/copy, ready to drop into a cross-post.
+ * Uses the agent LLM (OpenAI by default; Claude via FORGECAST_AGENT_LLM=anthropic).
+ */
+export async function generateAdCopy(
+  services: Services,
+  projectId: string,
+  input: unknown,
+  llm: AdCopyLlm = makeLlmClient(),
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as { brief?: unknown; platform?: unknown; count?: unknown };
+  if (typeof fields.brief !== 'string' || fields.brief.trim().length === 0) {
+    return { status: 400, body: { error: 'brief is required' } };
+  }
+  if (!llm.isAvailable()) {
+    return {
+      status: 503,
+      body: { error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' },
+    };
+  }
+
+  const spec = platformCopySpec(typeof fields.platform === 'string' ? fields.platform : 'instagram');
+  const count =
+    typeof fields.count === 'number' && Number.isFinite(fields.count)
+      ? Math.min(5, Math.max(1, Math.round(fields.count)))
+      : 3;
+  const brandKit = await getBrandKit(services, projectId);
+  const { system, user } = buildAdCopyPrompt({ brief: fields.brief, spec, count, brandKit });
+
+  let raw: string;
+  try {
+    raw = await llm.complete({ system, user });
+  } catch (e) {
+    return { status: 502, body: { error: `ad-copy generation failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const variants = parseAdCopyVariants(raw, spec, count);
+  if (variants.length === 0) return { status: 502, body: { error: 'no ad-copy variants returned' } };
+
+  return { status: 200, body: { platform: spec.platform, label: spec.label, limit: spec.limit, variants } };
+}
+
+// ── Ads measure→optimize: insights, fatigue, audit ───────────────────────────
+
+interface AdsMetricsInput { metrics?: unknown; source?: unknown; sinceDays?: unknown }
+
+/** Validate + coerce a caller-supplied metrics array into clean AdCreativeMetrics rows. */
+function sanitizeAdMetrics(rows: unknown[]): AdCreativeMetrics[] {
+  const out: AdCreativeMetrics[] = [];
+  for (const r of rows) {
+    if (!isAdCreativeMetrics(r)) continue;
+    out.push({
+      creativeId: String(r.creativeId),
+      name: typeof r.name === 'string' ? r.name : undefined,
+      platform: typeof r.platform === 'string' ? r.platform : undefined,
+      date: String(r.date),
+      impressions: Math.max(0, r.impressions),
+      clicks: Math.max(0, r.clicks),
+      spend: Math.max(0, r.spend),
+      conversions: typeof r.conversions === 'number' ? Math.max(0, r.conversions) : undefined,
+      frequency: typeof r.frequency === 'number' ? r.frequency : undefined,
+    });
+  }
+  return out;
+}
+
+type ResolvedMetrics = { ok: true; metrics: AdCreativeMetrics[]; source: string } | { ok: false; result: ApiResult };
+
+/**
+ * Get ad metrics either from the request body (keyless — `metrics: [...]`) or by
+ * pulling from a connected provider (`source: 'meta'|'google'`, else the first
+ * configured one). Keeps every ads endpoint usable with or without credentials.
+ */
+async function resolveAdMetrics(services: Services, input: AdsMetricsInput): Promise<ResolvedMetrics> {
+  if (Array.isArray(input.metrics)) {
+    const metrics = sanitizeAdMetrics(input.metrics);
+    if (metrics.length === 0) {
+      return { ok: false, result: { status: 400, body: { error: 'metrics had no valid rows — each needs creativeId, date, impressions, clicks, spend' } } };
+    }
+    return { ok: true, metrics, source: 'provided' };
+  }
+
+  const requested = typeof input.source === 'string' && input.source.trim() ? input.source.trim() : undefined;
+  const chosen = requested ?? services.insights.available()[0];
+  if (!chosen) {
+    return { ok: false, result: { status: 503, body: { error: 'no metrics provided and no ads source configured — pass `metrics`, or set META_ADS_* / GOOGLE_ADS_* to auto-pull' } } };
+  }
+  if (!services.insights.has(chosen)) {
+    return { ok: false, result: { status: 400, body: { error: `unknown ads source '${chosen}'` } } };
+  }
+  const provider = services.insights.get(chosen);
+  if (!provider.isAvailable()) {
+    return { ok: false, result: { status: 503, body: { error: `ads source '${chosen}' not configured` } } };
+  }
+  const sinceDays = typeof input.sinceDays === 'number' && Number.isFinite(input.sinceDays) ? input.sinceDays : undefined;
+  try {
+    const metrics = await provider.fetchInsights({ sinceDays });
+    return { ok: true, metrics, source: chosen };
+  } catch (e) {
+    return { ok: false, result: { status: 502, body: { error: `ads insights fetch failed: ${e instanceof Error ? e.message : String(e)}` } } };
+  }
+}
+
+/** Raw per-creative, per-day ad metrics — pulled from a connected source or echoed back. */
+export async function getAdsInsights(services: Services, input: unknown): Promise<ApiResult> {
+  const resolved = await resolveAdMetrics(services, (input ?? {}) as AdsMetricsInput);
+  if (!resolved.ok) return resolved.result;
+  return { status: 200, body: { source: resolved.source, count: resolved.metrics.length, metrics: resolved.metrics } };
+}
+
+/** Full account audit: health-dimension scores, per-creative fatigue, and recommendations. */
+export async function runAdsAudit(services: Services, input: unknown): Promise<ApiResult> {
+  const resolved = await resolveAdMetrics(services, (input ?? {}) as AdsMetricsInput);
+  if (!resolved.ok) return resolved.result;
+  return { status: 200, body: { source: resolved.source, audit: auditAds(resolved.metrics) } };
+}
+
+/** The refresh brief for a fatigued creative — kept generic so generateImage's brand-kit
+ * preamble does the on-brand grounding. */
+function refreshBrief(name: string | undefined, reason: string | undefined): string {
+  const subject = name ? ` to replace "${name}"` : '';
+  const why = reason ? ` It fatigued — ${reason.replace(/\.$/, '')}.` : '';
+  return `A fresh, scroll-stopping ad creative${subject}. Keep the same product and brand, but take a new visual angle: different composition, camera angle, and lighting.${why}`;
+}
+
+/**
+ * Close the loop: audit the metrics, find fatigued creatives, and regenerate an
+ * on-brand replacement image for each (reusing generateImage, which folds in the
+ * project brand kit). Degrades gracefully to a refresh *plan* when image
+ * generation isn't configured, so it's useful even without a fal key.
+ */
+export async function optimizeFatiguedCreatives(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as AdsMetricsInput & { max?: unknown };
+  const resolved = await resolveAdMetrics(services, fields);
+  if (!resolved.ok) return resolved.result;
+
+  const audit = auditAds(resolved.metrics);
+  const fatigued = audit.fatigue.filter((f) => f.status === 'fatigued');
+  const max = typeof fields.max === 'number' && Number.isFinite(fields.max) ? Math.min(10, Math.max(1, Math.round(fields.max))) : 3;
+  const imageReady = services.imageRegistry.available().includes('fal');
+
+  const optimizations: Array<{ creativeId: string; name?: string; score: number; reasons: string[]; brief: string; newAssetId: string | null }> = [];
+  for (const f of fatigued.slice(0, max)) {
+    const brief = refreshBrief(f.name, f.reasons[0]);
+    let newAssetId: string | null = null;
+    if (imageReady) {
+      const r = await generateImage(services, projectId, { prompt: brief });
+      const body = r.body as { asset?: { id?: string } | null };
+      newAssetId = body.asset?.id ?? null;
+    }
+    optimizations.push({ creativeId: f.creativeId, name: f.name, score: f.score, reasons: f.reasons, brief, newAssetId });
+  }
+
+  return {
+    status: 200,
+    body: {
+      source: resolved.source,
+      score: audit.score,
+      grade: audit.grade,
+      fatiguedCount: fatigued.length,
+      imageReady,
+      regenerated: optimizations.filter((o) => o.newAssetId),
+      optimizations,
+      recommendations: audit.recommendations,
+      ...(imageReady ? {} : { note: 'Image generation not configured (set FAL_KEY) — returned the refresh plan without generating new creatives.' }),
+    },
+  };
+}
+
+/** Seeds a brand kit from a website (name/tagline/key-messages/notes), merging
+ * over any existing kit. Colors/fonts are left for the user to fill in. */
+export async function deriveBrandKitFromWebsite(
+  services: Services,
+  projectId: string,
+  input: { url?: unknown },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (typeof input.url !== 'string' || input.url.trim().length === 0) {
+    return { status: 400, body: { error: 'a website url is required' } };
+  }
+
+  let site;
+  try {
+    site = await services.websiteReader.read(input.url);
+  } catch (e) {
+    return { status: 400, body: { error: `could not read website: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const existing = (await getBrandKit(services, projectId)) ?? {};
+  const desc = (site.description ?? '').trim();
+  const firstSentence = desc ? desc.split(/[.!?]/)[0]?.trim() : undefined;
+  const headings = (site.headings ?? []).slice(0, 5);
+
+  const merged: BrandKit = {
+    ...existing,
+    name: existing.name ?? site.siteName ?? site.title,
+    tagline: existing.tagline ?? firstSentence,
+    keyMessages: existing.keyMessages ?? (headings.length ? headings : undefined),
+    notes: existing.notes ?? (desc || undefined),
+    sourceUrl: site.url,
+  };
+  const kit = sanitizeBrandKit(merged);
+  const bytes = new TextEncoder().encode(JSON.stringify(kit));
+  await services.storage.put(brandKitKey(projectId), bytes, 'application/json');
+  return { status: 200, body: { brandKit: kit, derivedFrom: site.url } };
+}
+
+// Base64-encode bytes in a way that works on both Node (Buffer) and the edge
+// runtime (no Buffer — chunked String.fromCharCode + btoa, chunked to avoid the
+// arg-count limit on very large assets).
+function toBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Resolves an asset to a URL an external consumer (fal.ai models, the montage
+ * worker, ffmpeg) can actually fetch.
+ *
+ * - When FORGECAST_BASE_URL points at a publicly reachable deployment, we hand
+ *   out `${base}/api/assets/{id}/raw` so the provider streams the bytes from us
+ *   (cheapest — no re-upload).
+ * - Otherwise (the common local-dev case, where fal's servers can't reach your
+ *   laptop) we inline the bytes as a `data:` URI. fal's image models, the
+ *   image-to-video endpoint, and ffmpeg all accept data URIs, so enhance / edit
+ *   / animate / montage work with nothing but a fal key — no public tunnel.
+ *
+ * Returns null only when the asset has no stored bytes.
+ */
+async function resolveAssetUrl(services: Services, assetId: string): Promise<string | null> {
+  const base = process.env.FORGECAST_BASE_URL;
+  if (base && base.trim().length > 0) {
+    return `${base.replace(/\/$/, '')}/api/assets/${assetId}/raw`;
+  }
+  const got = await getAssetBytes(services, assetId);
+  if (!got) return null;
+  return `data:${got.contentType};base64,${toBase64(got.data)}`;
+}
+
 export async function generateShortVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
@@ -141,8 +472,10 @@ export async function generateShortVideo(services: Services, projectId: string, 
     return { status: 503, body: { error: 'short-video worker not configured (set FORGECAST_VIDEO_WORKER_URL)' } };
   }
   const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown };
-  const subject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
-  if (subject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+  const rawSubject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
+  if (rawSubject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+  // Ground the short video in the project's brand kit (no-op when none is set).
+  const subject = applyBrandKit(await getBrandKit(services, projectId), rawSubject);
 
   const guard = checkContentGuard(subject);
   if (!guard.allowed) {
@@ -192,11 +525,11 @@ export async function generateVideo(services: Services, projectId: string, input
   let resolvedImageUrl: string | undefined;
   if (modelDef?.mode === 'image-to-video') {
     if (typeof fields.imageAssetId === 'string' && fields.imageAssetId.length > 0) {
-      const base = process.env.FORGECAST_BASE_URL;
-      if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so image-to-video can resolve asset URLs' } };
       const asset = await services.assets.get(fields.imageAssetId);
       if (!asset) return { status: 404, body: { error: `asset ${fields.imageAssetId} not found` } };
-      resolvedImageUrl = `${base.replace(/\/$/, '')}/api/assets/${fields.imageAssetId}/raw`;
+      const url = await resolveAssetUrl(services, fields.imageAssetId);
+      if (!url) return { status: 404, body: { error: `asset ${fields.imageAssetId} has no stored bytes` } };
+      resolvedImageUrl = url;
     } else if (typeof fields.imageUrl === 'string' && fields.imageUrl.length > 0) {
       resolvedImageUrl = fields.imageUrl;
     } else {
@@ -204,7 +537,9 @@ export async function generateVideo(services: Services, projectId: string, input
     }
   }
 
-  const params: Record<string, unknown> = { prompt: fields.prompt };
+  // Ground the video in the project's brand kit (no-op when none is set).
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+  const params: Record<string, unknown> = { prompt: brandedPrompt };
   if (typeof fields.aspectRatio === 'string') params.aspectRatio = fields.aspectRatio;
   if (typeof fields.duration === 'number') params.duration = fields.duration;
   if (typeof fields.quality === 'string') params.quality = fields.quality;
@@ -222,7 +557,7 @@ export async function generateVideo(services: Services, projectId: string, input
   // which kill background work once the response is returned.
   try {
     const { taskId } = await services.videoProvider.create({
-      prompt: fields.prompt,
+      prompt: brandedPrompt,
       aspectRatio: typeof fields.aspectRatio === 'string' ? fields.aspectRatio : undefined,
       duration: typeof fields.duration === 'number' ? fields.duration : undefined,
       quality: typeof fields.quality === 'string' ? fields.quality : undefined,
@@ -247,12 +582,14 @@ export async function generateVideo(services: Services, projectId: string, input
   }
 }
 
-async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, base: string): Promise<MontageSpec | null> {
+async function buildSpecFromAssets(services: Services, assetIds: string[], aspectRatio: string, durationSec = 4): Promise<MontageSpec | null> {
   const scenes = [];
   for (const id of assetIds) {
     const asset = await services.assets.get(id);
     if (!asset) continue;
-    scenes.push({ url: `${base.replace(/\/$/, '')}/api/assets/${id}/raw`, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec: 4 });
+    const url = await resolveAssetUrl(services, id);
+    if (!url) continue;
+    scenes.push({ url, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
 }
@@ -263,15 +600,15 @@ export async function generateMontage(services: Services, projectId: string, inp
   if (!services.montageAvailable) {
     return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
   }
-  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown };
+  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown };
   const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
+  const rawDurationSec = typeof fields.durationSec === 'number' ? fields.durationSec : 4;
+  const durationSec = Math.min(10, Math.max(1, rawDurationSec));
 
   let spec = fields.spec;
   if (!spec && Array.isArray(fields.assetIds)) {
-    const base = process.env.FORGECAST_BASE_URL;
-    if (!base) return { status: 503, body: { error: 'set FORGECAST_BASE_URL so the montage worker can fetch your media' } };
     const ids = fields.assetIds.filter((x): x is string => typeof x === 'string');
-    spec = (await buildSpecFromAssets(services, ids, aspectRatio, base)) ?? undefined;
+    spec = (await buildSpecFromAssets(services, ids, aspectRatio, durationSec)) ?? undefined;
   }
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length === 0) {
     return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };
@@ -359,7 +696,8 @@ export async function generatePresenter(services: Services, projectId: string, i
   if (!hasAudio) return { status: 400, body: { error: 'text or audioUrl is required' } };
 
   const params: Record<string, unknown> = {};
-  if (typeof fields.imagePrompt === 'string') params.imagePrompt = fields.imagePrompt;
+  // Ground the presenter's look in the project's brand kit (no-op when none is set).
+  if (typeof fields.imagePrompt === 'string') params.imagePrompt = applyBrandKit(await getBrandKit(services, projectId), fields.imagePrompt);
   if (typeof fields.imageUrl === 'string') params.imageUrl = fields.imageUrl;
   if (typeof fields.text === 'string') params.text = fields.text;
   if (typeof fields.audioUrl === 'string') params.audioUrl = fields.audioUrl;
@@ -373,6 +711,301 @@ export async function generatePresenter(services: Services, projectId: string, i
   );
   runBackground(services.runner.run(job.id));
   return { status: 202, body: { job } };
+}
+
+export async function uploadAsset(
+  services: Services,
+  projectId: string,
+  input: { bytes: Uint8Array; contentType: string; filename?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (input.bytes.length === 0) return { status: 400, body: { error: 'file is empty' } };
+
+  let type: 'image' | 'video';
+  if (input.contentType.startsWith('image/')) {
+    type = 'image';
+  } else if (input.contentType.startsWith('video/')) {
+    type = 'video';
+  } else {
+    return { status: 400, body: { error: 'only image or video uploads are supported' } };
+  }
+
+  const extMap: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+  };
+  const defaultExt = type === 'video' ? 'mp4' : 'png';
+  const ext = extMap[input.contentType] ?? defaultExt;
+
+  const id = services.ids.randomId();
+  const key = `projects/${projectId}/uploads/${id}.${ext}`;
+  const stored = await services.storage.put(key, input.bytes, input.contentType);
+
+  const asset = await services.assets.create(
+    newAsset(
+      {
+        projectId,
+        type,
+        provider: 'upload',
+        storageKey: stored.key,
+        params: { prompt: input.filename ?? 'uploaded', filename: input.filename, uploaded: true },
+      },
+      { id, now: services.ids.nowIso() },
+    ),
+  );
+  return { status: 201, body: { asset } };
+}
+
+// Build a batch of assets from a product website: import the real images found on
+// the page, generate a few on-brand AI images grounded in the site copy, and
+// enhance the (often low-res) imported images. Bounded for serverless: ≤6 imports,
+// ≤4 generations, ≤4 enhancements. The image-download fetch is injectable for tests.
+export async function generateFromWebsite(
+  services: Services,
+  projectId: string,
+  input: { url?: unknown; generate?: unknown; generateCount?: unknown; enhance?: unknown },
+  fetchFn: typeof fetch = fetch,
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (typeof input.url !== 'string' || input.url.trim().length === 0) {
+    return { status: 400, body: { error: 'a website url is required' } };
+  }
+
+  let site;
+  try {
+    site = await services.websiteReader.read(input.url);
+  } catch (e) {
+    return { status: 400, body: { error: `could not read website: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const wantGenerate = input.generate !== false;
+  const generateCount = Math.min(4, Math.max(0, typeof input.generateCount === 'number' ? Math.round(input.generateCount) : 2));
+  const wantEnhance = input.enhance !== false;
+  const falReady = services.imageRegistry.available().includes('fal');
+
+  const created: unknown[] = [];
+  const importedIds: string[] = [];
+
+  // 1. Import the real product images from the site.
+  const extByType = (ct: string): string =>
+    ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : ct.includes('gif') ? 'gif' : 'jpg';
+  for (const imgUrl of (site.images ?? []).slice(0, 6)) {
+    try {
+      const res = await fetchFn(imgUrl);
+      if (!res.ok) continue;
+      const ct = res.headers.get('content-type') ?? 'image/jpeg';
+      if (!ct.startsWith('image/')) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.length === 0) continue;
+      const id = services.ids.randomId();
+      const key = `projects/${projectId}/web-import/${id}.${extByType(ct)}`;
+      const stored = await services.storage.put(key, bytes, ct);
+      const asset = await services.assets.create(
+        newAsset(
+          { projectId, type: 'image', provider: 'web-import', storageKey: stored.key, params: { prompt: site.title ?? input.url, sourceUrl: imgUrl, fromWebsite: input.url } },
+          { id, now: services.ids.nowIso() },
+        ),
+      );
+      importedIds.push(asset.id);
+      created.push(asset);
+    } catch {
+      // skip an individual bad image
+    }
+  }
+
+  // 2. Generate on-brand AI images grounded in the site copy.
+  if (wantGenerate && falReady && generateCount > 0) {
+    const brand = site.siteName ?? site.title ?? 'the brand';
+    const desc = (site.description ?? site.text ?? '').slice(0, 240);
+    const angles = [
+      `Hero product shot for ${brand}. ${desc} Clean studio lighting, premium, on-brand.`,
+      `Lifestyle scene featuring ${brand}'s product in use. ${desc} Natural light, aspirational.`,
+      `Bold, social-ready promo image for ${brand}. ${desc} High contrast, scroll-stopping.`,
+      `Minimal flat-lay of ${brand}'s product in brand colors. ${desc}`,
+    ];
+    for (let i = 0; i < generateCount; i++) {
+      const prompt = angles[i % angles.length] ?? `On-brand product image for ${brand}.`;
+      const r = await generateImage(services, projectId, { prompt });
+      const a = (r.body as { asset?: unknown }).asset;
+      if (a) created.push(a);
+    }
+  }
+
+  // 3. Enhance the imported (often low-res) site images.
+  let enhancedCount = 0;
+  if (wantEnhance && falReady) {
+    for (const id of importedIds.slice(0, 4)) {
+      const r = await enhanceAsset(services, projectId, { assetId: id });
+      const a = (r.body as { asset?: unknown }).asset;
+      if (a) { created.push(a); enhancedCount++; }
+    }
+  }
+
+  if (created.length === 0) {
+    return { status: 422, body: { error: 'no assets could be created from that website — no usable images were found; set FAL_KEY to also generate on-brand images' } };
+  }
+
+  return {
+    status: 200,
+    body: {
+      assets: created,
+      summary: {
+        url: site.url,
+        title: site.title ?? null,
+        imported: importedIds.length,
+        generated: wantGenerate && falReady ? generateCount : 0,
+        enhanced: enhancedCount,
+      },
+    },
+  };
+}
+
+export async function enhanceAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can be enhanced' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'enhance', provider: 'fal', params: { imageUrl, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+export async function removeBackgroundAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can have their background removed' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'cutout', provider: 'fal', params: { imageUrl, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+export async function editAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; prompt?: unknown },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can be edited' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  if (typeof input.prompt !== 'string' || input.prompt.trim().length === 0) {
+    return { status: 400, body: { error: 'an edit instruction (prompt) is required' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'edit', provider: 'fal', params: { imageUrl, prompt: input.prompt, sourceAssetId: input.assetId } },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+// Produces N alternate takes of an image by re-running the edit model with
+// variation instructions — "give me options" in one click. Thin layer over the
+// existing edit job; each variation is its own new image asset.
+export async function generateVariations(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; count?: number },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  if (!asset) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: 'only image assets can have variations' } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const count = Math.min(4, Math.max(1, typeof input.count === 'number' ? Math.round(input.count) : 3));
+  const assets = [];
+  for (let i = 1; i <= count; i++) {
+    const prompt = `Create a fresh variation of this image: keep the same subject, product, and brand, but change the composition, camera angle, and lighting. Variation ${i} of ${count}.`;
+    const job = await services.jobs.create(
+      newJob(
+        { projectId, kind: 'edit', provider: 'fal', params: { imageUrl, prompt, sourceAssetId: input.assetId, variation: true } },
+        { id: services.ids.randomId(), now: services.ids.nowIso() },
+      ),
+    );
+    const finished = await services.runner.run(job.id);
+    if (finished.resultAssetId) {
+      const a = await services.assets.get(finished.resultAssetId);
+      if (a) assets.push(a);
+    }
+  }
+  if (assets.length === 0) return { status: 502, body: { error: 'variation generation failed' } };
+  return { status: 200, body: { assets } };
 }
 
 export async function publishAsset(services: Services, assetId: string, input: unknown): Promise<ApiResult> {

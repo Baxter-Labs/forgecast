@@ -48,14 +48,18 @@ server.registerTool(
   {
     title: 'Forgecast Health Check',
     description:
-      'Checks whether the Forgecast spine API is reachable and returns the list of ' +
-      'configured image providers.\n\n' +
-      'Returns: `{ ok: boolean, providers: { image: string[] } }`\n' +
-      '`providers.image` lists every image provider that has been configured (e.g. ' +
-      '"fal"). An empty array means no FAL_KEY has been set on the server.\n\n' +
-      'Example response: `{ "ok": true, "providers": { "image": ["fal"] } }`\n\n' +
-      'Error guidance: If this call fails, verify that the Forgecast web app is ' +
-      'running at FORGECAST_API_URL.',
+      'Checks whether the Forgecast spine API is reachable and reports what is configured. ' +
+      'Call this FIRST to discover which capabilities are available.\n\n' +
+      'Returns: `{ ok, providers, publishers }`\n' +
+      '- `providers` — configured generation providers per modality: `image`, `video`, ' +
+      '`montage`, `voice`, `transcribe`, `presenter` (each an array; empty = that key/worker ' +
+      'is not set on the server).\n' +
+      '- `publishers` — the social channels available for **cross-posting** (e.g. ' +
+      '`["omnisocials","instagram","linkedin","youtube"]`). Use these exact names as the ' +
+      '`channels`/`publisher` args of `forgecast_publish_asset`. An empty array means no ' +
+      'publisher is configured (set OMNISOCIALS_API_KEY or the per-network tokens on the server).\n\n' +
+      'Example: `{ "ok": true, "providers": { "image": ["fal"], "video": [] }, "publishers": ["omnisocials"] }`\n\n' +
+      'Error guidance: If this call fails, verify the Forgecast web app is running at FORGECAST_API_URL.',
     inputSchema: z.object({}).strict(),
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
@@ -329,24 +333,130 @@ server.registerTool(
   },
 );
 
-// 10. forgecast_publish_asset
+// 10. forgecast_enhance_image
+server.registerTool(
+  'forgecast_enhance_image',
+  {
+    title: 'Enhance / Upscale Image',
+    description:
+      'Upscales and sharpens an existing image asset (fal clarity-upscaler), producing a new, higher-resolution ' +
+      'image asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to enhance.\n\n' +
+      'Returns: `{ job, asset }` where asset is the new enhanced image (provider "enhance").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means the asset is not an image. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id }) => {
+    try {
+      return ok(await client.enhanceAsset(project_id, asset_id));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 11. forgecast_edit_image
+server.registerTool(
+  'forgecast_edit_image',
+  {
+    title: 'Edit Image (instruction)',
+    description:
+      'Edits an existing image asset from a natural-language instruction (fal flux-kontext), producing a new image ' +
+      'asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to edit.\n' +
+      '  prompt (string): The edit instruction, e.g. "make the background a sunset".\n\n' +
+      'Returns: `{ job, asset }` where asset is the new edited image (provider "edit").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means a missing prompt or non-image asset. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string(), prompt: z.string().min(1) }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id, prompt }) => {
+    try {
+      return ok(await client.editAsset(project_id, asset_id, prompt));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 12. forgecast_cutout_image
+server.registerTool(
+  'forgecast_cutout_image',
+  {
+    title: 'Remove Background (cutout)',
+    description:
+      'Removes the background from an existing image asset (fal birefnet), producing a clean transparent-PNG ' +
+      'cutout of the subject as a new image asset. SYNCHRONOUS — returns the finished job and the new asset.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  asset_id (string): ID of an existing IMAGE asset to cut out.\n\n' +
+      'Returns: `{ job, asset }` where asset is the new transparent cutout (provider "cutout").\n\n' +
+      'Error guidance: 503 means no FAL_KEY is configured. 400 means the asset is not an image. 404 means the project or asset does not exist.',
+    inputSchema: z.object({ project_id: z.string(), asset_id: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, asset_id }) => {
+    try {
+      return ok(await client.cutoutAsset(project_id, asset_id));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 13. forgecast_narrate_video
+server.registerTool(
+  'forgecast_narrate_video',
+  {
+    title: 'Narrate Video (add voice-over)',
+    description:
+      'Synthesizes a spoken voice-over (VoxCPM-2, or fal TTS) and muxes it onto an existing video asset, producing ' +
+      'a new narrated video asset. This is ASYNC — it returns a queued job; poll `forgecast_get_job`.\n\n' +
+      'Args:\n' +
+      '  project_id (string): ID of the project the asset belongs to.\n' +
+      '  video_asset_id (string): ID of an existing VIDEO asset to narrate.\n' +
+      '  text (string): The voice-over script.\n' +
+      '  voice (string, optional): Voice id/name for the TTS provider.\n\n' +
+      'Returns: `{ job }` with status "queued". Poll `forgecast_get_job({ job_id })` until "done".\n\n' +
+      'Error guidance: 503 means no voice provider is configured (run the VoxCPM-2 worker or set a fal voice key). 400 means a missing script or source. 404 means the project does not exist.',
+    inputSchema: z
+      .object({ project_id: z.string(), video_asset_id: z.string(), text: z.string().min(1), voice: z.string().optional() })
+      .strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, video_asset_id, text, voice }) => {
+    try {
+      return ok(await client.narrateVideo(project_id, { videoAssetId: video_asset_id, text, voice }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 14. forgecast_publish_asset
 server.registerTool(
   'forgecast_publish_asset',
   {
-    title: 'Publish Asset',
+    title: 'Publish / Cross-post Asset',
     description:
-      'Publishes a generated asset\'s media and caption to social platforms via the configured publisher ' +
-      '(default: omnisocials).\n\n' +
+      'Publishes (cross-posts) a generated asset\'s media + caption to one or more social channels at once.\n\n' +
+      'Discover the available channels first with `forgecast_health` → `publishers`; pass those names in `channels` ' +
+      'to fan out a single post across them (e.g. `["instagram","linkedin","youtube"]`). The fast path is the ' +
+      'OmniSocials publisher (one key → 10+ networks); per-network publishers (instagram/linkedin/youtube) work too.\n\n' +
       'Args:\n' +
-      '  asset_id (string): ID of the asset to publish.\n' +
-      '  content (string): Caption or body text for the post.\n' +
-      '  channels (string[], optional): Social channels to target (e.g. ["instagram", "twitter"]).\n' +
-      '  publisher (string, optional): Publisher name to use. Defaults to "omnisocials".\n\n' +
+      '  asset_id (string): ID of the asset to post (from `forgecast_list_assets`).\n' +
+      '  content (string): caption / body text.\n' +
+      '  channels (string[], optional): which networks to cross-post to (from health.publishers).\n' +
+      '  publisher (string, optional): publisher to route through. Defaults to "omnisocials".\n\n' +
       'Returns: `{ published: { postId, status } }`\n\n' +
-      'Requirements: The publisher must be configured on the app (set OMNISOCIALS_API_KEY for omnisocials). ' +
-      'The app must also be publicly reachable (set FORGECAST_BASE_URL) so the publisher can fetch the media.\n\n' +
-      'Error guidance: A 503 means no publisher is configured — set OMNISOCIALS_API_KEY on the Forgecast server. ' +
-      'A 404 means the asset does not exist.',
+      'Requirements: a publisher must be configured on the app (e.g. OMNISOCIALS_API_KEY), and the app must be ' +
+      'publicly reachable (set FORGECAST_BASE_URL) so the network can fetch the media.\n\n' +
+      'Error guidance: 503 = no publisher configured (the error lists `availablePublishers`); 404 = asset not found.',
     inputSchema: z.object({
       asset_id: z.string(),
       content: z.string().min(1),
@@ -361,6 +471,310 @@ server.registerTool(
     } catch (e) {
       return fail(e);
     }
+  },
+);
+
+// 15. forgecast_get_brand_kit
+server.registerTool(
+  'forgecast_get_brand_kit',
+  {
+    title: 'Get Brand Kit',
+    description:
+      'Returns a project\'s brand kit — the identity (name, tagline, palette, fonts, tone, key messages, notes) ' +
+      'that grounds every generation so images and video come out on-brand.\n\n' +
+      'Args: project_id (string).\n' +
+      'Returns: `{ brandKit: {...} }` (an empty object `{}` when none is set yet).',
+    inputSchema: z.object({ project_id: z.string() }).strict(),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ project_id }) => {
+    try { return ok(await client.getBrandKit(project_id)); } catch (e) { return fail(e); }
+  },
+);
+
+// 16. forgecast_set_brand_kit
+server.registerTool(
+  'forgecast_set_brand_kit',
+  {
+    title: 'Set Brand Kit',
+    description:
+      'Saves a project\'s brand kit. From then on, every image and video generated in that project is grounded ' +
+      'in this identity automatically (the fields are folded into the generation prompt).\n\n' +
+      'Args (all optional): name, tagline, palette (hex colors), fonts {display, body}, tone_of_voice, ' +
+      'key_messages (string[]), notes. Replaces the stored kit wholesale.\n' +
+      'Returns: `{ brandKit: {...} }` (the sanitized, saved kit).',
+    inputSchema: z.object({
+      project_id: z.string(),
+      name: z.string().optional(),
+      tagline: z.string().optional(),
+      palette: z.array(z.string()).optional(),
+      fonts: z.object({ display: z.string().optional(), body: z.string().optional() }).optional(),
+      tone_of_voice: z.string().optional(),
+      key_messages: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, tone_of_voice, key_messages, ...rest }) => {
+    try {
+      return ok(await client.saveBrandKit(project_id, { ...rest, toneOfVoice: tone_of_voice, keyMessages: key_messages }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 17. forgecast_brand_kit_from_website
+server.registerTool(
+  'forgecast_brand_kit_from_website',
+  {
+    title: 'Derive Brand Kit from a Website',
+    description:
+      'Reads a brand\'s website and seeds the project brand kit from it (name, tagline, key messages, notes). ' +
+      'Colors and fonts are left for you to fill in via `forgecast_set_brand_kit`.\n\n' +
+      'Args: project_id (string), url (string).\n' +
+      'Returns: `{ brandKit, derivedFrom }`. 400 if the URL is missing or unreadable.',
+    inputSchema: z.object({ project_id: z.string(), url: z.string() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, url }) => {
+    try { return ok(await client.brandKitFromWebsite(project_id, url)); } catch (e) { return fail(e); }
+  },
+);
+
+// 18. forgecast_generate_from_website
+server.registerTool(
+  'forgecast_generate_from_website',
+  {
+    title: 'Create Assets from a Website',
+    description:
+      'Turns a product/brand URL into ready-to-post assets in one call: imports the real product images found on ' +
+      'the page, generates on-brand AI images grounded in the site copy, and enhances the imports. SYNCHRONOUS — ' +
+      'returns the created assets.\n\n' +
+      'Args: project_id (string), url (string), generate (bool, default true), generate_count (1-4, default 2), ' +
+      'enhance (bool, default true).\n' +
+      'Returns: `{ assets: [...], summary: { imported, generated, enhanced } }`. Image generation/enhancement need ' +
+      'FAL_KEY on the server; importing works without it.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      url: z.string(),
+      generate: z.boolean().optional(),
+      generate_count: z.number().int().min(1).max(4).optional(),
+      enhance: z.boolean().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, url, generate, generate_count, enhance }) => {
+    try {
+      return ok(await client.generateFromWebsite(project_id, { url, generate, generateCount: generate_count, enhance }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 19. forgecast_agent_plan
+server.registerTool(
+  'forgecast_agent_plan',
+  {
+    title: 'Agent — Plan a Campaign',
+    description:
+      'Hands a one-line brief to the Forgecast content agent, which researches and returns a concrete, on-trend ' +
+      'CONTENT PLAN (concept, per-platform captions, and the image/video assets + an optional montage it would ' +
+      'produce). Nothing is generated yet — this is the "PLAN" step you can review, then run with ' +
+      '`forgecast_agent_execute`.\n\n' +
+      'Tip: if the brief contains a product URL or domain, the agent reads the site and grounds the plan in the ' +
+      'real brand.\n\n' +
+      'Args: brief (string — the goal/idea, optionally with a product URL), platforms (string[], optional, e.g. ' +
+      '["instagram","linkedin"]; defaults to instagram).\n' +
+      'Returns: `{ plan }`.\n\n' +
+      'Requires an agent LLM on the server (set OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ' +
+      'ANTHROPIC_API_KEY). A 503 means none is configured.',
+    inputSchema: z.object({ brief: z.string().min(1), platforms: z.array(z.string()).optional() }).strict(),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async ({ brief, platforms }) => {
+    try { return ok(await client.agentPlan(brief, platforms)); } catch (e) { return fail(e); }
+  },
+);
+
+// 20. forgecast_agent_execute
+server.registerTool(
+  'forgecast_agent_execute',
+  {
+    title: 'Agent — Execute a Plan',
+    description:
+      'Produces a content plan (from `forgecast_agent_plan`): generates its images and video, and — when ' +
+      '`publish` is true — cross-posts them to the plan\'s platforms. Images come back as assets; video and ' +
+      'montage come back as async jobs to poll with `forgecast_get_job`.\n\n' +
+      'Args: plan (object — pass the `plan` returned by forgecast_agent_plan verbatim), project_id (string, ' +
+      'optional — produce into this existing project; omit to create one), project_name (string, optional), ' +
+      'publish (bool, optional — also cross-post the results).\n' +
+      'Returns: `{ result: { projectId, assetIds, videoJobIds, montageJobIds, published } }`.',
+    inputSchema: z.object({
+      plan: z.record(z.string(), z.unknown()),
+      project_id: z.string().optional(),
+      project_name: z.string().optional(),
+      publish: z.boolean().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ plan, project_id, project_name, publish }) => {
+    try {
+      return ok(await client.agentExecute({ plan, projectId: project_id, projectName: project_name, publish }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 21. forgecast_agent_run
+server.registerTool(
+  'forgecast_agent_run',
+  {
+    title: 'Agent — Auto-run (brief → finished assets)',
+    description:
+      'The autonomous "AUTO-RUN": hand the agent a brief and it brainstorms AND produces in one shot — deciding ' +
+      'per video whether to make b-roll or a talking-head AI presenter, generating the images and clips, and (if ' +
+      'the brief includes a product URL) reading the site first. Best for "just make me a campaign about X".\n\n' +
+      'Args: brief (string), project_id (string, optional — produce into this project; omit to create one), ' +
+      'platforms (string[], optional).\n' +
+      'Returns: `{ result: { imageAssetIds, videoJobIds, presenterJobIds, steps, summary } }`. Images are ready ' +
+      'immediately; poll video/presenter job ids with `forgecast_get_job`, then `forgecast_publish_asset` to ' +
+      'cross-post.\n\n' +
+      'Requires an agent LLM on the server (OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY). ' +
+      'A 503 means none is configured.',
+    inputSchema: z.object({
+      brief: z.string().min(1),
+      project_id: z.string().optional(),
+      platforms: z.array(z.string()).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ brief, project_id, platforms }) => {
+    try { return ok(await client.agentRun({ brief, projectId: project_id, platforms })); } catch (e) { return fail(e); }
+  },
+);
+
+// 22. forgecast_generate_ad_copy
+server.registerTool(
+  'forgecast_generate_ad_copy',
+  {
+    title: 'Generate ad copy (platform-aware, A/B variants)',
+    description:
+      'Write N high-converting, on-brand ad-copy variants for a brief, each tagged A/B/C and guaranteed to fit the ' +
+      "target platform's character limit (Instagram 2200, LinkedIn 3000, X/Twitter 280, Facebook 2200, TikTok " +
+      '2200, YouTube 5000, Google RSA 90). Grounded in the project brand kit (tone of voice, key messages), so the ' +
+      'copy sounds like the brand. Pick a variant and pass its text as `content` to `forgecast_publish_asset` to ' +
+      'cross-post.\n\n' +
+      'Args: project_id (string), brief (string), platform (string, optional — default instagram; x aliases ' +
+      'twitter), count (1–5, optional — default 3).\n' +
+      'Returns: `{ platform, label, limit, variants: [{ id, text, chars }] }`.\n\n' +
+      'Requires an agent LLM on the server (OPENAI_API_KEY, or FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY). ' +
+      'A 503 means none is configured.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      brief: z.string().min(1),
+      platform: z.string().optional(),
+      count: z.number().int().min(1).max(5).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, brief, platform, count }) => {
+    try { return ok(await client.generateAdCopy(project_id, { brief, platform, count })); } catch (e) { return fail(e); }
+  },
+);
+
+const metricsSchema = z
+  .array(
+    z.object({
+      creativeId: z.string(),
+      name: z.string().optional(),
+      platform: z.string().optional(),
+      date: z.string(),
+      impressions: z.number(),
+      clicks: z.number(),
+      spend: z.number(),
+      conversions: z.number().optional(),
+      frequency: z.number().optional(),
+    }),
+  )
+  .optional();
+
+// 23. forgecast_ads_audit
+server.registerTool(
+  'forgecast_ads_audit',
+  {
+    title: 'Audit ad performance (fatigue + health score)',
+    description:
+      'The measure side of the loop: audit ad-account performance and get a 0–100 health score + letter grade ' +
+      'across dimensions (CTR health, creative freshness, spend efficiency, conversion rate, spend ' +
+      'concentration), a per-creative **creative-fatigue** diagnosis (CTR decay + frequency saturation + rising ' +
+      'CPA), and prioritized recommendations.\n\n' +
+      'Two ways to feed it: **(a) keyless** — pass `metrics` (an array of per-creative, per-day rows: ' +
+      'creativeId, date, impressions, clicks, spend, and optionally conversions/frequency/name); or **(b) auto-pull** ' +
+      '— omit `metrics` and set `source` (meta|google) to pull from a connected account (needs META_ADS_* / ' +
+      'GOOGLE_ADS_* on the server).\n' +
+      'Returns: `{ source, audit: { score, grade, totals, dimensions[], fatigue[], recommendations[] } }`. ' +
+      'Pair the fatigue list with `forgecast_generate_image` + `forgecast_publish_asset` to refresh tired creatives.',
+    inputSchema: z.object({
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ metrics, source, sinceDays }) => {
+    try { return ok(await client.adsAudit({ metrics, source, sinceDays })); } catch (e) { return fail(e); }
+  },
+);
+
+// 24. forgecast_ads_insights
+server.registerTool(
+  'forgecast_ads_insights',
+  {
+    title: 'Pull raw ad metrics',
+    description:
+      'Fetch normalized per-creative, per-day ad metrics from a connected account (`source`: meta|google; needs ' +
+      'META_ADS_* / GOOGLE_ADS_* on the server), or echo back `metrics` you pass in. Returns ' +
+      '`{ source, count, metrics[] }`. Use `forgecast_ads_audit` to score and diagnose them.',
+    inputSchema: z.object({
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ metrics, source, sinceDays }) => {
+    try { return ok(await client.adsInsights({ metrics, source, sinceDays })); } catch (e) { return fail(e); }
+  },
+);
+
+// 25. forgecast_optimize_creatives
+server.registerTool(
+  'forgecast_optimize_creatives',
+  {
+    title: 'Close the loop — regenerate fatigued creatives on-brand',
+    description:
+      'The optimize step: audit the metrics, find **fatigued** creatives, and regenerate a fresh, on-brand ' +
+      'replacement image for each (grounded in the project brand kit), into the given project. Feed it the same ' +
+      'way as `forgecast_ads_audit` — keyless `metrics`, or a connected `source` (meta|google).\n\n' +
+      'Args: project_id (string — produce the new creatives here), metrics (optional rows) OR source (meta|google), ' +
+      'max (1–10, optional — how many of the worst to refresh, default 3).\n' +
+      'Returns: `{ source, score, grade, fatiguedCount, imageReady, regenerated: [{ creativeId, newAssetId }], ' +
+      'optimizations[] }`. When image generation is not configured (no FAL_KEY), it returns the refresh *plan* ' +
+      '(briefs) without generating. Then `forgecast_publish_asset` the new creatives to cross-post them.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+      max: z.number().int().min(1).max(10).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, metrics, source, sinceDays, max }) => {
+    try { return ok(await client.optimizeCreatives(project_id, { metrics, source, sinceDays, max })); } catch (e) { return fail(e); }
   },
 );
 

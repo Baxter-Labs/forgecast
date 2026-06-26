@@ -1,23 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { imageModels, videoModels, videoModelById } from '../src/index';
+import { imageModels, openImageModels, videoModels, videoModelById, imageModelById, defaultImageModelId } from '../src/index';
 
-describe('imageModels (vendored catalog)', () => {
-  it('loads many image models', () => {
-    expect(imageModels.length).toBeGreaterThanOrEqual(40);
-  });
-
-  it('every model is well-formed', () => {
+describe('imageModels (curated, fal-runnable)', () => {
+  it('every model is well-formed and uses a fal-ai endpoint id', () => {
+    expect(imageModels.length).toBeGreaterThanOrEqual(2);
     for (const m of imageModels) {
       expect(typeof m.id).toBe('string');
-      expect(m.id.length).toBeGreaterThan(0);
+      expect(m.id.startsWith('fal-ai/')).toBe(true); // a real, submittable endpoint
       expect(typeof m.name).toBe('string');
       expect(m.category).toBe('image');
       expect(Array.isArray(m.aspectRatios)).toBe(true);
+      expect(m.sizing === 'aspect_ratio' || m.sizing === 'image_size' || m.sizing === undefined).toBe(true);
     }
   });
 
-  it('includes a known model id', () => {
-    expect(imageModels.map((m) => m.id)).toContain('nano-banana');
+  it('defaults to Nano Banana (aspect_ratio sizing), first in the list', () => {
+    expect(defaultImageModelId).toBe('fal-ai/nano-banana');
+    expect(imageModelById('fal-ai/nano-banana')?.sizing).toBe('aspect_ratio');
+    expect(imageModels[0]?.id).toBe('fal-ai/nano-banana'); // the default selection
+  });
+
+  it('marks the FLUX family as image_size sizing', () => {
+    expect(imageModelById('fal-ai/flux/schnell')?.sizing).toBe('image_size');
+  });
+
+  it('still exposes the full open browse catalog separately', () => {
+    expect(openImageModels.length).toBeGreaterThanOrEqual(40);
+    expect(openImageModels.map((m) => m.id)).toContain('nano-banana');
   });
 });
 

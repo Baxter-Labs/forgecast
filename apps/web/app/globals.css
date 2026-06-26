@@ -81,6 +81,23 @@ body::before {
 }
 .forge-done { animation: forge-done 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
 
+/* Skeleton shimmer for loading states */
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.shimmer {
+  background: linear-gradient(90deg, var(--forge-surface) 25%, var(--forge-surface-2) 37%, var(--forge-surface) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Spinner for in-flight forge operations */
+@keyframes forge-spin { to { transform: rotate(360deg); } }
+.forge-spinner {
+  width: 34px; height: 34px; border-radius: 999px;
+  border: 3px solid var(--forge-border);
+  border-top-color: var(--ember-1);
+  animation: forge-spin 0.8s linear infinite;
+}
+
 /* Accessibility */
 :focus-visible {
   outline: 2px solid var(--ember-2);

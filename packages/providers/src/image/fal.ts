@@ -16,6 +16,7 @@ export interface FalImageProviderOptions {
 
 interface FalImageResponse {
   images?: Array<{ url: string; width?: number; height?: number }>;
+  image?: { url?: string; width?: number; height?: number };
 }
 
 export class FalImageProvider implements ImageProvider {
@@ -48,7 +49,8 @@ export class FalImageProvider implements ImageProvider {
       ...input.extra,
     };
 
-    const res = await this.fetchFn(`https://fal.run/${this.model}`, {
+    const model = input.model ?? this.model;
+    const res = await this.fetchFn(`https://fal.run/${model}`, {
       method: 'POST',
       headers: {
         Authorization: `Key ${this.apiKey}`,
@@ -63,7 +65,7 @@ export class FalImageProvider implements ImageProvider {
     }
 
     const data = (await res.json()) as FalImageResponse;
-    const image = data.images?.[0];
+    const image = data.images?.[0] ?? (data as { image?: { url?: string; width?: number; height?: number } }).image;
     if (!image?.url) throw new Error('fal response missing image url');
 
     return { url: image.url, width: image.width, height: image.height, raw: data };

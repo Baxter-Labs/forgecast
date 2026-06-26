@@ -13,3 +13,8 @@ export * from './montage';
 export * from './transcribe';
 export * from './presenter';
 export * from './website';
+export * from './brandkit';
+export * from './adcopy';
+export * from './adinsights';
+export * from './fatigue';
+export * from './adaudit';

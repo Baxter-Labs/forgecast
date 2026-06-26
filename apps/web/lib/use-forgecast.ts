@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export interface StudioAsset {
   id: string;
   type: 'image' | 'video' | 'audio';
-  params: { prompt?: string; width?: number; height?: number; model?: string; aspectRatio?: string };
+  params: { prompt?: string; text?: string; width?: number; height?: number; model?: string; aspectRatio?: string };
   provider: string;
   createdAt: string;
 }
@@ -36,12 +36,14 @@ function normalizeAsset(a: RawAsset): StudioAsset {
   };
 }
 
-interface GenerateImageArgs { prompt: string; model?: string; width?: number; height?: number }
+interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number }
 interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
 interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
+interface ComposeVideoArgs { assetIds: string[]; aspectRatio?: string; durationSec?: number }
+interface AnimateAssetOpts { aspectRatio?: string; model?: string }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_TRIES = 200;
@@ -257,6 +259,52 @@ export function useForgecast() {
     }
   }, []);
 
+  const generateAdCopy = useCallback(async (
+    brief: string,
+    platform: string,
+    count = 3,
+  ): Promise<{ platform?: string; label?: string; limit?: number; variants?: { id: string; text: string; chars: number }[]; error?: string }> => {
+    if (!projectId) return { error: 'No active project' };
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ad-copy`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ brief, platform, count }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Ad-copy failed (${res.status})` };
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId]);
+
+  const auditAds = useCallback(async (metrics: unknown[]): Promise<{ source?: string; audit?: unknown; error?: string }> => {
+    try {
+      const res = await fetch('/api/ads/audit', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ metrics }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Audit failed (${res.status})` };
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
+  const optimizeCreatives = useCallback(async (metrics: unknown[], max = 3): Promise<{ imageReady?: boolean; regenerated?: Array<{ creativeId: string; newAssetId: string }>; optimizations?: unknown[]; note?: string; error?: string }> => {
+    if (!projectId) return { error: 'No active project' };
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ads/optimize`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ metrics, max }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Optimize failed (${res.status})` };
+      await refreshAssets();
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId, refreshAssets]);
+
   const generateVoiceover = useCallback(async ({ text, voice }: GenerateVoiceoverArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -321,6 +369,102 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  const uploadAsset = useCallback(async (file: File): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/projects/${projectId}/assets/upload`, { method: 'POST', body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Upload failed'); setStatus('error'); return null; }
+      const asset = (body as { asset?: RawAsset }).asset;
+      if (asset) { setAssets((prev) => [normalizeAsset(asset), ...prev]); }
+      setStatus('idle');
+      return asset?.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
+  const createFromWebsite = useCallback(async (
+    args: { url: string; generate?: boolean; enhance?: boolean; generateCount?: number },
+  ): Promise<number> => {
+    if (!projectId) return 0;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/from-website`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setError(data?.error ?? 'Failed to build from website'); setStatus('error'); return 0; }
+      await refreshAssets();
+      setStatus('idle');
+      return ((data as { assets?: unknown[] })?.assets ?? []).length;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return 0;
+    }
+  }, [projectId, refreshAssets]);
+
+  const enhanceAsset = useCallback(async (assetId: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/enhance`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Enhance failed'); setStatus('error'); return null; }
+      const enhanced = (body as { asset?: RawAsset }).asset;
+      if (enhanced) { setAssets((prev) => [normalizeAsset(enhanced), ...prev]); }
+      setStatus('idle');
+      return enhanced?.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
+  const cutoutAsset = useCallback(async (assetId: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/cutout`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Cutout failed'); setStatus('error'); return null; }
+      const cut = (body as { job?: { status?: string; error?: string }; asset?: RawAsset });
+      if (cut.job?.status !== 'done' || !cut.asset) {
+        setError(cut.job?.error ?? 'Cutout failed'); setStatus('error'); return null;
+      }
+      setAssets((prev) => [normalizeAsset(cut.asset!), ...prev]);
+      setStatus('idle');
+      return cut.asset.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
+  const editAsset = useCallback(async (assetId: string, prompt: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/assets/${assetId}/edit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Edit failed'); setStatus('error'); return null; }
+      const edited = (body as { job?: { status?: string; error?: string }; asset?: RawAsset });
+      if (edited.job?.status !== 'done' || !edited.asset) {
+        setError(edited.job?.error ?? 'Edit failed'); setStatus('error'); return null;
+      }
+      setAssets((prev) => [normalizeAsset(edited.asset!), ...prev]);
+      setStatus('idle');
+      return edited.asset.id ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
   const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
     try {
       const form = new FormData();
@@ -337,6 +481,48 @@ export function useForgecast() {
       return null;
     }
   }, []);
+
+  const composeVideo = useCallback(async ({ assetIds, aspectRatio, durationSec }: ComposeVideoArgs): Promise<string | null> => {
+    if (!projectId) return null;
+    if (assetIds.length < 1) { setError('Select at least 1 asset to compose a video'); setStatus('error'); return null; }
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-montage`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assetIds, aspectRatio: aspectRatio ?? '9:16', durationSec: durationSec ?? 4 }),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start compose')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const animateAsset = useCallback(async (assetId: string, opts?: AnimateAssetOpts): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          prompt: 'subtle natural cinematic motion, gentle camera move',
+          model: opts?.model ?? 'fal-ai/wan-pro/image-to-video',
+          aspectRatio: opts?.aspectRatio ?? '9:16',
+          imageAssetId: assetId,
+        }),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start animation')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId: resultAssetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return resultAssetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
 
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
@@ -404,8 +590,9 @@ export function useForgecast() {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
     generateImage, generateVideo, generateMontage,
+    composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, clearAllAssets,
+    publishAsset, clearAllAssets, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

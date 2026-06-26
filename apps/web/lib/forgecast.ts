@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, PublisherRegistry, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -11,8 +11,8 @@ import {
   r2OptionsFromEnv,
   type D1Like,
 } from '@forgecast/store';
-import { JobRunner, ImageJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider } from '@forgecast/core';
+import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
+import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding } from './cf-env';
@@ -36,6 +36,10 @@ export interface Services {
   transcribeAvailable: boolean;
   presenterProvider: PresenterProvider;
   presenterAvailable: boolean;
+  websiteReader: WebsiteReader;
+  insights: AdsInsightsRegistry;
+  /** Names of connected ad-insights sources (e.g. ['meta','google']). */
+  insightsAvailable: string[];
 }
 
 export interface BuildServicesOptions {
@@ -81,10 +85,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const falVideoKey = 'falVideoKey' in opts ? opts.falVideoKey : process.env.FAL_KEY_VIDEO;
 
   const imageRegistry = new ImageProviderRegistry();
-  const falImageProvider = new FalImageProvider({ apiKey: falKey });
+  const falImageProvider = new FalImageProvider({ apiKey: falKey, fetchFn: opts.fetchFn });
   imageRegistry.register(falImageProvider);
 
   const publishers = new PublisherRegistry();
+  publishers.register(new WebhookPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new OmnisocialsPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new InstagramPublisher({ fetchFn: opts.fetchFn }));
   publishers.register(new LinkedInPublisher({ fetchFn: opts.fetchFn }));
@@ -134,9 +139,33 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     clock: nowIso,
     fetchFn: opts.fetchFn,
   });
+  const enhanceHandler = new EnhanceJobHandler({
+    registry: imageRegistry,
+    storage,
+    assets,
+    idGen: randomId,
+    clock: nowIso,
+    fetchFn: opts.fetchFn,
+  });
+  const editImageHandler = new EditImageJobHandler({
+    registry: imageRegistry,
+    storage,
+    assets,
+    idGen: randomId,
+    clock: nowIso,
+    fetchFn: opts.fetchFn,
+  });
+  const cutoutHandler = new CutoutJobHandler({
+    registry: imageRegistry,
+    storage,
+    assets,
+    idGen: randomId,
+    clock: nowIso,
+    fetchFn: opts.fetchFn,
+  });
   const videoWorker = new MoneyPrinterWorker();
   const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
-  const handlers: JobHandler[] = [imageHandler];
+  const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
       new ShortVideoJobHandler({ worker: videoWorker, storage, assets, idGen: randomId, clock: nowIso }),
@@ -156,7 +185,8 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
     montageAvailable = true;
   }
-  const voiceProvider: VoiceProvider = new FalTtsProvider({ fetchFn: opts.fetchFn });
+  const voxcpm = new VoxCpmVoiceProvider({ fetchFn: opts.fetchFn });
+  const voiceProvider: VoiceProvider = voxcpm.isAvailable() ? voxcpm : new FalTtsProvider({ fetchFn: opts.fetchFn });
   if (voiceProvider.isAvailable()) {
     handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
@@ -183,9 +213,18 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     }));
   }
 
+  const websiteReader: WebsiteReader = new HttpWebsiteReader({ fetchFn: opts.fetchFn });
+
+  // Ad-performance sources for the measure→optimize loop. Unconfigured by default;
+  // the analyzers also run on metrics handed in directly, so this needs no keys.
+  const insights = new AdsInsightsRegistry();
+  insights.register(new MetaAdsInsightsProvider({ fetchFn: opts.fetchFn }));
+  insights.register(new GoogleAdsInsightsProvider({ fetchFn: opts.fetchFn }));
+  const insightsAvailable = insights.available();
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable };
 }
 
 /**

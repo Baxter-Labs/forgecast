@@ -60,6 +60,30 @@ describe('FalImageProvider', () => {
     );
   });
 
+  it('uses per-call model override and parses single {image:{url}} response (upscaler shape)', async () => {
+    const fetchFn = vi.fn(async (..._args: Parameters<typeof fetch>) =>
+      new Response(JSON.stringify({ image: { url: 'https://cdn.fal/up.png', width: 2048, height: 2048 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const p = new FalImageProvider({ apiKey: 'k-test', model: 'fal-ai/flux/schnell', fetchFn });
+
+    const result = await p.generateImage({
+      prompt: 'enhance quality',
+      model: 'fal-ai/clarity-upscaler',
+      extra: { image_url: 'https://example.com/src.png' },
+    });
+
+    expect(result.url).toBe('https://cdn.fal/up.png');
+    expect(result.width).toBe(2048);
+    const [url, init] = fetchFn.mock.calls[0]!;
+    // Must post to the per-call model, not the provider default
+    expect(url).toBe('https://fal.run/fal-ai/clarity-upscaler');
+    const sentBody = JSON.parse((init as RequestInit).body as string);
+    expect(sentBody.image_url).toBe('https://example.com/src.png');
+  });
+
   it('passes extra params through, and extra takes precedence over mapped fields', async () => {
     const fetchFn = vi.fn(async (..._args: Parameters<typeof fetch>) =>
       jsonResponse({ images: [{ url: 'https://cdn.fal/o.png' }] }),

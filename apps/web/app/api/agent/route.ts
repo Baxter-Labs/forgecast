@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { ContentAgent, ToolCallingAgent, type ContentPlan } from '@forgecast/agent';
 import { getServices } from '@/lib/forgecast';
 import { makeForgecastActions } from '@/lib/agent/forgecast-actions';
-import { OpenAiLlmClient } from '@/lib/agent/llm';
+import { makeLlmClient } from '@/lib/agent/llm';
 import { maybeTrendTool } from '@/lib/agent/trends';
 
 function msg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
@@ -13,11 +13,11 @@ export async function POST(req: Request) {
     | null;
   if (!body?.mode) return NextResponse.json({ error: 'mode is required (plan|execute)' }, { status: 400 });
 
-  const llm = new OpenAiLlmClient();
+  const llm = makeLlmClient();
   const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
 
   if (body.mode === 'plan') {
-    if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY)' }, { status: 503 });
+    if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' }, { status: 503 });
     if (typeof body.brief !== 'string' || body.brief.trim().length === 0) return NextResponse.json({ error: 'brief is required' }, { status: 400 });
     try {
       // Detect a URL/domain in the brief and pre-fetch website context to enrich planning.
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
   if (body.mode === 'agentic') {
     if (!llm.isAvailable() || !llm.chat) {
-      return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY)' }, { status: 503 });
+      return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' }, { status: 503 });
     }
     if (typeof body.brief !== 'string' || body.brief.trim().length === 0) {
       return NextResponse.json({ error: 'brief is required' }, { status: 400 });

@@ -4,7 +4,7 @@
 >
 > **Hero loop:** *speak it · forge it · cast it.* Talk to Forgecast → a planning agent checks what's trending, plans the content, generates it, stitches a montage, and casts it everywhere — with a Pro tier and a fully offline-testable core.
 
-65 commits · 141 tests green · strict TypeScript · CI on Node 24. Repo: https://github.com/eshwarpk/forgecast
+178 commits · 375 tests green · strict TypeScript · CI on Node 24. Repo: https://github.com/eshwarpk/forgecast
 
 ---
 
@@ -30,6 +30,17 @@ A pnpm/TypeScript monorepo. `@forgecast/core` holds **pure contracts** (provider
 - **Studio UI v2** — Image/Video/Montage mode toggle, the agent chat panel ("speak it · forge it · cast it"), and a Pro badge — all in the Molten Forge aesthetic, verified live.
 - **Montage-in-agent** — the planning agent can now request a `montage` directive and stitch its generated scenes into one longer-form video; the voice flow speaks it too.
 - **Devin** → native IG/LinkedIn/YouTube publisher adapters (autonomous, commits in this repo — see `docs/devin/native-publishers.md`).
+
+### Post-hackathon — depth & ownership (Jun 21–26) — same seams, more product
+- **Open-source voice** — self-hosted **VoxCPM-2** `VoiceProvider` (Apache-2.0); cloud fal TTS demoted to a fallback. Voice-over muxed onto clips via in-process **ffmpeg**.
+- **Talking-head presenter** — an OmniHuman `PresenterProvider` + job; the tool-calling agent (`ToolCallingAgent`, AUTO-RUN) decides b-roll vs. presenter per scene.
+- **Model-agnostic video** — a curated fal text→video + image→video catalog (WAN, Veo, Kling, Seedance, Hailuo); montage now renders in-process by default (no Chromium worker required).
+- **Asset Studio** — bring your own product: **upload → enhance/upscale → instruction-edit → background-cutout → animate (image→video) → compose → narrate → download**, all keyless-friendly (assets resolve to a `data:` URI without a public URL).
+- **Website-grounded campaigns** — `read_website` tool + a "From Website" flow: URL → import + generate on-brand assets.
+- **Brand Kit** — per-project identity (palette, fonts, tone, key messages) folded into every image/video/presenter prompt; seed it from a website.
+- **Smart ad copy** — platform-aware, character-limited, A/B-tagged ad-copy generation (IG/LinkedIn/X/FB/TikTok/YouTube/Google RSA), wired into publish + MCP. *(inspired by NotFair)*
+- **Ads measure → optimize loop** — audit ad performance (health score + **creative-fatigue** diagnosis + recommendations), then **regenerate fatigued creatives on-brand** — closing create → publish → measure → optimize. Keyless on provided metrics; auto-pulls from Meta / Google Ads. A Studio "Ad Performance" panel + 3 MCP tools. *(the NotFair-complement half)*
+- **Agent LLM choice** — pluggable `LlmClient`: OpenAI default, **Claude (Anthropic) opt-in** — explicit, never auto-billed.
 
 ## Track stack (one build → many tracks)
 Startup (Mollie revenue path) · Pixverse (creative product + a Pixverse-made video) · Vapi (voice-first interface) · Best Build with Devin (Devin commits) · Build-in-Public (this log + a public repo) · Wispr Flow (booth).

@@ -1,9 +1,14 @@
 'use client';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
+import { Palette, Activity } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
+import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
+import { BrandKitModal } from './BrandKitModal';
+import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
+import { CreatePanel } from './CreatePanel';
 import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
@@ -88,23 +93,31 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
 // ─── Studio ───────────────────────────────────────────────────────────────────
 export function Studio() {
   const {
+    projectId,
     providers, publishers, availability, pro, assets, status, error,
-    generateImage, generateVideo, generateMontage,
-    publishAsset, clearAllAssets,
+    generateImage, generateVideo, generateMontage, generateVoiceover,
+    composeVideo,
+    publishAsset, clearAllAssets, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
 
+  const brand = useBrandKit(projectId);
+  const [brandKitOpen, setBrandKitOpen] = useState(false);
+  const [perfOpen, setPerfOpen] = useState(false);
+
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
+  const [voiceName, setVoiceName] = useState('');
   const [boostQuality, setBoostQuality] = useState(false);
-  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-a14b/text-to-video';
+  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
+  const [webBuilding, setWebBuilding] = useState(false);
 
   // Campaign history
   const [campaigns, setCampaigns] = useState<StoredCampaign[]>(() =>
@@ -195,6 +208,31 @@ export function Studio() {
     setView('history');
   }, []);
 
+  // ── Upload handler ────────────────────────────────────────────────────────────
+  function handleUpload(file: File) {
+    void uploadAsset(file).then((assetId) => {
+      if (assetId && activeCampaignId) appendVideoAssets(activeCampaignId, [assetId]);
+    });
+  }
+
+  // ── From-website handler (import + generate + enhance) ───────────────────────
+  function handleFromWebsite(args: { url: string; generate: boolean; enhance: boolean }) {
+    setWebBuilding(true);
+    void createFromWebsite(args).then((n) => {
+      setWebBuilding(false);
+      if (n > 0) setView('gallery');
+    });
+  }
+
+  // ── Compose handler (Gallery multi-select → montage) ────────────────────────
+  async function handleCompose(ids: string[], ar: string, dur: number) {
+    const attach = (assetId: string | null | undefined) => {
+      if (assetId && activeCampaignId) appendVideoAssets(activeCampaignId, [assetId]);
+    };
+    const result = await composeVideo({ assetIds: ids, aspectRatio: ar, durationSec: dur });
+    attach(result);
+  }
+
   // ── Forge handler ────────────────────────────────────────────────────────────
   function handleForge() {
     if (!activeCampaignId) return;
@@ -206,9 +244,11 @@ export function Studio() {
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
-      void generateImage({ prompt, model, width, height }).then(attach);
+      void generateImage({ prompt, model, aspectRatio: ratio, width, height }).then(attach);
     } else if (mode === 'video') {
       void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
+    } else if (mode === 'voice') {
+      void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -219,31 +259,78 @@ export function Studio() {
       <Header providers={providers} pro={pro} />
 
       <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
-        {/* Left: Forge panel */}
-        <section aria-label="Create" className="rise" style={{ animationDelay: '80ms' }}>
-          <ForgePanel
-            mode={mode}
-            setMode={setMode}
-            prompt={prompt}
-            setPrompt={setPrompt}
-            model={model}
-            setModel={setModel}
-            boostQuality={boostQuality}
-            setBoostQuality={setBoostQuality}
-            videoImageAssetId={videoImageAssetId}
-            setVideoImageAssetId={setVideoImageAssetId}
-            ratio={ratio}
-            setRatio={setRatio}
-            onForge={handleForge}
-            forging={status === 'forging'}
-            availability={availability}
-            assets={assets}
-            montagePrompts={montagePrompts}
-            setMontagePrompts={setMontagePrompts}
-            campaigns={campaigns}
-            activeCampaignId={activeCampaignId}
-            setActiveCampaignId={setActiveCampaignId}
-            onCreateCampaign={createManualCampaign}
+        {/* Left: unified Create surface (Idea · Website · Upload) */}
+        <section aria-label="Create" className="rise flex flex-col gap-3" style={{ animationDelay: '80ms' }}>
+          {/* Brand Kit — grounds every generation */}
+          <button
+            type="button"
+            onClick={() => setBrandKitOpen(true)}
+            aria-label="Open Brand Kit"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-colors cursor-pointer hover:border-[var(--ember-2)]"
+            style={{ borderColor: brandKitIsEmpty(brand.kit) ? 'var(--forge-border)' : 'var(--ember-2)', background: 'var(--forge-surface-2)' }}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Palette size={14} className="text-[var(--ember-1)] shrink-0" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--forge-text)] truncate">
+                Brand Kit{brand.kit.name ? <span className="text-[var(--forge-faint)] normal-case tracking-normal"> · {brand.kit.name}</span> : null}
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              {(brand.kit.palette ?? []).slice(0, 4).map((c) => (
+                <span key={c} className="w-3 h-3 rounded-sm border border-black/30" style={{ background: c }} />
+              ))}
+              <span className="font-mono text-[10px] text-[var(--forge-faint)]">{brandKitIsEmpty(brand.kit) ? 'set up' : 'edit'}</span>
+            </span>
+          </button>
+
+          {/* Ad Performance — audit fatigue + regenerate on-brand */}
+          <button
+            type="button"
+            onClick={() => setPerfOpen(true)}
+            aria-label="Open Ad Performance"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-colors cursor-pointer hover:border-[var(--ember-2)]"
+            style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Activity size={14} className="text-[var(--ember-1)] shrink-0" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--forge-text)] truncate">Ad Performance</span>
+            </span>
+            <span className="font-mono text-[10px] text-[var(--forge-faint)] shrink-0">audit &amp; optimize</span>
+          </button>
+
+          <CreatePanel
+            building={webBuilding}
+            imageAvailable={availability.image}
+            onBuildFromWebsite={handleFromWebsite}
+            onUpload={handleUpload}
+            idea={
+              <ForgePanel
+                mode={mode}
+                setMode={setMode}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                model={model}
+                setModel={setModel}
+                voiceName={voiceName}
+                setVoiceName={setVoiceName}
+                boostQuality={boostQuality}
+                setBoostQuality={setBoostQuality}
+                videoImageAssetId={videoImageAssetId}
+                setVideoImageAssetId={setVideoImageAssetId}
+                ratio={ratio}
+                setRatio={setRatio}
+                onForge={handleForge}
+                forging={status === 'forging'}
+                availability={availability}
+                assets={assets}
+                montagePrompts={montagePrompts}
+                setMontagePrompts={setMontagePrompts}
+                campaigns={campaigns}
+                activeCampaignId={activeCampaignId}
+                setActiveCampaignId={setActiveCampaignId}
+                onCreateCampaign={createManualCampaign}
+              />
+            }
           />
         </section>
 
@@ -306,7 +393,13 @@ export function Studio() {
                 ? { position: 'relative', width: '100%', transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(0)', opacity: 1 }
                 : { position: 'absolute', inset: 0, transition: 'transform 300ms ease, opacity 300ms ease', transform: 'translateX(-105%)', opacity: 0, pointerEvents: 'none' }}
             >
-              <Gallery assets={assets} onPublish={(asset) => setPublishingAsset(asset)} />
+              <Gallery
+                assets={assets}
+                onPublish={(asset) => setPublishingAsset(asset)}
+                onUpload={handleUpload}
+                onCompose={handleCompose}
+                montageAvailable={availability.montage}
+              />
             </div>
 
             {/* History pane */}
@@ -343,12 +436,16 @@ export function Studio() {
                 asset={publishingAsset}
                 publishers={publishers}
                 onPublish={publishAsset}
+                onGenerateAdCopy={generateAdCopy}
                 onClose={() => setPublishingAsset(null)}
               />
             </div>
           )}
         </div>
       </main>
+
+      <BrandKitModal open={brandKitOpen} onClose={() => setBrandKitOpen(false)} brand={brand} />
+      <PerformancePanel open={perfOpen} onClose={() => setPerfOpen(false)} onAudit={auditAds} onOptimize={optimizeCreatives} />
     </div>
   );
 }

@@ -8,7 +8,7 @@ Thanks for forging with us. Forgecast is designed so the highest-value contribut
 
 ```bash
 pnpm install
-pnpm test          # 141 tests, all offline — no keys, GPU, or Docker needed
+pnpm test          # 375 tests, all offline — no keys, GPU, or Docker needed
 pnpm typecheck     # strict tsc across every package
 pnpm -C apps/web dev   # Studio at http://localhost:3210
 ```

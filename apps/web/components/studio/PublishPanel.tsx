@@ -1,7 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { Send, X, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Send, X, Check, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
+
+interface AdCopyVariant { id: string; text: string; chars: number }
+type AdCopyResult = { limit?: number; variants?: AdCopyVariant[]; error?: string };
 
 const PLATFORMS = [
   { id: 'instagram', label: 'Instagram' },
@@ -15,12 +18,14 @@ interface PublishPanelProps {
   asset: StudioAsset;
   publishers: string[];
   onPublish: (assetId: string, content: string, channels?: string[], publisher?: string) => Promise<{ postId?: string; status?: string; error?: string }>;
+  /** Optional: generate platform-aware, char-limited A/B caption variants for the brief. */
+  onGenerateAdCopy?: (brief: string, platform: string, count: number) => Promise<AdCopyResult>;
   onClose: () => void;
 }
 
 type PublishState = 'draft' | 'confirm' | 'publishing' | 'success' | 'error';
 
-export function PublishPanel({ asset, publishers, onPublish, onClose }: PublishPanelProps) {
+export function PublishPanel({ asset, publishers, onPublish, onGenerateAdCopy, onClose }: PublishPanelProps) {
   const prompt = asset.params.prompt ?? '';
   const [caption, setCaption] = useState(prompt);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
@@ -28,12 +33,32 @@ export function PublishPanel({ asset, publishers, onPublish, onClose }: PublishP
   const [state, setState] = useState<PublishState>('draft');
   const [resultMessage, setResultMessage] = useState('');
 
+  // Ad-copy suggestions
+  const [variants, setVariants] = useState<AdCopyVariant[]>([]);
+  const [copyLimit, setCopyLimit] = useState<number | undefined>();
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState('');
+
   const isVideo = asset.type === 'video';
+  // Write copy for the single selected platform if there's exactly one; else default.
+  const copyPlatform = selectedChannels.length === 1 ? selectedChannels[0]! : 'instagram';
 
   function toggleChannel(id: string) {
     setSelectedChannels((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
     );
+  }
+
+  async function handleSuggestCopy() {
+    if (!onGenerateAdCopy) return;
+    const brief = caption.trim() || prompt;
+    if (!brief) { setCopyError('Write a brief or caption first.'); return; }
+    setCopyLoading(true); setCopyError('');
+    const r = await onGenerateAdCopy(brief, copyPlatform, 3);
+    setCopyLoading(false);
+    if (r.error) { setCopyError(r.error); setVariants([]); return; }
+    setCopyLimit(r.limit);
+    setVariants(r.variants ?? []);
   }
 
   function handlePostClick() {
@@ -97,9 +122,12 @@ export function PublishPanel({ asset, publishers, onPublish, onClose }: PublishP
 
       {/* Caption */}
       <div>
-        <label className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--forge-faint)] mb-1.5 block">
-          Caption
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--forge-faint)]">
+            Caption
+          </label>
+          <span className="font-mono text-[9px] text-[var(--forge-faint)] tabular-nums">{caption.length} chars</span>
+        </div>
         <textarea
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
@@ -108,6 +136,49 @@ export function PublishPanel({ asset, publishers, onPublish, onClose }: PublishP
           className="w-full rounded-lg border px-3 py-2 text-sm bg-[var(--forge-surface-2)] text-[var(--forge-text)] border-[var(--forge-border)] focus:outline-none focus:border-[var(--ember-2)] transition-colors resize-none placeholder:text-[var(--forge-faint)] disabled:opacity-60"
           placeholder="Write your caption..."
         />
+
+        {/* AI copy suggestions — platform-aware, char-limited A/B variants */}
+        {onGenerateAdCopy && state === 'draft' && (
+          <div className="mt-2 flex flex-col gap-2">
+            <button
+              onClick={handleSuggestCopy}
+              disabled={copyLoading}
+              className="self-start flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] px-2.5 py-1.5 rounded-md border transition-all disabled:opacity-50"
+              style={{ borderColor: 'var(--forge-border)', color: 'var(--ember-1)', background: 'rgba(255,122,26,0.06)' }}
+            >
+              {copyLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {copyLoading ? 'Writing variants…' : `Suggest copy${selectedChannels.length === 1 ? ` · ${copyPlatform}` : ''}`}
+            </button>
+
+            {copyError && (
+              <p className="font-mono text-[9px] text-red-300">{copyError}</p>
+            )}
+
+            {variants.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {variants.map((v) => {
+                  const over = copyLimit !== undefined && v.chars > copyLimit;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setCaption(v.text)}
+                      className="text-left rounded-lg border px-2.5 py-2 transition-all hover:border-[var(--ember-2)] bg-[var(--forge-surface-2)] border-[var(--forge-border)]"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ember-1)]">Variant {v.id}</span>
+                        <span className={`font-mono text-[9px] tabular-nums ${over ? 'text-red-300' : 'text-[var(--forge-faint)]'}`}>
+                          {v.chars}{copyLimit !== undefined ? `/${copyLimit}` : ''}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--forge-text)] leading-relaxed line-clamp-3">{v.text}</p>
+                    </button>
+                  );
+                })}
+                <p className="font-mono text-[9px] text-[var(--forge-faint)] italic">Tap a variant to use it as your caption.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Platform chips */}
