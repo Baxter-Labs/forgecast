@@ -299,6 +299,61 @@ export async function runAdsAudit(services: Services, input: unknown): Promise<A
   return { status: 200, body: { source: resolved.source, audit: auditAds(resolved.metrics) } };
 }
 
+/** The refresh brief for a fatigued creative — kept generic so generateImage's brand-kit
+ * preamble does the on-brand grounding. */
+function refreshBrief(name: string | undefined, reason: string | undefined): string {
+  const subject = name ? ` to replace "${name}"` : '';
+  const why = reason ? ` It fatigued — ${reason.replace(/\.$/, '')}.` : '';
+  return `A fresh, scroll-stopping ad creative${subject}. Keep the same product and brand, but take a new visual angle: different composition, camera angle, and lighting.${why}`;
+}
+
+/**
+ * Close the loop: audit the metrics, find fatigued creatives, and regenerate an
+ * on-brand replacement image for each (reusing generateImage, which folds in the
+ * project brand kit). Degrades gracefully to a refresh *plan* when image
+ * generation isn't configured, so it's useful even without a fal key.
+ */
+export async function optimizeFatiguedCreatives(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as AdsMetricsInput & { max?: unknown };
+  const resolved = await resolveAdMetrics(services, fields);
+  if (!resolved.ok) return resolved.result;
+
+  const audit = auditAds(resolved.metrics);
+  const fatigued = audit.fatigue.filter((f) => f.status === 'fatigued');
+  const max = typeof fields.max === 'number' && Number.isFinite(fields.max) ? Math.min(10, Math.max(1, Math.round(fields.max))) : 3;
+  const imageReady = services.imageRegistry.available().includes('fal');
+
+  const optimizations: Array<{ creativeId: string; name?: string; score: number; reasons: string[]; brief: string; newAssetId: string | null }> = [];
+  for (const f of fatigued.slice(0, max)) {
+    const brief = refreshBrief(f.name, f.reasons[0]);
+    let newAssetId: string | null = null;
+    if (imageReady) {
+      const r = await generateImage(services, projectId, { prompt: brief });
+      const body = r.body as { asset?: { id?: string } | null };
+      newAssetId = body.asset?.id ?? null;
+    }
+    optimizations.push({ creativeId: f.creativeId, name: f.name, score: f.score, reasons: f.reasons, brief, newAssetId });
+  }
+
+  return {
+    status: 200,
+    body: {
+      source: resolved.source,
+      score: audit.score,
+      grade: audit.grade,
+      fatiguedCount: fatigued.length,
+      imageReady,
+      regenerated: optimizations.filter((o) => o.newAssetId),
+      optimizations,
+      recommendations: audit.recommendations,
+      ...(imageReady ? {} : { note: 'Image generation not configured (set FAL_KEY) — returned the refresh plan without generating new creatives.' }),
+    },
+  };
+}
+
 /** Seeds a brand kit from a website (name/tagline/key-messages/notes), merging
  * over any existing kit. Colors/fonts are left for the user to fill in. */
 export async function deriveBrandKitFromWebsite(

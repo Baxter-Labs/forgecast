@@ -750,6 +750,34 @@ server.registerTool(
   },
 );
 
+// 25. forgecast_optimize_creatives
+server.registerTool(
+  'forgecast_optimize_creatives',
+  {
+    title: 'Close the loop — regenerate fatigued creatives on-brand',
+    description:
+      'The optimize step: audit the metrics, find **fatigued** creatives, and regenerate a fresh, on-brand ' +
+      'replacement image for each (grounded in the project brand kit), into the given project. Feed it the same ' +
+      'way as `forgecast_ads_audit` — keyless `metrics`, or a connected `source` (meta|google).\n\n' +
+      'Args: project_id (string — produce the new creatives here), metrics (optional rows) OR source (meta|google), ' +
+      'max (1–10, optional — how many of the worst to refresh, default 3).\n' +
+      'Returns: `{ source, score, grade, fatiguedCount, imageReady, regenerated: [{ creativeId, newAssetId }], ' +
+      'optimizations[] }`. When image generation is not configured (no FAL_KEY), it returns the refresh *plan* ' +
+      '(briefs) without generating. Then `forgecast_publish_asset` the new creatives to cross-post them.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      metrics: metricsSchema,
+      source: z.string().optional(),
+      sinceDays: z.number().int().positive().optional(),
+      max: z.number().int().min(1).max(10).optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, metrics, source, sinceDays, max }) => {
+    try { return ok(await client.optimizeCreatives(project_id, { metrics, source, sinceDays, max })); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────

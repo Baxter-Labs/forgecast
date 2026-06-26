@@ -190,4 +190,9 @@ export class SpineClient {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }
+  optimizeCreatives(projectId: string, input: AdsMetricsInput & { max?: number }): Promise<{ source: string; fatiguedCount: number; imageReady: boolean; regenerated: Array<{ creativeId: string; newAssetId: string }>; optimizations: unknown[]; note?: string }> {
+    return this.req(`/api/projects/${projectId}/ads/optimize`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
 }
