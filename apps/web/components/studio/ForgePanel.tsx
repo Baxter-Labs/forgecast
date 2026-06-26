@@ -120,8 +120,8 @@ function BoostToggle({ active, onToggle }: { active: boolean; onToggle: () => vo
       </button>
       <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
         {active
-          ? <><span className="text-[var(--ember-1)] opacity-70">fal-ai/veo3.1/fast</span> · 4K + native audio</>
-          : <><span style={{ color: 'var(--forge-muted)' }}>fal-ai/wan/v2.2-a14b</span> · standard</>}
+          ? <><span className="text-[var(--ember-1)] opacity-70">Veo 3.1 Fast</span> · best · 4K + native audio</>
+          : <><span style={{ color: 'var(--forge-muted)' }}>Seedance 1.5 Pro</span> · best value · native audio</>}
       </p>
     </div>
   );
@@ -401,8 +401,12 @@ export function ForgePanel({
             </select>
             <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2 flex items-center gap-2">
               <span className="text-[var(--ember-1)] opacity-70">{model}</span>
-              <span className="text-[var(--forge-faint)]">·</span>
-              <span>active backend: fal</span>
+              {selectedModel?.note && (
+                <>
+                  <span className="text-[var(--forge-faint)]">·</span>
+                  <span>{selectedModel.note}</span>
+                </>
+              )}
             </p>
           </div>
 

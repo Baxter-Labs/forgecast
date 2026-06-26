@@ -33,7 +33,9 @@ export function makeForgecastActions(services: Services): ForgecastActions {
     },
     async generateImage(projectId, prompt, aspectRatio) {
       const dim = aspectRatio ? RATIO_TO_DIM[aspectRatio] : undefined;
-      const r = await generateImage(services, projectId, { prompt, ...(dim ?? {}) });
+      // Pass both: aspect_ratio models (Nano Banana, the default) use `aspectRatio`,
+      // image_size models (FLUX) use the pixel dims.
+      const r = await generateImage(services, projectId, { prompt, aspectRatio, ...(dim ?? {}) });
       const body = r.body as { asset?: { id: string } | null; job?: { status?: string; error?: string }; error?: string };
       const asset = body.asset;
       if (!asset) {

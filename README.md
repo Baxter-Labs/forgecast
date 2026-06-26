@@ -113,9 +113,11 @@ Forgecast is **model-agnostic** (every model is a swappable adapter), but it shi
 
 | Modality | Default | Best (opt-in) | Engine |
 |---|---|---|---|
-| **Image** | `fal-ai/flux/schnell` — fast, low-cost | FLUX dev/pro + 50+ models in the picker | fal.ai text-to-image |
-| **Video** | `fal-ai/wan/v2.2-a14b` (standard) · `bytedance/seedance/v1.5/pro` for the agent | **`fal-ai/veo3.1/fast`** — 4K + native audio (the Studio's **Boost Quality** toggle) · Kling 3 Pro for cinematic motion | fal.ai text→video **and** image→video |
+| **Image** | **`fal-ai/nano-banana`** (Google Gemini 2.5 Flash Image) — fast, low-cost, great | **`fal-ai/nano-banana-pro`** — state-of-the-art detail + text · FLUX.1 [dev]/[schnell] also in the picker | fal.ai text-to-image |
+| **Video** | **`bytedance/seedance/v1.5/pro`** — best value, native audio (the Studio's standard) | **`fal-ai/veo3.1/fast`** — 4K + native audio (the **Boost Quality** toggle) · **Kling 3 Pro** for cinematic motion (premium) | fal.ai text→video **and** image→video |
 | **Voice** | self-hosted **VoxCPM-2** (open-source, Apache-2.0) | cloud **fal TTS** (automatic fallback) | `VoiceProvider` |
+
+> Image models come in two sizing families: **Nano Banana** uses an `aspect_ratio` enum, **FLUX** uses pixel `image_size` — Forgecast sends the right one per model, and the picked model now flows all the way to fal (it previously always fell back to FLUX schnell). The Studio's image picker is a **curated, fal-runnable** set; the full vendored open-model list stays available as `openImageModels`.
 
 **How voice is generated.** Type a script in the Studio's **Voice** tab (or call `POST /api/projects/:id/generate-voiceover`). Forgecast runs it through the `VoiceProvider` — **VoxCPM-2** when `VOXCPM_URL` is set (self-hosted, zero per-use cost), otherwise cloud **fal TTS** — and produces a playable **audio asset**. You can cast it on its own, or **render** it onto a video clip as a narration (in-process ffmpeg mux). Voice generation is wired on **both** sides: the Studio UI (Voice tab + an in-gallery audio player) and the backend route/provider/job, plus the `narrate` flow for muxing voice onto a clip.
 
