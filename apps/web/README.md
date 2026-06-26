@@ -6,7 +6,7 @@ The Forgecast Studio — a Next.js 16 (App Router) application that serves as bo
 
 ```bash
 # from the monorepo root
-cp apps/web/.env.example apps/web/.env   # fill in your API keys
+cp .env.example apps/web/.env.local       # fill in your API keys (all optional)
 pnpm install
 pnpm -C apps/web dev                      # http://localhost:3210
 ```
