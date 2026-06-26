@@ -54,6 +54,14 @@ export interface AdCopyVariant { id: string; text: string; chars: number }
 /** Result of an ad-copy generation: the resolved platform, its char limit, and the variants. */
 export interface AdCopyResult { platform: string; label: string; limit: number; variants: AdCopyVariant[] }
 
+/** One creative's metrics for one day (the measure side). */
+export interface AdCreativeMetrics {
+  creativeId: string; name?: string; platform?: string; date: string;
+  impressions: number; clicks: number; spend: number; conversions?: number; frequency?: number;
+}
+/** Input for the ads endpoints: hand in `metrics` (keyless) or pull from a connected `source`. */
+export interface AdsMetricsInput { metrics?: AdCreativeMetrics[]; source?: string; sinceDays?: number }
+
 export class SpineClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -167,6 +175,18 @@ export class SpineClient {
   // ── Ad copy (platform-aware, char-limited, A/B variants) ──────────────────
   generateAdCopy(projectId: string, input: { brief: string; platform?: string; count?: number }): Promise<AdCopyResult> {
     return this.req(`/api/projects/${projectId}/ad-copy`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+
+  // ── Ads measure→optimize: insights + audit ────────────────────────────────
+  adsInsights(input: AdsMetricsInput): Promise<{ source: string; count: number; metrics: AdCreativeMetrics[] }> {
+    return this.req('/api/ads/insights', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+  adsAudit(input: AdsMetricsInput): Promise<{ source: string; audit: unknown }> {
+    return this.req('/api/ads/audit', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }

@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -37,6 +37,9 @@ export interface Services {
   presenterProvider: PresenterProvider;
   presenterAvailable: boolean;
   websiteReader: WebsiteReader;
+  insights: AdsInsightsRegistry;
+  /** Names of connected ad-insights sources (e.g. ['meta','google']). */
+  insightsAvailable: string[];
 }
 
 export interface BuildServicesOptions {
@@ -212,9 +215,16 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const websiteReader: WebsiteReader = new HttpWebsiteReader({ fetchFn: opts.fetchFn });
 
+  // Ad-performance sources for the measure→optimize loop. Unconfigured by default;
+  // the analyzers also run on metrics handed in directly, so this needs no keys.
+  const insights = new AdsInsightsRegistry();
+  insights.register(new MetaAdsInsightsProvider({ fetchFn: opts.fetchFn }));
+  insights.register(new GoogleAdsInsightsProvider({ fetchFn: opts.fetchFn }));
+  const insightsAvailable = insights.available();
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable };
 }
 
 /**

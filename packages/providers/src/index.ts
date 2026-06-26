@@ -15,3 +15,6 @@ export * from './voice/voxcpm';
 export * from './transcribe/wisprflow';
 export * from './presenter/omnihuman';
 export * from './website/http';
+export * from './insights/registry';
+export * from './insights/meta';
+export * from './insights/google';

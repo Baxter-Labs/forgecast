@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants } from '@forgecast/core';
-import type { MontageSpec, Job, VideoGenTask, BrandKit } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics } from '@forgecast/core';
+import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics } from '@forgecast/core';
 import { videoModelById } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
@@ -222,6 +222,81 @@ export async function generateAdCopy(
   if (variants.length === 0) return { status: 502, body: { error: 'no ad-copy variants returned' } };
 
   return { status: 200, body: { platform: spec.platform, label: spec.label, limit: spec.limit, variants } };
+}
+
+// ── Ads measure→optimize: insights, fatigue, audit ───────────────────────────
+
+interface AdsMetricsInput { metrics?: unknown; source?: unknown; sinceDays?: unknown }
+
+/** Validate + coerce a caller-supplied metrics array into clean AdCreativeMetrics rows. */
+function sanitizeAdMetrics(rows: unknown[]): AdCreativeMetrics[] {
+  const out: AdCreativeMetrics[] = [];
+  for (const r of rows) {
+    if (!isAdCreativeMetrics(r)) continue;
+    out.push({
+      creativeId: String(r.creativeId),
+      name: typeof r.name === 'string' ? r.name : undefined,
+      platform: typeof r.platform === 'string' ? r.platform : undefined,
+      date: String(r.date),
+      impressions: Math.max(0, r.impressions),
+      clicks: Math.max(0, r.clicks),
+      spend: Math.max(0, r.spend),
+      conversions: typeof r.conversions === 'number' ? Math.max(0, r.conversions) : undefined,
+      frequency: typeof r.frequency === 'number' ? r.frequency : undefined,
+    });
+  }
+  return out;
+}
+
+type ResolvedMetrics = { ok: true; metrics: AdCreativeMetrics[]; source: string } | { ok: false; result: ApiResult };
+
+/**
+ * Get ad metrics either from the request body (keyless — `metrics: [...]`) or by
+ * pulling from a connected provider (`source: 'meta'|'google'`, else the first
+ * configured one). Keeps every ads endpoint usable with or without credentials.
+ */
+async function resolveAdMetrics(services: Services, input: AdsMetricsInput): Promise<ResolvedMetrics> {
+  if (Array.isArray(input.metrics)) {
+    const metrics = sanitizeAdMetrics(input.metrics);
+    if (metrics.length === 0) {
+      return { ok: false, result: { status: 400, body: { error: 'metrics had no valid rows — each needs creativeId, date, impressions, clicks, spend' } } };
+    }
+    return { ok: true, metrics, source: 'provided' };
+  }
+
+  const requested = typeof input.source === 'string' && input.source.trim() ? input.source.trim() : undefined;
+  const chosen = requested ?? services.insights.available()[0];
+  if (!chosen) {
+    return { ok: false, result: { status: 503, body: { error: 'no metrics provided and no ads source configured — pass `metrics`, or set META_ADS_* / GOOGLE_ADS_* to auto-pull' } } };
+  }
+  if (!services.insights.has(chosen)) {
+    return { ok: false, result: { status: 400, body: { error: `unknown ads source '${chosen}'` } } };
+  }
+  const provider = services.insights.get(chosen);
+  if (!provider.isAvailable()) {
+    return { ok: false, result: { status: 503, body: { error: `ads source '${chosen}' not configured` } } };
+  }
+  const sinceDays = typeof input.sinceDays === 'number' && Number.isFinite(input.sinceDays) ? input.sinceDays : undefined;
+  try {
+    const metrics = await provider.fetchInsights({ sinceDays });
+    return { ok: true, metrics, source: chosen };
+  } catch (e) {
+    return { ok: false, result: { status: 502, body: { error: `ads insights fetch failed: ${e instanceof Error ? e.message : String(e)}` } } };
+  }
+}
+
+/** Raw per-creative, per-day ad metrics — pulled from a connected source or echoed back. */
+export async function getAdsInsights(services: Services, input: unknown): Promise<ApiResult> {
+  const resolved = await resolveAdMetrics(services, (input ?? {}) as AdsMetricsInput);
+  if (!resolved.ok) return resolved.result;
+  return { status: 200, body: { source: resolved.source, count: resolved.metrics.length, metrics: resolved.metrics } };
+}
+
+/** Full account audit: health-dimension scores, per-creative fatigue, and recommendations. */
+export async function runAdsAudit(services: Services, input: unknown): Promise<ApiResult> {
+  const resolved = await resolveAdMetrics(services, (input ?? {}) as AdsMetricsInput);
+  if (!resolved.ok) return resolved.result;
+  return { status: 200, body: { source: resolved.source, audit: auditAds(resolved.metrics) } };
 }
 
 /** Seeds a brand kit from a website (name/tagline/key-messages/notes), merging
