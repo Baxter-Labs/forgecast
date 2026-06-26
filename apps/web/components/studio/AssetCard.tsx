@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Send, Download, Pencil } from 'lucide-react';
+import { Send, Download, Pencil, AudioLines } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { Lightbox } from './Lightbox';
 
@@ -22,19 +22,21 @@ export function AssetCard({
   selectable = false, selected = false, onSelect,
 }: AssetCardProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const prompt = asset.params.prompt ?? '';
+  // Voice-over assets carry their script in params.text rather than params.prompt.
+  const prompt = asset.params.prompt ?? asset.params.text ?? '';
   const isVideo = asset.type === 'video';
+  const isAudio = asset.type === 'audio';
   const w = asset.params.width;
   const h = asset.params.height;
   const modelId = asset.params.model ?? asset.provider;
   const ar = asset.params.aspectRatio;
-  const videoTag = asset.provider === 'remotion' ? 'MONTAGE' : 'VIDEO';
+  const badge = isAudio ? 'VOICE' : asset.provider === 'remotion' ? 'MONTAGE' : 'VIDEO';
   const dims = w && h ? `${w}×${h}` : ar ? ar : null;
 
   function handleCardClick() {
     if (selectable && onSelect) {
       onSelect(asset.id);
-    } else {
+    } else if (!isAudio) {
       setLightboxOpen(true);
     }
   }
@@ -52,7 +54,7 @@ export function AssetCard({
         }}
       >
         <div
-          className={`relative group ${selectable ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+          className={`relative group ${selectable ? 'cursor-pointer' : isAudio ? 'cursor-default' : 'cursor-zoom-in'}`}
           onClick={handleCardClick}
         >
           {isVideo ? (
@@ -61,6 +63,15 @@ export function AssetCard({
               muted loop playsInline
               className="w-full aspect-square object-cover block bg-black pointer-events-none"
             />
+          ) : isAudio ? (
+            <div
+              className="w-full aspect-square flex flex-col items-center justify-center gap-4 px-5 bg-gradient-to-b from-[var(--forge-surface-2)] to-[var(--forge-bg)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AudioLines size={40} className="text-[var(--ember-1)]" aria-hidden="true" />
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <audio src={`/api/assets/${asset.id}/raw`} controls className="w-full" />
+            </div>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -70,16 +81,16 @@ export function AssetCard({
               loading="lazy"
             />
           )}
-          {isVideo && (
+          {(isVideo || isAudio) && (
             <span
               className="absolute top-2 left-2 font-mono text-[9px] uppercase tracking-[0.12em] px-1.5 py-0.5 rounded"
               style={{ background: 'var(--molten)', color: '#1a0c03', boxShadow: '0 0 10px var(--ember-glow)' }}
             >
-              {videoTag}
+              {badge}
             </span>
           )}
-          {/* Expand hint (only in non-selectable mode) */}
-          {!selectable && (
+          {/* Expand hint (only in non-selectable, non-audio mode) */}
+          {!selectable && !isAudio && (
             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(0,0,0,0.3)' }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
@@ -137,16 +148,18 @@ export function AssetCard({
               </div>
               {!selectable && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <Link
-                    href={`/edit/${asset.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Open in editor"
-                    title="Open this asset in the editor"
-                    className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-colors hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] cursor-pointer"
-                    style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
-                  >
-                    <Pencil size={10} /> Edit
-                  </Link>
+                  {!isAudio && (
+                    <Link
+                      href={`/edit/${asset.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Open in editor"
+                      title="Open this asset in the editor"
+                      className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded border transition-colors hover:border-[var(--ember-2)] hover:text-[var(--ember-1)] cursor-pointer"
+                      style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}
+                    >
+                      <Pencil size={10} /> Edit
+                    </Link>
+                  )}
                   {onPublish && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onPublish(asset); }}

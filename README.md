@@ -107,6 +107,22 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 
 ---
 
+## Models & generation — defaults, best, and how voice works
+
+Forgecast is **model-agnostic** (every model is a swappable adapter), but it ships with sensible defaults and a clear "best" option you can opt into:
+
+| Modality | Default | Best (opt-in) | Engine |
+|---|---|---|---|
+| **Image** | `fal-ai/flux/schnell` — fast, low-cost | FLUX dev/pro + 50+ models in the picker | fal.ai text-to-image |
+| **Video** | `fal-ai/wan/v2.2-a14b` (standard) · `bytedance/seedance/v1.5/pro` for the agent | **`fal-ai/veo3.1/fast`** — 4K + native audio (the Studio's **Boost Quality** toggle) · Kling 3 Pro for cinematic motion | fal.ai text→video **and** image→video |
+| **Voice** | self-hosted **VoxCPM-2** (open-source, Apache-2.0) | cloud **fal TTS** (automatic fallback) | `VoiceProvider` |
+
+**How voice is generated.** Type a script in the Studio's **Voice** tab (or call `POST /api/projects/:id/generate-voiceover`). Forgecast runs it through the `VoiceProvider` — **VoxCPM-2** when `VOXCPM_URL` is set (self-hosted, zero per-use cost), otherwise cloud **fal TTS** — and produces a playable **audio asset**. You can cast it on its own, or **render** it onto a video clip as a narration (in-process ffmpeg mux). Voice generation is wired on **both** sides: the Studio UI (Voice tab + an in-gallery audio player) and the backend route/provider/job, plus the `narrate` flow for muxing voice onto a clip.
+
+**Rendering.** The **Montage** tab is the renderer: it generates clips and stitches them into a finished video via **Remotion**, or **in-process ffmpeg** by default (no Chromium worker needed). Narrated-video rendering muxes a voice-over onto a clip the same way. Everything resolves to a downloadable asset.
+
+---
+
 ## Monorepo layout
 
 ```
