@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export interface StudioAsset {
   id: string;
   type: 'image' | 'video' | 'audio';
-  params: { prompt?: string; width?: number; height?: number; model?: string; aspectRatio?: string };
+  params: { prompt?: string; text?: string; width?: number; height?: number; model?: string; aspectRatio?: string };
   provider: string;
   createdAt: string;
 }

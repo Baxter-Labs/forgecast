@@ -9,7 +9,7 @@ import type { StoredCampaign } from './CampaignPanel';
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
 
-export type ForgeMode = 'image' | 'video' | 'montage';
+export type ForgeMode = 'image' | 'video' | 'montage' | 'voice';
 
 interface ForgePanelProps {
   mode: ForgeMode;
@@ -18,6 +18,8 @@ interface ForgePanelProps {
   setPrompt: (v: string) => void;
   model: string;
   setModel: (v: string) => void;
+  voiceName: string;
+  setVoiceName: (v: string) => void;
   boostQuality: boolean;
   setBoostQuality: (v: boolean) => void;
   videoImageAssetId: string | null;
@@ -59,6 +61,7 @@ const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'image', label: 'Image' },
   { id: 'video', label: 'Video' },
   { id: 'montage', label: 'Montage' },
+  { id: 'voice', label: 'Voice' },
 ];
 
 function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string; setRatio: (v: string) => void }) {
@@ -187,7 +190,7 @@ function ImageSourcePicker({
 }
 
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, boostQuality, setBoostQuality,
+  mode, setMode, prompt, setPrompt, model, setModel, voiceName, setVoiceName, boostQuality, setBoostQuality,
   videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
   assets,
@@ -205,6 +208,7 @@ export function ForgePanel({
   function segmentAvailable(id: ForgeMode): boolean {
     if (id === 'video') return availability.video;
     if (id === 'montage') return availability.video && availability.montage;
+    if (id === 'voice') return availability.voice;
     return true;
   }
 
@@ -214,7 +218,9 @@ export function ForgePanel({
       ? 'montage offline · set FAL_KEY_VIDEO (clips required)'
       : mode === 'montage' && !availability.montage
         ? 'montage offline · set MONTAGE_WORKER_URL'
-        : null;
+        : mode === 'voice' && !availability.voice
+          ? 'voice offline · set VOXCPM_URL (self-hosted) or FAL_KEY_VOICE'
+          : null;
 
   const hasCampaign = !!activeCampaignId;
 
@@ -227,16 +233,19 @@ export function ForgePanel({
       ? prompt.trim().length > 0
       : mode === 'video'
         ? prompt.trim().length > 0 && availability.video && (!isI2V || !!videoImageAssetId)
-        : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
+        : mode === 'voice'
+          ? prompt.trim().length > 0 && availability.voice
+          : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
     !hasCampaign ? '⚒ SELECT A CAMPAIGN FIRST'
       : mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
         : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
-          : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
+          : mode === 'voice' ? (forging ? '⚒ FORGING…' : '⚒ FORGE VOICE →')
+            : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
   const forgeAction =
-    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : 'Forge image';
+    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : 'Forge image';
 
   function submitNewCampaign() {
     const name = newCampaignName.trim();
@@ -325,7 +334,7 @@ export function ForgePanel({
 
       {/* MODE TOGGLE */}
       <div>
-        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
+        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
           {SEGMENTS.map((seg) => {
             const active = seg.id === mode;
             const available = segmentAvailable(seg.id);
@@ -461,6 +470,38 @@ export function ForgePanel({
           <p className="font-mono text-[10px] text-[var(--forge-faint)]">
             generates 3 video clips and stitches them into a montage (Remotion)
           </p>
+        </>
+      )}
+
+      {/* VOICE MODE */}
+      {mode === 'voice' && (
+        <>
+          <div>
+            <FieldLabel htmlFor="forge-voice-script">Script</FieldLabel>
+            <textarea
+              id="forge-voice-script"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="The words to speak — Forgecast turns them into a natural voice-over you can narrate a video with or cast on its own…"
+              rows={6}
+              className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)]"
+            />
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="forge-voice-name">Voice <span className="normal-case tracking-normal text-[var(--forge-faint)]">(optional)</span></FieldLabel>
+            <input
+              id="forge-voice-name"
+              type="text"
+              value={voiceName}
+              onChange={(e) => setVoiceName(e.target.value)}
+              placeholder="e.g. narrator · leave blank for the default"
+              className="w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm px-3 py-2.5 outline-none focus:border-[var(--ember-2)] transition-colors"
+            />
+            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
+              self-hosted <span className="text-[var(--ember-1)] opacity-70">VoxCPM-2</span> when configured, else fal TTS
+            </p>
+          </div>
         </>
       )}
 

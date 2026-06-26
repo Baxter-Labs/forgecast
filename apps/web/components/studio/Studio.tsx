@@ -94,7 +94,7 @@ export function Studio() {
   const {
     projectId,
     providers, publishers, availability, pro, assets, status, error,
-    generateImage, generateVideo, generateMontage,
+    generateImage, generateVideo, generateMontage, generateVoiceover,
     composeVideo,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
@@ -108,6 +108,7 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
+  const [voiceName, setVoiceName] = useState('');
   const [boostQuality, setBoostQuality] = useState(false);
   const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-a14b/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
@@ -230,6 +231,8 @@ export function Studio() {
       void generateImage({ prompt, model, width, height }).then(attach);
     } else if (mode === 'video') {
       void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
+    } else if (mode === 'voice') {
+      void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -292,6 +295,8 @@ export function Studio() {
                 setPrompt={setPrompt}
                 model={model}
                 setModel={setModel}
+                voiceName={voiceName}
+                setVoiceName={setVoiceName}
                 boostQuality={boostQuality}
                 setBoostQuality={setBoostQuality}
                 videoImageAssetId={videoImageAssetId}
