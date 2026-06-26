@@ -296,3 +296,13 @@ The single best place to start: **add a provider adapter.** A local Stable Diffu
 ## License
 
 [MIT](LICENSE) © Baxter Labs. Generated content and provider usage are governed by each provider's own terms.
+
+---
+
+## Demo
+
+A scroll-stopping vertical social ad, forged end-to-end with Forgecast — generate → brand → cast:
+
+<video src="https://github.com/eshwarpk/forgecast/raw/main/docs/media/forgecast-social-ad.mp4" controls muted loop width="320"></video>
+
+> Player not loading in your viewer? [Watch the clip here.](docs/media/forgecast-social-ad.mp4)
