@@ -13,6 +13,10 @@ export interface ImageJobParams {
   prompt: string;
   width?: number;
   height?: number;
+  /** fal model endpoint to use (else the provider's default). */
+  model?: string;
+  /** Provider-specific request params (e.g. `aspect_ratio` for Nano Banana). */
+  extra?: Record<string, unknown>;
 }
 
 export interface ImageJobHandlerDeps {
@@ -43,6 +47,8 @@ export class ImageJobHandler implements JobHandler {
       prompt: params.prompt,
       width: params.width,
       height: params.height,
+      model: params.model,
+      extra: params.extra,
     });
     await report(0.6);
 

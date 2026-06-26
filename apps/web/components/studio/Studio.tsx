@@ -110,7 +110,7 @@ export function Studio() {
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
   const [voiceName, setVoiceName] = useState('');
   const [boostQuality, setBoostQuality] = useState(false);
-  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/wan/v2.2-a14b/text-to-video';
+  const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
@@ -228,7 +228,7 @@ export function Studio() {
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
-      void generateImage({ prompt, model, width, height }).then(attach);
+      void generateImage({ prompt, model, aspectRatio: ratio, width, height }).then(attach);
     } else if (mode === 'video') {
       void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
     } else if (mode === 'voice') {

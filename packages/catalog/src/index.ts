@@ -1,12 +1,62 @@
 import rawData from '../data/openmodels-t2i.json';
 import { parseImageModels } from './parse';
-import type { VideoModel } from './types';
+import type { CatalogModel, VideoModel } from './types';
 
 export * from './types';
 export * from './parse';
 
-/** The vendored text-to-image catalog, parsed and validated at module load. */
-export const imageModels = parseImageModels(rawData);
+/**
+ * Curated, **fal-runnable** text-to-image models — the ones the Studio actually
+ * submits, with verified `fal-ai/…` endpoint ids and the correct sizing convention
+ * per family. Led by Nano Banana (Google Gemini 2.5 Flash Image), the recommended
+ * best. The larger vendored open catalog is available as `openImageModels` for
+ * browsing, but those short ids are not fal endpoints.
+ */
+export const imageModels: CatalogModel[] = [
+  {
+    id: 'fal-ai/nano-banana',
+    name: 'Nano Banana',
+    category: 'image',
+    sizing: 'aspect_ratio',
+    note: 'recommended · fast, low-cost, great quality',
+    aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  },
+  {
+    id: 'fal-ai/nano-banana-pro',
+    name: 'Nano Banana Pro',
+    category: 'image',
+    sizing: 'aspect_ratio',
+    note: 'best · state-of-the-art detail + text (premium)',
+    aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  },
+  {
+    id: 'fal-ai/flux/dev',
+    name: 'FLUX.1 [dev]',
+    category: 'image',
+    sizing: 'image_size',
+    note: 'high quality, open weights',
+    aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+  },
+  {
+    id: 'fal-ai/flux/schnell',
+    name: 'FLUX.1 [schnell]',
+    category: 'image',
+    sizing: 'image_size',
+    note: 'fastest · cheapest',
+    aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+  },
+];
+
+/** Recommended default image model (best balance of quality + cost). */
+export const defaultImageModelId = 'fal-ai/nano-banana';
+
+/** Look up a curated image model by its fal endpoint id. */
+export function imageModelById(id: string): CatalogModel | undefined {
+  return imageModels.find((m) => m.id === id);
+}
+
+/** The full vendored open-model browse list (short ids; not all fal-runnable). */
+export const openImageModels: CatalogModel[] = parseImageModels(rawData);
 
 /** Curated fal.ai video models (text-to-video and image-to-video). */
 export const videoModels: VideoModel[] = [
@@ -50,7 +100,7 @@ export const videoModels: VideoModel[] = [
     name: 'Seedance 1.5 Pro',
     category: 'video',
     mode: 'text-to-video',
-    note: 'native audio, keyframes',
+    note: 'best value · native audio + keyframes',
     audio: true,
     aspectRatios: ['16:9', '9:16', '1:1'],
   },
@@ -59,7 +109,7 @@ export const videoModels: VideoModel[] = [
     name: 'Kling 3 Pro',
     category: 'video',
     mode: 'text-to-video',
-    note: 'cinematic motion + audio',
+    note: 'best · cinematic motion + audio (premium)',
     audio: true,
     aspectRatios: ['16:9', '9:16', '1:1'],
   },
@@ -68,7 +118,7 @@ export const videoModels: VideoModel[] = [
     name: 'Veo 3.1 Fast',
     category: 'video',
     mode: 'text-to-video',
-    note: '4K + native audio',
+    note: 'best · 4K + native audio',
     audio: true,
     aspectRatios: ['16:9', '9:16'],
   },
