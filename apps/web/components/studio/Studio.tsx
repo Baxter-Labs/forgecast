@@ -1,10 +1,11 @@
 'use client';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
-import { Palette } from 'lucide-react';
+import { Palette, Activity } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
 import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
 import { BrandKitModal } from './BrandKitModal';
+import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode } from './ForgePanel';
 import { CreatePanel } from './CreatePanel';
@@ -95,13 +96,14 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo,
-    publishAsset, generateAdCopy, uploadAsset, createFromWebsite,
+    publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
 
   const brand = useBrandKit(projectId);
   const [brandKitOpen, setBrandKitOpen] = useState(false);
+  const [perfOpen, setPerfOpen] = useState(false);
 
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
@@ -262,6 +264,21 @@ export function Studio() {
             </span>
           </button>
 
+          {/* Ad Performance — audit fatigue + regenerate on-brand */}
+          <button
+            type="button"
+            onClick={() => setPerfOpen(true)}
+            aria-label="Open Ad Performance"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-colors cursor-pointer hover:border-[var(--ember-2)]"
+            style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Activity size={14} className="text-[var(--ember-1)] shrink-0" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--forge-text)] truncate">Ad Performance</span>
+            </span>
+            <span className="font-mono text-[10px] text-[var(--forge-faint)] shrink-0">audit &amp; optimize</span>
+          </button>
+
           <CreatePanel
             building={webBuilding}
             imageAvailable={availability.image}
@@ -385,6 +402,7 @@ export function Studio() {
       </main>
 
       <BrandKitModal open={brandKitOpen} onClose={() => setBrandKitOpen(false)} brand={brand} />
+      <PerformancePanel open={perfOpen} onClose={() => setPerfOpen(false)} onAudit={auditAds} onOptimize={optimizeCreatives} />
     </div>
   );
 }

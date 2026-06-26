@@ -277,6 +277,34 @@ export function useForgecast() {
     }
   }, [projectId]);
 
+  const auditAds = useCallback(async (metrics: unknown[]): Promise<{ source?: string; audit?: unknown; error?: string }> => {
+    try {
+      const res = await fetch('/api/ads/audit', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ metrics }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Audit failed (${res.status})` };
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
+  const optimizeCreatives = useCallback(async (metrics: unknown[], max = 3): Promise<{ imageReady?: boolean; regenerated?: Array<{ creativeId: string; newAssetId: string }>; optimizations?: unknown[]; note?: string; error?: string }> => {
+    if (!projectId) return { error: 'No active project' };
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ads/optimize`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ metrics, max }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Optimize failed (${res.status})` };
+      await refreshAssets();
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId, refreshAssets]);
+
   const generateVoiceover = useCallback(async ({ text, voice }: GenerateVoiceoverArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -557,7 +585,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, generateAdCopy, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
+    publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

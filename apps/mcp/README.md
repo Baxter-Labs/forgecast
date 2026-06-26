@@ -105,6 +105,7 @@ These need an LLM key on the web app (`OPENAI_API_KEY`, or `FORGECAST_AGENT_LLM=
 | `forgecast_agent_run` | **Agent — Auto-run:** brief → brainstorm **and** produce in one shot |
 | `forgecast_ads_audit` | **Measure:** audit ad performance → health score + grade, per-creative **fatigue** diagnosis, recommendations (keyless via `metrics`, or auto-pull `source` meta/google) |
 | `forgecast_ads_insights` | Pull normalized per-creative/day ad metrics from a connected account, or echo provided `metrics` |
+| `forgecast_optimize_creatives` | **Optimize:** find fatigued creatives and regenerate on-brand replacements into a project (degrades to a refresh plan when no FAL_KEY) — closes the create→measure→optimize loop |
 
 Every tool returns structured JSON; async ones return a job to poll with `forgecast_get_job`. The three agent tools need an LLM key on the web app.
 
