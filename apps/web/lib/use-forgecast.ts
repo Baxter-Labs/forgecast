@@ -259,6 +259,24 @@ export function useForgecast() {
     }
   }, []);
 
+  const generateAdCopy = useCallback(async (
+    brief: string,
+    platform: string,
+    count = 3,
+  ): Promise<{ platform?: string; label?: string; limit?: number; variants?: { id: string; text: string; chars: number }[]; error?: string }> => {
+    if (!projectId) return { error: 'No active project' };
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ad-copy`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ brief, platform, count }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { error: data?.error ?? `Ad-copy failed (${res.status})` };
+      return data ?? { error: 'Unexpected response' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, [projectId]);
+
   const generateVoiceover = useCallback(async ({ text, voice }: GenerateVoiceoverArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -539,7 +557,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
-    publishAsset, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
+    publishAsset, generateAdCopy, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   };

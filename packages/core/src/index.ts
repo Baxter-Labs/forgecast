@@ -14,3 +14,4 @@ export * from './transcribe';
 export * from './presenter';
 export * from './website';
 export * from './brandkit';
+export * from './adcopy';

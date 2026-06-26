@@ -95,7 +95,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage,
     composeVideo,
-    publishAsset, uploadAsset, createFromWebsite,
+    publishAsset, generateAdCopy, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
   } = useForgecast();
@@ -376,6 +376,7 @@ export function Studio() {
                 asset={publishingAsset}
                 publishers={publishers}
                 onPublish={publishAsset}
+                onGenerateAdCopy={generateAdCopy}
                 onClose={() => setPublishingAsset(null)}
               />
             </div>
