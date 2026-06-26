@@ -4,6 +4,7 @@ export * from './video/moneyprinter';
 export * from './video/pixverse';
 export * from './video/fal';
 export * from './publish/registry';
+export * from './publish/webhook';
 export * from './publish/omnisocials';
 export * from './publish/instagram';
 export * from './publish/linkedin';
