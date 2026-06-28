@@ -62,6 +62,31 @@ export interface AdCreativeMetrics {
 /** Input for the ads endpoints: hand in `metrics` (keyless) or pull from a connected `source`. */
 export interface AdsMetricsInput { metrics?: AdCreativeMetrics[]; source?: string; sinceDays?: number }
 
+/** Short-video (MoneyPrinterTurbo) options — vendor-neutral; the app maps them to the worker. */
+export interface ShortVideoOptions {
+  aspect?: '9:16' | '16:9' | '1:1';
+  script?: string;
+  terms?: string[];
+  clipDuration?: number;
+  count?: number;
+  source?: 'pexels' | 'pixabay' | 'local';
+  concatMode?: 'random' | 'sequential';
+  transition?: 'none' | 'Shuffle' | 'FadeIn' | 'FadeOut' | 'SlideIn' | 'SlideOut';
+  voiceName?: string;
+  voiceVolume?: number;
+  voiceRate?: number;
+  bgmType?: string;
+  bgmVolume?: number;
+  subtitles?: boolean;
+  subtitlePosition?: 'top' | 'center' | 'bottom' | 'custom';
+  fontName?: string;
+  textColor?: string;
+  fontSize?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  paragraphs?: number;
+}
+
 export class SpineClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -98,8 +123,8 @@ export class SpineClient {
   generateImage(projectId: string, input: GenerateImageInput): Promise<{ job: Job; asset: Asset | null }> {
     return this.req(`/api/projects/${projectId}/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
   }
-  generateShortVideo(projectId: string, subject: string): Promise<{ job: Job }> {
-    return this.req(`/api/projects/${projectId}/generate-video`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject }) });
+  generateShortVideo(projectId: string, subject: string, options?: ShortVideoOptions): Promise<{ job: Job }> {
+    return this.req(`/api/projects/${projectId}/generate-video`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject, options }) });
   }
   generateVideo(projectId: string, input: { prompt: string; aspectRatio?: string; duration?: number; quality?: string; model?: string }): Promise<{ job: { id: string; kind: string; status: string } }> {
     return this.req(`/api/projects/${projectId}/generate-clip`, {

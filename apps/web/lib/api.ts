@@ -1,5 +1,5 @@
 import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics } from '@forgecast/core';
-import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics } from '@forgecast/core';
+import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
@@ -442,21 +442,67 @@ async function resolveAssetUrl(services: Services, assetId: string): Promise<str
   return `data:${got.contentType};base64,${toBase64(got.data)}`;
 }
 
+const SHORT_ASPECTS = new Set(['9:16', '16:9', '1:1']);
+const SHORT_SOURCES = new Set(['pexels', 'pixabay', 'local']);
+const SHORT_CONCAT = new Set(['random', 'sequential']);
+const SHORT_TRANSITIONS = new Set(['none', 'Shuffle', 'FadeIn', 'FadeOut', 'SlideIn', 'SlideOut']);
+const SHORT_SUB_POS = new Set(['top', 'center', 'bottom', 'custom']);
+
+function clampNum(v: unknown, min: number, max: number): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+  return Math.min(max, Math.max(min, v));
+}
+
+/** Validate + clamp untrusted short-video options into a typed ShortVideoOptions. */
+function sanitizeShortVideoOptions(input: unknown): ShortVideoOptions | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const o = input as Record<string, unknown>;
+  const out: ShortVideoOptions = {};
+  if (typeof o.aspect === 'string' && SHORT_ASPECTS.has(o.aspect)) out.aspect = o.aspect as ShortVideoOptions['aspect'];
+  if (typeof o.script === 'string' && o.script.trim().length > 0) out.script = o.script;
+  if (Array.isArray(o.terms)) {
+    const t = o.terms.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+    if (t.length > 0) out.terms = t;
+  }
+  const cd = clampNum(o.clipDuration, 1, 30); if (cd !== undefined) out.clipDuration = Math.round(cd);
+  const ct = clampNum(o.count, 1, 10); if (ct !== undefined) out.count = Math.round(ct);
+  if (typeof o.source === 'string' && SHORT_SOURCES.has(o.source)) out.source = o.source as ShortVideoOptions['source'];
+  if (typeof o.concatMode === 'string' && SHORT_CONCAT.has(o.concatMode)) out.concatMode = o.concatMode as ShortVideoOptions['concatMode'];
+  if (typeof o.transition === 'string' && SHORT_TRANSITIONS.has(o.transition)) out.transition = o.transition as ShortVideoOptions['transition'];
+  if (typeof o.voiceName === 'string') out.voiceName = o.voiceName;
+  const vv = clampNum(o.voiceVolume, 0, 5); if (vv !== undefined) out.voiceVolume = vv;
+  const vr = clampNum(o.voiceRate, 0.5, 2); if (vr !== undefined) out.voiceRate = vr;
+  if (typeof o.bgmType === 'string') out.bgmType = o.bgmType;
+  const bv = clampNum(o.bgmVolume, 0, 1); if (bv !== undefined) out.bgmVolume = bv;
+  if (typeof o.subtitles === 'boolean') out.subtitles = o.subtitles;
+  if (typeof o.subtitlePosition === 'string' && SHORT_SUB_POS.has(o.subtitlePosition)) out.subtitlePosition = o.subtitlePosition as ShortVideoOptions['subtitlePosition'];
+  if (typeof o.fontName === 'string') out.fontName = o.fontName;
+  if (typeof o.textColor === 'string') out.textColor = o.textColor;
+  const fs = clampNum(o.fontSize, 10, 200); if (fs !== undefined) out.fontSize = Math.round(fs);
+  if (typeof o.strokeColor === 'string') out.strokeColor = o.strokeColor;
+  const sw = clampNum(o.strokeWidth, 0, 10); if (sw !== undefined) out.strokeWidth = sw;
+  const pn = clampNum(o.paragraphs, 1, 10); if (pn !== undefined) out.paragraphs = Math.round(pn);
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export async function generateShortVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   if (!services.videoWorker.isAvailable()) {
     return { status: 503, body: { error: 'short-video worker not configured (set FORGECAST_VIDEO_WORKER_URL)' } };
   }
-  const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown };
+  const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown; options?: unknown };
   const rawSubject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
   if (rawSubject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
   // Ground the short video in the project's brand kit (no-op when none is set).
   const subject = applyBrandKit(await getBrandKit(services, projectId), rawSubject);
+  const options = sanitizeShortVideoOptions(fields.options);
 
+  const params: Record<string, unknown> = { subject };
+  if (options) params.options = options;
   const job = await services.jobs.create(
     newJob(
-      { projectId, kind: 'short_video', provider: 'moneyprinter', params: { subject } },
+      { projectId, kind: 'short_video', provider: 'moneyprinter', params },
       { id: services.ids.randomId(), now: services.ids.nowIso() },
     ),
   );

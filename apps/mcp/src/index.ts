@@ -170,26 +170,53 @@ server.registerTool(
 server.registerTool(
   'forgecast_generate_short_video',
   {
-    title: 'Generate Short Video',
+    title: 'Generate Short Video (topic → captioned vertical clip)',
     description:
-      'Starts an ASYNC short-video generation job for the specified project. ' +
-      'This is a fire-and-forget call — it immediately returns a queued job. ' +
-      'Poll `forgecast_get_job` with the returned job ID to track progress.\n\n' +
+      'Starts an ASYNC MoneyPrinterTurbo short-video job: a topic → LLM script → ' +
+      'stock footage (Pexels/Pixabay) → TTS narration → **burned-in styled captions** → ' +
+      'background music → a finished vertical clip. Fire-and-forget; poll `forgecast_get_job`.\n\n' +
       'Args:\n' +
-      '  project_id (string): ID of an existing project.\n' +
-      '  subject (string): Topic or description for the short video.\n\n' +
-      'Returns: `{ job: { id, kind, status } }` where status is "queued".\n\n' +
-      'Example: `forgecast_generate_short_video({ project_id: "p_xyz", subject: "cats in space" })`\n' +
-      '→ `{ "job": { "id": "j_abc", "kind": "short_video", "status": "queued" } }`\n' +
-      'Then poll: `forgecast_get_job({ job_id: "j_abc" })` until status = "done".\n\n' +
-      'Error guidance: A 503 means FORGECAST_VIDEO_WORKER_URL is not configured on ' +
-      'the Forgecast app. A 404 means the project does not exist.',
-    inputSchema: z.object({ project_id: z.string(), subject: z.string() }).strict(),
+      '  project_id (string), subject (string — the topic).\n' +
+      '  options (object, optional): aspect ("9:16" default / "16:9" / "1:1"), subtitles (bool, ' +
+      'default on) + subtitlePosition/fontSize/textColor/strokeColor, count (1–10, batch), ' +
+      'clipDuration (sec), source ("pexels"/"pixabay"/"local"), voiceName, bgmType/bgmVolume, ' +
+      'script (your own narration), terms (search terms), paragraphs (1–10 script length), ' +
+      'transition, concatMode.\n\n' +
+      'Returns: `{ job: { id, kind, status } }`. Then poll `forgecast_get_job` until "done".\n\n' +
+      'Error guidance: A 503 means FORGECAST_VIDEO_WORKER_URL is not configured (run the ' +
+      'MoneyPrinterTurbo worker — see workers/shorts). A 404 means the project does not exist.',
+    inputSchema: z.object({
+      project_id: z.string(),
+      subject: z.string(),
+      options: z.object({
+        aspect: z.enum(['9:16', '16:9', '1:1']).optional(),
+        script: z.string().optional(),
+        terms: z.array(z.string()).optional(),
+        clipDuration: z.number().optional(),
+        count: z.number().int().min(1).max(10).optional(),
+        source: z.enum(['pexels', 'pixabay', 'local']).optional(),
+        concatMode: z.enum(['random', 'sequential']).optional(),
+        transition: z.enum(['none', 'Shuffle', 'FadeIn', 'FadeOut', 'SlideIn', 'SlideOut']).optional(),
+        voiceName: z.string().optional(),
+        voiceVolume: z.number().optional(),
+        voiceRate: z.number().optional(),
+        bgmType: z.string().optional(),
+        bgmVolume: z.number().optional(),
+        subtitles: z.boolean().optional(),
+        subtitlePosition: z.enum(['top', 'center', 'bottom', 'custom']).optional(),
+        fontName: z.string().optional(),
+        textColor: z.string().optional(),
+        fontSize: z.number().optional(),
+        strokeColor: z.string().optional(),
+        strokeWidth: z.number().optional(),
+        paragraphs: z.number().int().min(1).max(10).optional(),
+      }).strict().optional(),
+    }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
-  async ({ project_id, subject }) => {
+  async ({ project_id, subject, options }) => {
     try {
-      return ok(await client.generateShortVideo(project_id, subject));
+      return ok(await client.generateShortVideo(project_id, subject, options));
     } catch (e) {
       return fail(e);
     }

@@ -1,7 +1,7 @@
 import {
   newAsset,
   type Job, type JobHandler, type JobOutcome, type ProgressReporter,
-  type StorageDriver, type AssetRepo, type ShortVideoWorker,
+  type StorageDriver, type AssetRepo, type ShortVideoWorker, type ShortVideoOptions,
 } from '@forgecast/core';
 
 export interface ShortVideoJobHandlerDeps {
@@ -27,10 +27,12 @@ function subjectOf(params: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+const RESERVED = new Set(['subject', 'topic', 'prompt', 'options']);
+
 function extraOf(params: Record<string, unknown>): Record<string, unknown> {
   const rest: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(params)) {
-    if (k !== 'subject' && k !== 'topic' && k !== 'prompt') rest[k] = v;
+    if (!RESERVED.has(k)) rest[k] = v;
   }
   return rest;
 }
@@ -44,7 +46,8 @@ export class ShortVideoJobHandler implements JobHandler {
     const subject = subjectOf(job.params);
     if (!subject) throw new Error('short_video job requires a "subject" (or prompt/topic) param');
 
-    const { taskId } = await this.deps.worker.createVideo({ subject, extra: extraOf(job.params) });
+    const options = job.params.options as ShortVideoOptions | undefined;
+    const { taskId } = await this.deps.worker.createVideo({ subject, options, extra: extraOf(job.params) });
     await report(0.05);
 
     const wait = this.deps.wait ?? defaultWait;
