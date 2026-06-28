@@ -163,7 +163,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     clock: nowIso,
     fetchFn: opts.fetchFn,
   });
-  const videoWorker = new MoneyPrinterWorker();
+  const videoWorker = new MoneyPrinterWorker({ fetchFn: opts.fetchFn });
   const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
   const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {

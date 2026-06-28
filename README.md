@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **380 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **386 tests, strict TypeScript.**
 
 ---
 
@@ -103,7 +103,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**380 tests, strict TypeScript, every commit a passing TDD cycle.**
+**386 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -122,6 +122,8 @@ Forgecast is **model-agnostic** (every model is a swappable adapter), but it shi
 **How voice is generated.** Type a script in the Studio's **Voice** tab (or call `POST /api/projects/:id/generate-voiceover`). Forgecast runs it through the `VoiceProvider` — **VoxCPM-2** when `VOXCPM_URL` is set (self-hosted, zero per-use cost), otherwise cloud **fal TTS** — and produces a playable **audio asset**. You can cast it on its own, or **render** it onto a video clip as a narration (in-process ffmpeg mux). Voice generation is wired on **both** sides: the Studio UI (Voice tab + an in-gallery audio player) and the backend route/provider/job, plus the `narrate` flow for muxing voice onto a clip.
 
 **Rendering.** The **Montage** tab is the renderer: it generates clips and stitches them into a finished video via **Remotion**, or **in-process ffmpeg** by default (no Chromium worker needed). Narrated-video rendering muxes a voice-over onto a clip the same way. Everything resolves to a downloadable asset.
+
+**Short-form videos (MoneyPrinterTurbo).** Hand it a topic and the optional [`workers/shorts`](workers/shorts/) worker turns it into a finished vertical clip — LLM script → stock footage (Pexels/Pixabay) → TTS narration → **burned-in styled captions** → background music. Forgecast exposes the engine's best knobs as a typed `options` object: aspect (`9:16` default), captions on/off + style, **batch count**, clip length, voice, music, your own script/terms, and more — via `POST /api/projects/:id/generate-video` and the `forgecast_generate_short_video` MCP tool.
 
 ---
 
@@ -158,7 +160,7 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 380 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 386 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 

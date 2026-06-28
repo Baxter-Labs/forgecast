@@ -9,6 +9,10 @@ Forgecast speaks the worker's contract:
 
 This is implemented in `@forgecast/providers` (`MoneyPrinterWorker`) and `@forgecast/jobs` (`ShortVideoJobHandler`) — both fully unit-tested with a mocked worker, so Forgecast's side needs no MoneyPrinter to develop or test against.
 
+### What you can control (the best parts)
+
+Forgecast exposes MoneyPrinterTurbo's standout features as a typed, vendor-neutral `options` object (mapped to its `VideoParams`): **aspect** (`9:16` vertical default / `16:9` / `1:1`), **burned-in styled captions** (`subtitles` + `subtitlePosition` / `fontSize` / `textColor` / `strokeColor`), **batch** (`count` 1–10), **clip length** (`clipDuration`), **stock source** (`pexels` / `pixabay` / `local`), **voice** (`voiceName` / `voiceVolume` / `voiceRate`), **background music** (`bgmType` / `bgmVolume`), your own **script** / search **terms**, **paragraphs** (1–10 script length), **transition**, and **concatMode**. All optional — omit any to keep the worker's defaults. Available via `POST /api/projects/:id/generate-video` and the `forgecast_generate_short_video` MCP tool.
+
 ## Run the worker
 
 **Requirements:** Docker, plus provider keys — an LLM (OpenAI / Gemini / DeepSeek / Moonshot / Ollama / …) for the script, and a stock source (a free [Pexels](https://www.pexels.com/api/) key). TTS uses free Edge-TTS by default.

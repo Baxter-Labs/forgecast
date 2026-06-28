@@ -91,7 +91,8 @@ These need an LLM key on the web app (`OPENAI_API_KEY`, or `FORGECAST_AGENT_LLM=
 | `forgecast_get_brand_kit` / `forgecast_set_brand_kit` | Read / set the project **brand kit** — grounds every generation on-brand |
 | `forgecast_brand_kit_from_website` | Seed the brand kit from a brand's website |
 | `forgecast_generate_image` | Generate an image (sync; returns asset + URL) |
-| `forgecast_generate_video` / `forgecast_generate_short_video` | Start a video / short-video job (async → poll `forgecast_get_job`) |
+| `forgecast_generate_video` | Start a fal video job — text→video / image→video (async → poll `forgecast_get_job`) |
+| `forgecast_generate_short_video` | MoneyPrinterTurbo short: topic → script → stock footage → narration → **burned-in captions** → music → vertical clip. `options`: aspect, subtitles+style, count (batch), voice, bgm, clipDuration, script/terms, … (async) |
 | `forgecast_generate_montage` | Stitch a project's assets into a montage (async) |
 | `forgecast_generate_from_website` | URL → assets: import product images + generate on-brand images + enhance |
 | `forgecast_enhance_image` / `forgecast_edit_image` / `forgecast_cutout_image` | Upscale / instruction-edit / background-remove an image |
