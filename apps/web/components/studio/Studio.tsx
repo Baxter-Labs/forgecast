@@ -7,7 +7,7 @@ import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
 import { BrandKitModal } from './BrandKitModal';
 import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
-import { ForgePanel, type ForgeMode } from './ForgePanel';
+import { ForgePanel, type ForgeMode, type ShortControls } from './ForgePanel';
 import { CreatePanel } from './CreatePanel';
 import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
@@ -94,7 +94,7 @@ export function Studio() {
   const {
     projectId,
     providers, publishers, availability, pro, assets, status, error,
-    generateImage, generateVideo, generateMontage, generateVoiceover,
+    generateImage, generateVideo, generateMontage, generateVoiceover, generateShortVideo,
     composeVideo,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
@@ -109,6 +109,7 @@ export function Studio() {
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
   const [voiceName, setVoiceName] = useState('');
+  const [short, setShort] = useState<ShortControls>({ subtitles: true, count: 1, music: true, voiceName: '' });
   const [boostQuality, setBoostQuality] = useState(false);
   const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
@@ -233,6 +234,14 @@ export function Studio() {
       void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
     } else if (mode === 'voice') {
       void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
+    } else if (mode === 'short') {
+      void generateShortVideo(prompt, {
+        aspect: ratio === '9:16' || ratio === '16:9' || ratio === '1:1' ? ratio : '9:16',
+        subtitles: short.subtitles,
+        count: short.count,
+        bgmType: short.music ? 'random' : '',
+        voiceName: short.voiceName.trim() || undefined,
+      }).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -297,6 +306,8 @@ export function Studio() {
                 setModel={setModel}
                 voiceName={voiceName}
                 setVoiceName={setVoiceName}
+                short={short}
+                setShort={setShort}
                 boostQuality={boostQuality}
                 setBoostQuality={setBoostQuality}
                 videoImageAssetId={videoImageAssetId}

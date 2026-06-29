@@ -9,7 +9,15 @@ import type { StoredCampaign } from './CampaignPanel';
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
 
-export type ForgeMode = 'image' | 'video' | 'montage' | 'voice';
+export type ForgeMode = 'image' | 'video' | 'montage' | 'voice' | 'short';
+
+/** UI knobs for the MoneyPrinterTurbo short-video tab. */
+export interface ShortControls {
+  subtitles: boolean;
+  count: number;
+  music: boolean;
+  voiceName: string;
+}
 
 interface ForgePanelProps {
   mode: ForgeMode;
@@ -20,6 +28,8 @@ interface ForgePanelProps {
   setModel: (v: string) => void;
   voiceName: string;
   setVoiceName: (v: string) => void;
+  short: ShortControls;
+  setShort: (s: ShortControls) => void;
   boostQuality: boolean;
   setBoostQuality: (v: boolean) => void;
   videoImageAssetId: string | null;
@@ -62,6 +72,7 @@ const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'video', label: 'Video' },
   { id: 'montage', label: 'Montage' },
   { id: 'voice', label: 'Voice' },
+  { id: 'short', label: 'Short' },
 ];
 
 function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string; setRatio: (v: string) => void }) {
@@ -124,6 +135,23 @@ function BoostToggle({ active, onToggle }: { active: boolean; onToggle: () => vo
           : <><span style={{ color: 'var(--forge-muted)' }}>Seedance 1.5 Pro</span> · best value · native audio</>}
       </p>
     </div>
+  );
+}
+
+function ShortToggle({ label, active, onToggle }: { label: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className="flex items-center gap-2 rounded-lg px-3 py-2 border font-mono text-[10px] uppercase tracking-[0.1em] transition-all"
+      style={active
+        ? { borderColor: 'var(--ember-2)', color: 'var(--ember-1)', background: 'rgba(255,122,26,0.08)' }
+        : { borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+    >
+      <span aria-hidden="true">{active ? '⚡' : '○'}</span>
+      {label}
+    </button>
   );
 }
 
@@ -190,7 +218,7 @@ function ImageSourcePicker({
 }
 
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, voiceName, setVoiceName, boostQuality, setBoostQuality,
+  mode, setMode, prompt, setPrompt, model, setModel, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
   videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
   assets,
@@ -209,6 +237,7 @@ export function ForgePanel({
     if (id === 'video') return availability.video;
     if (id === 'montage') return availability.video && availability.montage;
     if (id === 'voice') return availability.voice;
+    if (id === 'short') return availability.short;
     return true;
   }
 
@@ -220,7 +249,9 @@ export function ForgePanel({
         ? 'montage offline · set MONTAGE_WORKER_URL'
         : mode === 'voice' && !availability.voice
           ? 'voice offline · set VOXCPM_URL (self-hosted) or FAL_KEY_VOICE'
-          : null;
+          : mode === 'short' && !availability.short
+            ? 'short video offline · run the MoneyPrinterTurbo worker + set FORGECAST_VIDEO_WORKER_URL'
+            : null;
 
   const hasCampaign = !!activeCampaignId;
 
@@ -235,17 +266,20 @@ export function ForgePanel({
         ? prompt.trim().length > 0 && availability.video && (!isI2V || !!videoImageAssetId)
         : mode === 'voice'
           ? prompt.trim().length > 0 && availability.voice
-          : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
+          : mode === 'short'
+            ? prompt.trim().length > 0 && availability.short
+            : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
     !hasCampaign ? '⚒ SELECT A CAMPAIGN FIRST'
       : mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
         : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
           : mode === 'voice' ? (forging ? '⚒ FORGING…' : '⚒ FORGE VOICE →')
-            : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
+            : mode === 'short' ? (forging ? '⚒ FORGING…' : '⚒ FORGE SHORT →')
+              : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
   const forgeAction =
-    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : 'Forge image';
+    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : mode === 'short' ? 'Forge short video' : 'Forge image';
 
   function submitNewCampaign() {
     const name = newCampaignName.trim();
@@ -334,7 +368,7 @@ export function ForgePanel({
 
       {/* MODE TOGGLE */}
       <div>
-        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
+        <div className="grid grid-cols-5 gap-1 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
           {SEGMENTS.map((seg) => {
             const active = seg.id === mode;
             const available = segmentAvailable(seg.id);
@@ -506,6 +540,72 @@ export function ForgePanel({
               self-hosted <span className="text-[var(--ember-1)] opacity-70">VoxCPM-2</span> when configured, else fal TTS
             </p>
           </div>
+        </>
+      )}
+
+      {/* SHORT MODE — MoneyPrinterTurbo: topic → captioned vertical clip */}
+      {mode === 'short' && (
+        <>
+          <div>
+            <FieldLabel htmlFor="forge-short">Topic or script</FieldLabel>
+            <textarea
+              id="forge-short"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="A topic to turn into a captioned vertical short — it writes the script, pulls stock footage, narrates, and burns in captions…"
+              rows={5}
+              className="w-full resize-none rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm leading-relaxed px-4 py-3 outline-none transition-all focus:border-[var(--ember-2)] focus:shadow-[0_0_0_3px_rgba(255,122,26,0.15)]"
+            />
+          </div>
+
+          <div>
+            <FieldHeading>Aspect</FieldHeading>
+            <RatioRow ratios={VIDEO_RATIOS} ratio={ratio} setRatio={setRatio} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <ShortToggle label="Burn-in captions" active={short.subtitles} onToggle={() => setShort({ ...short, subtitles: !short.subtitles })} />
+            <ShortToggle label="Background music" active={short.music} onToggle={() => setShort({ ...short, music: !short.music })} />
+          </div>
+
+          <div>
+            <FieldHeading>How many (batch)</FieldHeading>
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5].map((n) => {
+                const selected = short.count === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setShort({ ...short, count: n })}
+                    aria-pressed={selected}
+                    className="font-mono text-xs w-9 py-1.5 rounded border transition-all"
+                    style={selected
+                      ? { borderColor: 'var(--ember-2)', color: 'var(--ember-1)', boxShadow: '0 0 12px var(--ember-glow)', background: 'rgba(255,122,26,0.06)' }
+                      : { borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="short-voice">Voice <span className="normal-case tracking-normal text-[var(--forge-faint)]">(optional)</span></FieldLabel>
+            <input
+              id="short-voice"
+              type="text"
+              value={short.voiceName}
+              onChange={(e) => setShort({ ...short, voiceName: e.target.value })}
+              placeholder="e.g. en-US-AvaNeural · blank for the worker default"
+              className="w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] placeholder:text-[var(--forge-faint)] text-sm px-3 py-2.5 outline-none focus:border-[var(--ember-2)] transition-colors"
+            />
+          </div>
+
+          <p className="font-mono text-[10px] text-[var(--forge-faint)]">
+            topic → script → stock footage → narration → captions → music (MoneyPrinterTurbo)
+          </p>
         </>
       )}
 

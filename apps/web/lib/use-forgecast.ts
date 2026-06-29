@@ -1,5 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import type { ShortVideoOptions } from '@forgecast/core';
+
+export type { ShortVideoOptions };
 
 export interface StudioAsset {
   id: string;
@@ -13,6 +16,7 @@ export interface Availability {
   image: boolean;
   video: boolean;
   montage: boolean;
+  short: boolean;
   voice: boolean;
   transcribe: boolean;
   presenter: boolean;
@@ -52,7 +56,7 @@ export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
   const [publishers, setPublishers] = useState<string[]>([]);
-  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, voice: false, transcribe: false, presenter: false });
+  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, short: false, voice: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
@@ -69,13 +73,14 @@ export function useForgecast() {
       const image: string[] = health?.providers?.image ?? [];
       const video: string[] = health?.providers?.video ?? [];
       const montage: string[] = health?.providers?.montage ?? [];
+      const short: string[] = health?.providers?.short ?? [];
       const voice: string[] = health?.providers?.voice ?? [];
       const transcribe: string[] = health?.providers?.transcribe ?? [];
       const presenter: string[] = health?.providers?.presenter ?? [];
       const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
       setPublishers(pubs);
-      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
+      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, short: short.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
       await refreshPro();
 
@@ -150,6 +155,24 @@ export function useForgecast() {
         body: JSON.stringify(body),
       });
       if (res.status !== 202) { setError(await readError(res, 'Failed to start clip')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const generateShortVideo = useCallback(async (subject: string, options?: ShortVideoOptions): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-video`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ subject, options }),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start short video')); setStatus('error'); return null; }
       const { job } = await res.json();
       const { outcome, assetId } = await pollJob(job.id);
       setStatus(outcome === 'done' ? 'idle' : 'error');
@@ -582,7 +605,7 @@ export function useForgecast() {
   return {
     projectId, providers, publishers, availability, pro, refreshPro,
     assets, status, error,
-    generateImage, generateVideo, generateMontage,
+    generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
     generateVoiceover, narrateVideo, generatePresenter,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
