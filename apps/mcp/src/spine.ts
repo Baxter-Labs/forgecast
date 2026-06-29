@@ -62,6 +62,12 @@ export interface AdCreativeMetrics {
 /** Input for the ads endpoints: hand in `metrics` (keyless) or pull from a connected `source`. */
 export interface AdsMetricsInput { metrics?: AdCreativeMetrics[]; source?: string; sinceDays?: number }
 
+/** One real footage clip found by a search. */
+export interface FootageClip {
+  id: string; url: string; thumbnailUrl?: string; width?: number; height?: number;
+  durationSec?: number; source: string; author?: string; pageUrl?: string;
+}
+
 /** Short-video (MoneyPrinterTurbo) options — vendor-neutral; the app maps them to the worker. */
 export interface ShortVideoOptions {
   aspect?: '9:16' | '16:9' | '1:1';
@@ -217,6 +223,18 @@ export class SpineClient {
   }
   optimizeCreatives(projectId: string, input: AdsMetricsInput & { max?: number }): Promise<{ source: string; fatiguedCount: number; imageReady: boolean; regenerated: Array<{ creativeId: string; newAssetId: string }>; optimizations: unknown[]; note?: string }> {
     return this.req(`/api/projects/${projectId}/ads/optimize`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+
+  // ── Real-footage search + import (OpenMontage-style) ──────────────────────
+  searchFootage(input: { query: string; source?: string; perPage?: number; orientation?: 'portrait' | 'landscape' | 'square' }): Promise<{ source: string; count: number; clips: FootageClip[] }> {
+    return this.req('/api/footage/search', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+  importFootage(projectId: string, input: { url: string; query?: string; source?: string }): Promise<{ asset: Asset }> {
+    return this.req(`/api/projects/${projectId}/footage/import`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
     });
   }

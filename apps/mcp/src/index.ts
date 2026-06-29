@@ -805,6 +805,55 @@ server.registerTool(
   },
 );
 
+// 26. forgecast_search_footage
+server.registerTool(
+  'forgecast_search_footage',
+  {
+    title: 'Search real stock footage by topic',
+    description:
+      'Find real, copyright-free **motion footage** by topic from an open source (Pexels) — the OpenMontage-style ' +
+      'way to assemble a montage from actual footage instead of generated clips. Returns clips with direct video ' +
+      'URLs you can import with `forgecast_import_footage`, then montage with `forgecast_generate_montage`.\n\n' +
+      'Args: query (string), orientation ("portrait"/"landscape"/"square", optional), per_page (1–40, optional), ' +
+      'source (optional; default the first configured).\n' +
+      'Returns: `{ source, count, clips: [{ id, url, thumbnailUrl, width, height, durationSec, author, pageUrl }] }`.\n' +
+      'A 503 means no footage source is configured (set PEXELS_API_KEY on the server).',
+    inputSchema: z.object({
+      query: z.string().min(1),
+      orientation: z.enum(['portrait', 'landscape', 'square']).optional(),
+      per_page: z.number().int().min(1).max(40).optional(),
+      source: z.string().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ query, orientation, per_page, source }) => {
+    try { return ok(await client.searchFootage({ query, orientation, perPage: per_page, source })); } catch (e) { return fail(e); }
+  },
+);
+
+// 27. forgecast_import_footage
+server.registerTool(
+  'forgecast_import_footage',
+  {
+    title: 'Import a footage clip into a project',
+    description:
+      'Download a footage clip (a `url` from `forgecast_search_footage`) into a project as a video asset — ready to ' +
+      'montage, narrate, or cross-post. Returns `{ asset }`.\n\n' +
+      'Args: project_id (string), url (string — direct video URL), query (string, optional — labels the asset), ' +
+      'source (string, optional).',
+    inputSchema: z.object({
+      project_id: z.string(),
+      url: z.string().url(),
+      query: z.string().optional(),
+      source: z.string().optional(),
+    }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, url, query, source }) => {
+    try { return ok(await client.importFootage(project_id, { url, query, source })); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────

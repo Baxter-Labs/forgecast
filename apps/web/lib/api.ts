@@ -311,6 +311,69 @@ export async function runAdsAudit(services: Services, input: unknown): Promise<A
   return { status: 200, body: { source: resolved.source, audit: auditAds(resolved.metrics) } };
 }
 
+// ── Real-footage search (OpenMontage-style: find motion clips by topic) ───────
+
+/** Search a footage source (default: the first configured, e.g. Pexels) for real clips. */
+export async function searchFootage(services: Services, input: unknown): Promise<ApiResult> {
+  const fields = (input ?? {}) as { query?: unknown; source?: unknown; perPage?: unknown; orientation?: unknown };
+  if (typeof fields.query !== 'string' || fields.query.trim().length === 0) {
+    return { status: 400, body: { error: 'query is required' } };
+  }
+  const requested = typeof fields.source === 'string' && fields.source.trim() ? fields.source.trim() : undefined;
+  const chosen = requested ?? services.footage.available()[0];
+  if (!chosen) {
+    return { status: 503, body: { error: 'no footage source configured (set PEXELS_API_KEY)' } };
+  }
+  if (!services.footage.has(chosen)) return { status: 400, body: { error: `unknown footage source '${chosen}'` } };
+  const provider = services.footage.get(chosen);
+  if (!provider.isAvailable()) return { status: 503, body: { error: `footage source '${chosen}' not configured` } };
+
+  const perPage = typeof fields.perPage === 'number' && Number.isFinite(fields.perPage) ? Math.min(40, Math.max(1, Math.round(fields.perPage))) : 12;
+  const orientation = fields.orientation === 'portrait' || fields.orientation === 'landscape' || fields.orientation === 'square' ? fields.orientation : undefined;
+  try {
+    const clips = await provider.search({ query: fields.query, perPage, orientation });
+    return { status: 200, body: { source: chosen, count: clips.length, clips } };
+  } catch (e) {
+    return { status: 502, body: { error: `footage search failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+}
+
+/** Download a footage clip by URL into the project as a video asset (ready to montage). */
+export async function importFootage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as { url?: unknown; query?: unknown; source?: unknown };
+  if (typeof fields.url !== 'string' || !/^https?:\/\//i.test(fields.url)) {
+    return { status: 400, body: { error: 'a valid footage url is required' } };
+  }
+
+  let res: Response;
+  try {
+    res = await services.fetchFn(fields.url);
+  } catch (e) {
+    return { status: 502, body: { error: `footage download failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+  if (!res.ok) return { status: 502, body: { error: `footage download failed (${res.status})` } };
+
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const contentType = res.headers.get('content-type') ?? 'video/mp4';
+  const id = services.ids.randomId();
+  const ext = contentType.includes('webm') ? 'webm' : 'mp4';
+  const key = `projects/${projectId}/videos/${id}.${ext}`;
+  const stored = await services.storage.put(key, bytes, contentType);
+
+  const params: Record<string, unknown> = {
+    prompt: typeof fields.query === 'string' && fields.query.trim() ? fields.query : 'imported footage',
+    source: typeof fields.source === 'string' ? fields.source : 'footage',
+    importedFrom: fields.url,
+  };
+  const asset = await services.assets.create(
+    newAsset({ projectId, type: 'video', provider: 'footage', storageKey: stored.key, params }, { id, now: services.ids.nowIso() }),
+  );
+  return { status: 200, body: { asset } };
+}
+
 /** The refresh brief for a fatigued creative — kept generic so generateImage's brand-kit
  * preamble does the on-brand grounding. */
 function refreshBrief(name: string | undefined, reason: string | undefined): string {

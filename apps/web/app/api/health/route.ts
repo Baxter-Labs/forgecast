@@ -13,6 +13,7 @@ export async function GET() {
       voice: svc.voiceAvailable ? [svc.voiceProvider.name] : [],
       transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
       presenter: svc.presenterAvailable ? [svc.presenterProvider.name] : [],
+      footage: svc.footageAvailable,
     },
     publishers: svc.publishers.available(),
   });
