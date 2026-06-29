@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -40,6 +40,11 @@ export interface Services {
   insights: AdsInsightsRegistry;
   /** Names of connected ad-insights sources (e.g. ['meta','google']). */
   insightsAvailable: string[];
+  footage: FootageRegistry;
+  /** Names of configured footage sources (e.g. ['pexels']). */
+  footageAvailable: string[];
+  /** Injectable fetch for api-level downloads (e.g. importing footage). */
+  fetchFn: typeof fetch;
 }
 
 export interface BuildServicesOptions {
@@ -222,9 +227,14 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   insights.register(new GoogleAdsInsightsProvider({ fetchFn: opts.fetchFn }));
   const insightsAvailable = insights.available();
 
+  // Real-footage search (OpenMontage-style). Keyless-friendly UI; needs PEXELS_API_KEY to pull.
+  const footage = new FootageRegistry();
+  footage.register(new PexelsFootageProvider({ fetchFn: opts.fetchFn }));
+  const footageAvailable = footage.available();
+
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable };
+  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**
