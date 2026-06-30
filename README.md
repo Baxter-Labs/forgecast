@@ -170,10 +170,14 @@ pnpm typecheck     # strict tsc across every package
 
 ```bash
 cp .env.example apps/web/.env.local        # add the keys you have (all optional)
-pnpm -C apps/web dev                       # http://localhost:3210
+pnpm -C apps/web dev                       # → http://localhost:3210   (Ctrl-C to stop)
 ```
 
-Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. You can light it up **two ways**, both below: **cloud** (a single `FAL_KEY` gets you the whole image studio in seconds) or a **100% free local stack** (Stable Diffusion + Ollama + the open-source workers — no paid keys). Keys are read from `apps/web/.env.local`; the dev server hot-reloads, or restart it after editing.
+- **Start:** `pnpm -C apps/web dev` (from anywhere in the repo). Open **http://localhost:3210**.
+- **Stop:** `Ctrl-C` in that terminal — or, if it's detached, `lsof -ti tcp:3210 | xargs kill`.
+- **Reload:** the server hot-reloads on code and `.env.local` changes; only restart if a newly-added key doesn't pick up.
+
+Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. To make it generate, add keys: see **[Configure it](#configure-it--api-keys-cheat-sheet)** (what each key unlocks) and **[Set it up — step by step](#set-it-up--step-by-step)** for the two paths — **cloud** (a single `FAL_KEY` gets the whole image studio in seconds) or a **100% free local stack** (Stable Diffusion + Ollama + the open-source workers, no paid keys).
 
 ---
 
