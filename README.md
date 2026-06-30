@@ -260,6 +260,54 @@ MOLLIE_API_KEY=...                                 # optional — Pro-tier billi
 
 ---
 
+## Set it up — step by step
+
+### 0. Prerequisites
+- **Node ≥ 20** and **pnpm ≥ 9**. Get the repo running once: `git clone https://github.com/eshwarpk/forgecast.git && cd forgecast && pnpm install`.
+- **Docker** — only needed for the optional voice / short-video workers.
+- A modern **GPU** helps for self-hosted images (Stable Diffusion); CPU works but is slow.
+
+### A. Cloud — fastest (~2 min)
+1. Get a key at [fal.ai → keys](https://fal.ai/dashboard/keys).
+2. `cp .env.example apps/web/.env.local`, then set `FAL_KEY=...` (add `FAL_KEY_VIDEO` for video, `OPENAI_API_KEY` for the agent).
+3. `pnpm -C apps/web dev` → open **http://localhost:3210**. Done.
+
+### B. Free & local — no paid keys
+Stand up each open-source engine, then point Forgecast at it in `apps/web/.env.local`. Every piece is optional — set up only what you want.
+
+**Agent → [Ollama](https://ollama.com) (free local LLM)**
+```bash
+# install from ollama.com  (macOS: brew install ollama)
+ollama serve &            # start the server
+ollama pull llama3.1      # pull a model (or qwen2.5, mistral, …)
+```
+→ `.env.local`: `FORGECAST_AGENT_LLM=ollama` and `OLLAMA_MODEL=llama3.1`.
+
+**Image → [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) (Automatic1111)**
+```bash
+git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui
+cd stable-diffusion-webui
+# put a checkpoint (e.g. an SDXL .safetensors) in models/Stable-diffusion/ first, then:
+./webui.sh --api --listen          # macOS/Linux  (Windows: add --api to COMMANDLINE_ARGS in webui-user.bat)
+```
+→ `.env.local`: `SD_WEBUI_URL=http://localhost:7860`, then generate with `provider: "stablediffusion"`.
+
+**Voice-over → VoxCPM-2** — run [`workers/voice`](workers/voice/) (Docker), then `VOXCPM_URL=http://localhost:8770`.
+
+**Short video → MoneyPrinterTurbo** — run [`workers/shorts`](workers/shorts/) (Docker). The 100%-free recipe is **Ollama + Edge-TTS + a free [Pexels](https://www.pexels.com/api/) key** (see that worker's README). Then `FORGECAST_VIDEO_WORKER_URL=http://localhost:8080`.
+
+**Real-footage search** — set `PEXELS_API_KEY=...` (free tier).
+
+### Verify what's live
+```bash
+curl -s http://localhost:3210/api/health
+# providers.{image,video,voice,short,footage,…} list the adapters that are configured;
+# anything missing just shows a "not configured" badge in the Studio (nothing crashes).
+```
+The dev server hot-reloads `apps/web/.env.local`; restart it if a change doesn't pick up.
+
+---
+
 ## Deploy to the cloud
 
 Forgecast is a standard **Next.js 16** app, so it runs anywhere Next runs. Two supported paths:
