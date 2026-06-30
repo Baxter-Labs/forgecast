@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -92,6 +92,9 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const imageRegistry = new ImageProviderRegistry();
   const falImageProvider = new FalImageProvider({ apiKey: falKey, fetchFn: opts.fetchFn });
   imageRegistry.register(falImageProvider);
+  // Self-hosted, free image generation via a local Stable Diffusion WebUI. Available
+  // only when SD_WEBUI_URL is set (the registry filters by isAvailable()).
+  imageRegistry.register(new StableDiffusionImageProvider({ fetchFn: opts.fetchFn }));
 
   const publishers = new PublisherRegistry();
   publishers.register(new WebhookPublisher({ fetchFn: opts.fetchFn }));

@@ -42,20 +42,32 @@ export async function generateImage(services: Services, projectId: string, input
   }
 
   const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
+  // A non-fal provider (e.g. self-hosted Stable Diffusion) must actually be configured.
+  if (providerName !== 'fal' && !services.imageRegistry.available().includes(providerName)) {
+    return { status: 503, body: { error: `image provider '${providerName}' not configured` } };
+  }
   // Ground the generation in the project's brand kit (no-op when none is set).
   const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
 
-  // Resolve the model (default: Nano Banana) and emit the size param its family expects:
-  // an `aspect_ratio` enum for the Gemini/Nano-Banana family, else `image_size` pixels.
-  const modelId = typeof fields.model === 'string' && fields.model.length > 0 ? fields.model : defaultImageModelId;
-  const catalogModel = imageModelById(modelId);
-  const params: Record<string, unknown> = { prompt: brandedPrompt, model: modelId };
-  if (catalogModel?.sizing === 'aspect_ratio') {
-    const ratio = typeof fields.aspectRatio === 'string' && catalogModel.aspectRatios.includes(fields.aspectRatio)
-      ? fields.aspectRatio
-      : '1:1';
-    params.extra = { aspect_ratio: ratio };
+  const params: Record<string, unknown> = { prompt: brandedPrompt };
+  if (providerName === 'fal') {
+    // Resolve the model (default: Nano Banana) and emit the size param its family
+    // expects: an `aspect_ratio` enum for the Gemini/Nano-Banana family, else pixels.
+    const modelId = typeof fields.model === 'string' && fields.model.length > 0 ? fields.model : defaultImageModelId;
+    const catalogModel = imageModelById(modelId);
+    params.model = modelId;
+    if (catalogModel?.sizing === 'aspect_ratio') {
+      const ratio = typeof fields.aspectRatio === 'string' && catalogModel.aspectRatios.includes(fields.aspectRatio)
+        ? fields.aspectRatio
+        : '1:1';
+      params.extra = { aspect_ratio: ratio };
+    } else {
+      if (typeof fields.width === 'number') params.width = fields.width;
+      if (typeof fields.height === 'number') params.height = fields.height;
+    }
   } else {
+    // Self-hosted / other provider: raw prompt + pixel dimensions (+ optional checkpoint).
+    if (typeof fields.model === 'string' && fields.model.length > 0) params.model = fields.model;
     if (typeof fields.width === 'number') params.width = fields.width;
     if (typeof fields.height === 'number') params.height = fields.height;
   }

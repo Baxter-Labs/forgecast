@@ -1,5 +1,6 @@
 export * from './registry';
 export * from './image/fal';
+export * from './image/stablediffusion';
 export * from './video/moneyprinter';
 export * from './video/pixverse';
 export * from './video/fal';

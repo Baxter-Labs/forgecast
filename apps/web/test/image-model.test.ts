@@ -60,3 +60,31 @@ describe('generateImage — model selection actually reaches the provider', () =
     expect(asset.params.model).toBe('fal-ai/nano-banana');
   });
 });
+
+describe('generateImage — self-hosted (non-fal) provider routing', () => {
+  function makeServicesSD() {
+    const captured: GenerateImageInput[] = [];
+    const fetchFn = vi.fn(async (..._a: Parameters<typeof fetch>) => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'image/png' } }));
+    const svc = buildServices({ fetchFn });
+    svc.imageRegistry.register({ name: 'stablediffusion', isAvailable: () => true, async generateImage(input) { captured.push(input); return { url: 'data:image/png;base64,QUJD' }; } });
+    return { svc, captured };
+  }
+
+  it('routes provider=stablediffusion with raw prompt + pixel dims (no aspect_ratio) and records the provider', async () => {
+    const { svc, captured } = makeServicesSD();
+    const pid = await newProjectId(svc);
+    const r = await generateImage(svc, pid, { prompt: 'a glowing anvil', provider: 'stablediffusion', width: 768, height: 1024 });
+    expect(r.status).toBe(200);
+    expect(captured[0]!.width).toBe(768);
+    expect(captured[0]!.height).toBe(1024);
+    expect(captured[0]!.extra).toBeUndefined(); // no aspect_ratio for non-fal providers
+    expect((r.body as { asset: { provider: string } }).asset.provider).toBe('stablediffusion');
+  });
+
+  it('503s when the requested provider is not configured', async () => {
+    const svc = buildServices({ fetchFn: vi.fn(async (..._a: Parameters<typeof fetch>) => new Response('', { status: 200 })) });
+    const pid = await newProjectId(svc);
+    const r = await generateImage(svc, pid, { prompt: 'x', provider: 'stablediffusion' });
+    expect(r.status).toBe(503);
+  });
+});
