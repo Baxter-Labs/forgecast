@@ -26,6 +26,23 @@ Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engin
 
 ---
 
+## What you can do with it
+
+Hand Forgecast a **prompt**, a **product URL**, or a **topic** — it makes the asset and helps you ship it. What people use it for:
+
+- 🎨 **An on-brand image studio** — generate (Nano Banana / FLUX, or **free** local Stable Diffusion), then enhance, edit, cut out backgrounds, and make variations. Set a **Brand Kit** once and every generation comes out on-brand.
+- 🌐 **A product URL → a launch campaign** — "From Website" reads the page and generates matching on-brand images; the agent can brainstorm *and* produce the whole set.
+- 📱 **Captioned vertical shorts from a topic** — topic → script → stock footage → narration → **burned-in captions** → music → a finished 9:16 clip. Runs **100% free** (Ollama + Edge-TTS + a free Pexels key).
+- 🎬 **Montages from real footage** — search copyright-free stock video by topic, import it, and stitch a montage (Remotion / in-process ffmpeg).
+- 🗣️ **Voice & a presenter** — self-hosted **VoxCPM-2** voice-over (free), narrate any clip, or generate a talking-head AI presenter.
+- ✍️ **Write the caption, then cross-post** — platform-aware, char-limited A/B ad copy, then publish to Instagram / LinkedIn / YouTube (or any webhook) from one place.
+- 📈 **Measure → optimize your ads** — audit ad performance, diagnose **creative fatigue**, and regenerate tired creatives on-brand — closing create → publish → measure → optimize.
+- 🤖 **Drive all of it from an AI agent** — every action is also an **MCP tool**, so Claude / Cursor / your own agent can run the whole pipeline end to end.
+
+**Who it's for:** makers & marketers who want their *own* content engine instead of a rented SaaS, and developers who want an **MIT, provider-agnostic, agent-native** base to build on (or resell).
+
+---
+
 ## Why Forgecast is different
 
 Most tools make you pick one compromise. Forgecast refuses the trade-offs:
