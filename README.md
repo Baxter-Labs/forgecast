@@ -43,7 +43,7 @@ Most tools make you pick one compromise. Forgecast refuses the trade-offs:
 
 ### The five ideas that make it unique
 
-1. **A provider-adapter spine.** Image, video, voice, montage, presenter, publishing, and storage are all *interfaces*. Cloud adapters run anywhere with a key; **self-hosted open-source adapters** (VoxCPM-2 voice, Remotion/ffmpeg montage, MoneyPrinterTurbo shorts — and Stable Diffusion / Ollama / Piper as the contribution surface) are the way to own the whole stack. No vendor, no model, no cloud is hard-wired.
+1. **A provider-adapter spine.** Image, video, voice, montage, presenter, publishing, and storage are all *interfaces*. Cloud adapters run anywhere with a key; **self-hosted open-source adapters** (VoxCPM-2 voice, Remotion/ffmpeg montage, MoneyPrinterTurbo shorts, and a **free local LLM via Ollama** — with Stable Diffusion / Piper as the next contribution surface) are the way to own the whole stack. No vendor, no model, no cloud is hard-wired.
 2. **Agent-native from day one.** Every action exists twice — as a web API for humans *and* as an **MCP tool surface** for agents. The same platform that powers the Studio UI is driven by a built-in tool-calling agent (or Claude Code, Cursor, any MCP client).
 3. **Forge → Cast.** Generation and *distribution* are one story. Forgecast unifies "make the content" with "post it across platforms" — most tools stop at generation.
 4. **Cloud-agnostic core, cloud-optional power.** It runs on your laptop or your server. Optional deployment profiles light up Cloudflare Workers + R2 + D1 for those who want the edge — *without* tying the open-source core to any cloud.
@@ -196,6 +196,7 @@ Every capability is a swappable adapter. **You set keys once, as server-side env
 |---|---|---|---|
 | `OPENAI_API_KEY` | The tool-calling agent (**default**) | [platform.openai.com](https://platform.openai.com/api-keys) | for the agent |
 | `FORGECAST_AGENT_LLM=anthropic` + `ANTHROPIC_API_KEY` | Switch the agent to **Claude** | [console.anthropic.com](https://console.anthropic.com) | optional |
+| `FORGECAST_AGENT_LLM=ollama` (+ `OLLAMA_MODEL`) | Run the agent on a **free, self-hosted local model** via [Ollama](https://github.com/ollama/ollama) — no key, zero per-use cost | `ollama serve` + `ollama pull llama3.1` | optional |
 
 ### Voice input & publishing
 
@@ -292,7 +293,7 @@ Forgecast is built to be **handed to non-technical users as a hosted website** �
 | **M2 · Distribution** | Cross-platform posting — Instagram, LinkedIn, YouTube, OmniSocials | ✅ done |
 | **M3 · Agent** | "Describe it → it makes it" — a tool-calling agent over the platform | ✅ done |
 | **M4 · Montage + Voice** | Longer-form montage (Remotion/ffmpeg) + voice-over (VoxCPM-2) + AI presenter | ✅ done |
-| **Next** | More self-hosted/local adapters (SD, Ollama, Piper), scheduling, analytics | 🔜 |
+| **Next** | More self-hosted/local adapters (Stable Diffusion image, Piper TTS), scheduling, analytics | 🔜 |
 
 ---
 

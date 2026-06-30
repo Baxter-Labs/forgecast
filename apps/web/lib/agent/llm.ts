@@ -233,16 +233,30 @@ export class AnthropicLlmClient implements LlmClient {
 }
 
 /**
- * The agent's LLM. OpenAI is the default for now; the Claude (Anthropic) adapter
- * stays available and is opt-in via `FORGECAST_AGENT_LLM=anthropic` (or `claude`).
+ * The agent's LLM. OpenAI is the default; Claude (Anthropic) is opt-in via
+ * `FORGECAST_AGENT_LLM=anthropic` (or `claude`), and a free, self-hosted local
+ * model via **Ollama** is opt-in with `FORGECAST_AGENT_LLM=ollama` (or `local`).
  *
- * Selection is explicit on purpose — we do NOT auto-switch to Claude just because
- * an `ANTHROPIC_API_KEY` happens to be in the ambient environment, so a key meant
- * for something else (e.g. a local Claude tool) can't silently start billing the
- * agent.
+ * Selection is explicit on purpose — we do NOT auto-switch just because some key
+ * happens to be in the ambient environment, so a key meant for something else
+ * can't silently start billing the agent.
+ *
+ * Ollama (https://github.com/ollama/ollama) speaks the OpenAI Chat Completions
+ * shape at `${OLLAMA_URL}/v1`, including tool-calling — so the OpenAI adapter
+ * drives it directly with a dummy key (Ollama ignores it). Zero per-use cost.
  */
 export function makeLlmClient(): LlmClient & { isAvailable(): boolean } {
   const provider = (process.env.FORGECAST_AGENT_LLM ?? '').trim().toLowerCase();
   if (provider === 'anthropic' || provider === 'claude') return new AnthropicLlmClient();
+  if (provider === 'ollama' || provider === 'local') {
+    const host = (process.env.OLLAMA_URL ?? 'http://localhost:11434').replace(/\/+$/, '');
+    return new OpenAiLlmClient({
+      baseUrl: `${host}/v1`,
+      // Ollama ignores the key, but a non-empty value keeps isAvailable() true so
+      // the agent is offered (it's a free local model — nothing to bill).
+      apiKey: process.env.OLLAMA_API_KEY ?? 'ollama',
+      model: process.env.OLLAMA_MODEL ?? 'llama3.1',
+    });
+  }
   return new OpenAiLlmClient();
 }

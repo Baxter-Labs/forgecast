@@ -5,13 +5,17 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
-const savedAnthropic = process.env.ANTHROPIC_API_KEY;
-const savedOpenAi = process.env.OPENAI_API_KEY;
-const savedProvider = process.env.FORGECAST_AGENT_LLM;
+const savedEnv = {
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  FORGECAST_AGENT_LLM: process.env.FORGECAST_AGENT_LLM,
+  OLLAMA_URL: process.env.OLLAMA_URL,
+  OLLAMA_MODEL: process.env.OLLAMA_MODEL,
+};
 afterEach(() => {
-  if (savedAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedAnthropic;
-  if (savedOpenAi === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedOpenAi;
-  if (savedProvider === undefined) delete process.env.FORGECAST_AGENT_LLM; else process.env.FORGECAST_AGENT_LLM = savedProvider;
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
 });
 
 describe('AnthropicLlmClient', () => {
@@ -94,5 +98,27 @@ describe('makeLlmClient', () => {
     expect(makeLlmClient()).toBeInstanceOf(AnthropicLlmClient);
     process.env.FORGECAST_AGENT_LLM = 'claude';
     expect(makeLlmClient()).toBeInstanceOf(AnthropicLlmClient);
+  });
+
+  it('runs on a free local Ollama model when opted in (FORGECAST_AGENT_LLM=ollama)', async () => {
+    const fetchSpy = vi.fn(async (..._a: Parameters<typeof fetch>) => json({ choices: [{ message: { content: 'local hi' } }] }));
+    vi.stubGlobal('fetch', fetchSpy); // client captures fetch at construction → stub first
+    try {
+      process.env.FORGECAST_AGENT_LLM = 'ollama';
+      process.env.OLLAMA_URL = 'http://localhost:11434';
+      process.env.OLLAMA_MODEL = 'qwen2.5';
+      delete process.env.OPENAI_API_KEY; // no cloud key required
+
+      const llm = makeLlmClient();
+      expect(llm).toBeInstanceOf(OpenAiLlmClient);
+      expect(llm.isAvailable()).toBe(true); // free local → always "available", nothing to bill
+
+      expect(await llm.complete({ system: 's', user: 'u' })).toBe('local hi');
+      const [url, init] = fetchSpy.mock.calls[0]! as [string, RequestInit];
+      expect(url).toBe('http://localhost:11434/v1/chat/completions'); // Ollama's OpenAI-compatible endpoint
+      expect(JSON.parse(init.body as string).model).toBe('qwen2.5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
