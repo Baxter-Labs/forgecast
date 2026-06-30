@@ -28,6 +28,8 @@ export interface GenerateImageInput {
   model?: string;
   width?: number;
   height?: number;
+  /** Image provider: 'fal' (default) or 'stablediffusion' (self-hosted, free). */
+  provider?: string;
 }
 
 export interface BrandKit {

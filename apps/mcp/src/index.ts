@@ -131,28 +131,30 @@ server.registerTool(
       'Args:\n' +
       '  project_id (string): ID of an existing project (obtain from forgecast_list_projects).\n' +
       '  prompt (string): Description of the image to generate.\n' +
-      '  model (string, optional): Provider-specific model identifier.\n' +
+      '  model (string, optional): Provider-specific model identifier (fal default: Nano Banana).\n' +
+      '  provider (string, optional): "fal" (default, cloud) or "stablediffusion" (self-hosted, free — needs SD_WEBUI_URL).\n' +
       '  width (number, optional): Output width in pixels.\n' +
       '  height (number, optional): Output height in pixels.\n\n' +
       'Returns: `{ job: { id, status, error? }, asset: { id, type, url } | null }`\n' +
       'The `url` field is a direct download URL for the generated image bytes.\n\n' +
       'Example: `forgecast_generate_image({ project_id: "p_xyz", prompt: "a red fox at sunset", width: 1024, height: 1024 })`\n\n' +
-      'Error guidance: A 404 means the project does not exist. ' +
-      'If providers.image is empty (see forgecast_health), no FAL_KEY is configured on the server.',
+      'Error guidance: A 404 means the project does not exist. A 503 means the chosen `provider` is not configured ' +
+      '(see forgecast_health → providers.image; fal needs FAL_KEY, stablediffusion needs SD_WEBUI_URL).',
     inputSchema: z
       .object({
         project_id: z.string(),
         prompt: z.string(),
         model: z.string().optional(),
+        provider: z.string().optional(),
         width: z.number().int().positive().optional(),
         height: z.number().int().positive().optional(),
       })
       .strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
-  async ({ project_id, prompt, model, width, height }) => {
+  async ({ project_id, prompt, model, provider, width, height }) => {
     try {
-      const result = await client.generateImage(project_id, { prompt, model, width, height });
+      const result = await client.generateImage(project_id, { prompt, model, provider, width, height });
       const enriched = {
         job: result.job,
         asset: result.asset

@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **396 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **403 tests, strict TypeScript.**
 
 ---
 
@@ -35,7 +35,7 @@ Most tools make you pick one compromise. Forgecast refuses the trade-offs:
 | **Self-hosted, own your stack & outputs** | ✅ | ❌ rented | ✅ | ✅ / partial |
 | **License** | **MIT** | proprietary | mixed (often GPL/AGPL) | MIT / Apache / single-purpose |
 | **Runs anywhere (no GPU required)** | ✅ cloud-default | n/a (hosted) | ❌ needs GPU | varies |
-| **Open-source self-hosted engines** | ✅ (voice, montage, shorts) | ❌ | ✅ (only mode) | ✅ each on its own |
+| **Open-source self-hosted engines** | ✅ (voice, montage, shorts, **image** via SD, **LLM** via Ollama) | ❌ | ✅ (only mode) | ✅ each on its own |
 | **Provider-agnostic (no lock-in)** | ✅ swap any model | ❌ | SD-only | ❌ single-purpose |
 | **Multi-modal: image → video → voice → presenter** | ✅ | partial | image-only | single-purpose |
 | **Agent-native (MCP tool surface)** | ✅ day one | ❌ | ❌ | ❌ |
@@ -103,7 +103,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**396 tests, strict TypeScript, every commit a passing TDD cycle.**
+**403 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -113,7 +113,7 @@ Forgecast is **model-agnostic** (every model is a swappable adapter), but it shi
 
 | Modality | Default | Best (opt-in) | Engine |
 |---|---|---|---|
-| **Image** | **`fal-ai/nano-banana`** (Google Gemini 2.5 Flash Image) — fast, low-cost, great | **`fal-ai/nano-banana-pro`** — state-of-the-art detail + text · FLUX.1 [dev]/[schnell] also in the picker | fal.ai text-to-image |
+| **Image** | **`fal-ai/nano-banana`** (Google Gemini 2.5 Flash Image) — fast, low-cost, great | **`fal-ai/nano-banana-pro`** — state-of-the-art detail + text · FLUX.1 [dev]/[schnell] also in the picker | fal.ai text-to-image · **or free self-hosted Stable Diffusion** (`provider: "stablediffusion"`, `SD_WEBUI_URL`) |
 | **Video** | **`bytedance/seedance/v1.5/pro`** — best value, native audio (the Studio's standard) | **`fal-ai/veo3.1/fast`** — 4K + native audio (the **Boost Quality** toggle) · **Kling 3 Pro** for cinematic motion (premium) | fal.ai text→video **and** image→video |
 | **Voice** | self-hosted **VoxCPM-2** (open-source, Apache-2.0) | cloud **fal TTS** (automatic fallback) | `VoiceProvider` |
 
@@ -162,7 +162,7 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 396 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 403 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
