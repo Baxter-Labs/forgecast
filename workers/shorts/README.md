@@ -15,7 +15,18 @@ Forgecast exposes MoneyPrinterTurbo's standout features as a typed, vendor-neutr
 
 ## Run the worker
 
-**Requirements:** Docker, plus provider keys — an LLM (OpenAI / Gemini / DeepSeek / Moonshot / Ollama / …) for the script, and a stock source (a free [Pexels](https://www.pexels.com/api/) key). TTS uses free Edge-TTS by default.
+**Requirements:** Docker, plus an LLM for the script and a stock-footage source. **Every stage has a free path — see below.**
+
+### 💸 Run it 100% free (no paid API)
+
+Short videos can be generated end-to-end for free — you just supply the compute (the worker runs on your machine):
+
+- **Script (LLM)** → point it at a local **[Ollama](https://github.com/ollama/ollama)** model (`llm_provider = "ollama"` in `config.toml`). Free, no key. (Any free-tier cloud LLM also works.)
+- **Narration (TTS)** → **Edge-TTS** is the worker's **default**. Free, no key.
+- **Footage** → a free **[Pexels](https://www.pexels.com/api/)** API key (free tier), **or** set the source to `local` (Forgecast: `options.source = "local"`) and use your own clips — **zero keys**.
+- **Subtitles + rendering** → Whisper + FFmpeg run locally in the worker. Free.
+
+So the only non-compute cost is an *optional* free Pexels signup. Pair it with Forgecast's free local agent (`FORGECAST_AGENT_LLM=ollama`) and self-hosted Stable Diffusion images (`SD_WEBUI_URL`), and the whole create stack runs with **no paid keys**.
 
 ```bash
 cd workers/shorts
@@ -23,9 +34,11 @@ cd workers/shorts
 # 1. Clone MoneyPrinter into ./moneyprinter (gitignored — not vendored)
 git clone --depth 1 https://github.com/harry0703/MoneyPrinterTurbo moneyprinter
 
-# 2. Create config.toml from their example and add your keys
+# 2. Create config.toml from their example and configure it
 cp moneyprinter/config.example.toml config.toml
-#   then edit config.toml: set an LLM provider + api key, and pexels_api_keys = ["..."]
+#   Free path: set llm_provider = "ollama" (no key) and pexels_api_keys = ["<free key>"]
+#   (or video_source = "local" for zero keys). Edge-TTS is already the free default.
+#   Paid path: set any cloud LLM provider + its api key instead.
 
 # 3. Build + run the API worker (FastAPI on :8080)
 docker compose up --build
