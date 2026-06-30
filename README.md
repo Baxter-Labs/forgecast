@@ -173,7 +173,7 @@ cp .env.example apps/web/.env.local        # add the keys you have (all optional
 pnpm -C apps/web dev                       # http://localhost:3210
 ```
 
-Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. The next section is the wiring cheat sheet.
+Without any keys the Studio runs fine and shows clear "not configured" states — the whole pipeline executes, it just can't reach a provider. You can light it up **two ways**, both below: **cloud** (a single `FAL_KEY` gets you the whole image studio in seconds) or a **100% free local stack** (Stable Diffusion + Ollama + the open-source workers — no paid keys). Keys are read from `apps/web/.env.local`; the dev server hot-reloads, or restart it after editing.
 
 ---
 
@@ -185,10 +185,12 @@ Every capability is a swappable adapter. **You set keys once, as server-side env
 
 | Env var | Unlocks | Where to get it | Need it? |
 |---|---|---|---|
-| `FAL_KEY` | Image generation + **Enhance / Edit / Cutout / Variations**, From-Website & Brand-Kit images | [fal.ai → keys](https://fal.ai/dashboard/keys) | **Start here** |
+| `FAL_KEY` | Image generation + **Enhance / Edit / Cutout / Variations**, From-Website & Brand-Kit images | [fal.ai → keys](https://fal.ai/dashboard/keys) | **Start here** (cloud) |
+| `SD_WEBUI_URL` | **Free, self-hosted image generation** via a local Stable Diffusion WebUI ([Automatic1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) launched with `--api`) — call generate with `provider: "stablediffusion"` | run it locally (`:7860`) | free, optional |
 | `FAL_KEY_VIDEO` | Text→video, image→video (**Animate**), **AI presenter** | same fal.ai dashboard | for video |
-| `VOXCPM_URL` | Self-hosted open-source **voice-over** (VoxCPM-2, preferred) | run [`workers/voice`](workers/voice/) | optional |
+| `VOXCPM_URL` | Self-hosted open-source **voice-over** (VoxCPM-2, preferred) | run [`workers/voice`](workers/voice/) | free, optional |
 | `FAL_KEY_VOICE` | Cloud voice-over fallback (if you don't run VoxCPM) | fal.ai | optional |
+| `PEXELS_API_KEY` | **Real-footage search** (find copyright-free stock video by topic → import → montage) — also the short-video worker's stock source | free at [pexels.com/api](https://www.pexels.com/api/) | free, optional |
 
 ### Agent brain — the PLAN / AUTO-RUN agent
 
@@ -219,24 +221,42 @@ Every capability is a swappable adapter. **You set keys once, as server-side env
 | `FORGECAST_PROFILE=baxter-cloud` + `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Cloudflare **R2** asset storage + **D1** metadata at the edge | Cloudflare dashboard |
 | `MONTAGE_WORKER_URL` / `FORGECAST_VIDEO_WORKER_URL` | Remotion render worker / MoneyPrinter short-video worker (else bundled ffmpeg) | [`workers/`](workers/) |
 
-### 60-second wiring — copy-paste `.env.local`
+### Run it locally — pick a recipe, paste into `apps/web/.env.local`
+
+**A) Cloud — fastest to a full studio.** One key gets the whole image studio; add more as needed:
 
 ```bash
-# 1) minimum to make anything — images + enhance/edit/cutout/variations
-FAL_KEY=...
-# 2) add video — animate / text→video / AI presenter
-FAL_KEY_VIDEO=...
-# 3) add the agent (PLAN / AUTO-RUN)
-OPENAI_API_KEY=...              # or: FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY=...
-# 4) turn it into a business — Pro tier
-MOLLIE_API_KEY=...
-# 5) production essentials
-FORGECAST_BASE_URL=https://your-domain.com
-FORGECAST_DB=./.forgecast/forgecast.db
-FORGECAST_DATA_DIR=./.forgecast/objects
+FAL_KEY=...                     # image studio: generate · enhance · edit · cutout · variations · brand kit (start here)
+FAL_KEY_VIDEO=...               # + video: animate / text→video / AI presenter
+OPENAI_API_KEY=...              # + the PLAN / AUTO-RUN agent  (or FORGECAST_AGENT_LLM=anthropic + ANTHROPIC_API_KEY=...)
 ```
 
-> **Tip:** add `FAL_KEY` first and you've got the whole image studio (generate → enhance → edit → cutout → variations → brand-kit), working locally with no public URL.
+**B) Free & local — no paid keys.** Run the open-source engines yourself (each is optional — set the ones you want):
+
+```bash
+# Image → local Stable Diffusion WebUI (run Automatic1111 with --api), then generate with provider:"stablediffusion"
+SD_WEBUI_URL=http://localhost:7860
+# Agent → local Ollama:  `ollama serve` && `ollama pull llama3.1`
+FORGECAST_AGENT_LLM=ollama
+OLLAMA_MODEL=llama3.1
+# Voice-over → self-hosted VoxCPM-2  (run workers/voice)
+VOXCPM_URL=http://localhost:8770
+# Short video → MoneyPrinterTurbo worker (run workers/shorts; 100% free with Ollama + Edge-TTS + a free Pexels key)
+FORGECAST_VIDEO_WORKER_URL=http://localhost:8080
+# Real-footage search → free Pexels tier
+PEXELS_API_KEY=...
+```
+
+**Production essentials (either recipe):**
+
+```bash
+FORGECAST_BASE_URL=https://your-domain.com         # lets providers/workers fetch your assets (else inlined as data-URIs)
+FORGECAST_DB=./.forgecast/forgecast.db             # durable metadata (SQLite)
+FORGECAST_DATA_DIR=./.forgecast/objects            # durable asset bytes
+MOLLIE_API_KEY=...                                 # optional — Pro-tier billing
+```
+
+> **Fastest start:** add `FAL_KEY` and you've got the whole image studio locally, no public URL. **Cheapest start:** run Stable Diffusion + Ollama and it's all free. The full list of vars is in [`.env.example`](.env.example).
 
 ---
 
