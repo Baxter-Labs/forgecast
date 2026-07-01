@@ -8,6 +8,7 @@ export interface OmnisocialsPublisherOptions {
 
 interface OmniError { error?: { code?: string; message?: string } }
 interface OmniPost { id?: string; status?: string }
+interface OmniEnvelope { data?: OmniPost }
 
 export class OmnisocialsPublisher implements Publisher {
   readonly name = 'omnisocials';
@@ -47,7 +48,7 @@ export class OmnisocialsPublisher implements Publisher {
       throw new PublishError(err?.code ?? 'api_error', err?.message ?? `publish failed with status ${res.status}`);
     }
 
-    const post = parsed as OmniPost;
+    const post = (parsed as OmniEnvelope).data ?? (parsed as OmniPost);
     if (!post.id) throw new PublishError('bad_response', 'OmniSocials response missing post id');
     return { postId: post.id, status: post.status ?? 'unknown', raw: parsed };
   }
