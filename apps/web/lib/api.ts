@@ -1,4 +1,4 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent } from '@forgecast/core';
 import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
@@ -7,6 +7,21 @@ import { runBackground } from './cf-env';
 
 /** Minimal shape `generateAdCopy` needs from an LLM client (injectable for tests). */
 type AdCopyLlm = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
+
+/** Operator-configurable extra blocklist (comma-separated) for the content guardrails. */
+function contentBlocklist(): string[] {
+  return (process.env.CONTENT_BLOCKLIST ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+/**
+ * Run a user prompt/brief/script through the content guardrails. Returns a 400
+ * ApiResult when it's blocked (so callers `if (blocked) return blocked;`), else null.
+ */
+export function guardText(text: string): ApiResult | null {
+  const r = checkContent(text, contentBlocklist());
+  if (r.ok) return null;
+  return { status: 400, body: { error: `blocked by content policy — ${r.reason}`, category: r.category } };
+}
 
 // Reserved job-param key holding the provider's async task reference (response_url).
 // Stripped before it ever lands on the produced asset's params.
@@ -40,6 +55,7 @@ export async function generateImage(services: Services, projectId: string, input
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
   }
+  const blockedImage = guardText(fields.prompt); if (blockedImage) return blockedImage;
 
   const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
   // A non-fal provider (e.g. self-hosted Stable Diffusion) must actually be configured.
@@ -220,6 +236,7 @@ export async function generateAdCopy(
   if (typeof fields.brief !== 'string' || fields.brief.trim().length === 0) {
     return { status: 400, body: { error: 'brief is required' } };
   }
+  const blockedAdCopy = guardText(fields.brief); if (blockedAdCopy) return blockedAdCopy;
   if (!llm.isAvailable()) {
     return {
       status: 503,
@@ -569,6 +586,7 @@ export async function generateShortVideo(services: Services, projectId: string, 
   const fields = (input ?? {}) as { subject?: unknown; prompt?: unknown; options?: unknown };
   const rawSubject = typeof fields.subject === 'string' ? fields.subject : typeof fields.prompt === 'string' ? fields.prompt : '';
   if (rawSubject.trim().length === 0) return { status: 400, body: { error: 'subject is required' } };
+  const blockedShort = guardText(rawSubject); if (blockedShort) return blockedShort;
   // Ground the short video in the project's brand kit (no-op when none is set).
   const subject = applyBrandKit(await getBrandKit(services, projectId), rawSubject);
   const options = sanitizeShortVideoOptions(fields.options);
@@ -605,6 +623,7 @@ export async function generateVideo(services: Services, projectId: string, input
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
   }
+  const blockedVideo = guardText(fields.prompt); if (blockedVideo) return blockedVideo;
 
   const modelId = typeof fields.model === 'string' ? fields.model : undefined;
   const modelDef = modelId ? videoModelById(modelId) : undefined;
@@ -719,6 +738,7 @@ export async function generateVoiceover(services: Services, projectId: string, i
   if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {
     return { status: 400, body: { error: 'text is required' } };
   }
+  const blockedVoice = guardText(fields.text); if (blockedVoice) return blockedVoice;
   const params: Record<string, unknown> = { text: fields.text };
   if (typeof fields.voice === 'string') params.voice = fields.voice;
   if (typeof fields.model === 'string') params.model = fields.model;
@@ -782,6 +802,8 @@ export async function generatePresenter(services: Services, projectId: string, i
 
   if (!hasImage) return { status: 400, body: { error: 'imagePrompt or imageUrl is required' } };
   if (!hasAudio) return { status: 400, body: { error: 'text or audioUrl is required' } };
+  if (typeof fields.imagePrompt === 'string') { const b = guardText(fields.imagePrompt); if (b) return b; }
+  if (typeof fields.text === 'string') { const b = guardText(fields.text); if (b) return b; }
 
   const params: Record<string, unknown> = {};
   // Ground the presenter's look in the project's brand kit (no-op when none is set).

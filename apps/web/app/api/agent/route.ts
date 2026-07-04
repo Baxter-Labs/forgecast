@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ContentAgent, ToolCallingAgent, type ContentPlan } from '@forgecast/agent';
 import { getServices } from '@/lib/forgecast';
+import { guardText } from '@/lib/api';
 import { makeForgecastActions } from '@/lib/agent/forgecast-actions';
 import { makeLlmClient } from '@/lib/agent/llm';
 import { maybeTrendTool } from '@/lib/agent/trends';
@@ -12,6 +13,12 @@ export async function POST(req: Request) {
     | { mode?: string; brief?: string; platforms?: string[]; plan?: ContentPlan; projectId?: string; projectName?: string; publish?: boolean }
     | null;
   if (!body?.mode) return NextResponse.json({ error: 'mode is required (plan|execute)' }, { status: 400 });
+
+  // Content guardrails — block a disallowed brief before the agent plans/produces anything.
+  if (typeof body.brief === 'string' && body.brief.length > 0) {
+    const blocked = guardText(body.brief);
+    if (blocked) return NextResponse.json(blocked.body, { status: blocked.status });
+  }
 
   const llm = makeLlmClient();
   const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
