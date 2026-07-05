@@ -3,6 +3,7 @@ import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
   InMemoryJobRepo,
+  InMemoryUserRepo,
   InMemoryStorage,
   openStore,
   d1Store,
@@ -12,7 +13,7 @@ import {
   type D1Like,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding } from './cf-env';
@@ -23,6 +24,7 @@ export interface Services {
   projects: ProjectRepo;
   assets: AssetRepo;
   jobs: JobRepo;
+  users: UserRepo;
   storage: StorageDriver;
   runner: JobRunner;
   ids: { randomId: () => string; nowIso: () => string };
@@ -119,6 +121,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   let projects: ProjectRepo;
   let assets: AssetRepo;
   let jobs: JobRepo;
+  let users: UserRepo;
   if (opts.d1) {
     // Edge-durable metadata: D1 (SQLite at the edge), so projects/assets/jobs
     // persist across Worker isolates.
@@ -126,15 +129,18 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     projects = store.projects;
     assets = store.assets;
     jobs = store.jobs;
+    users = store.users;
   } else if (dbPath) {
     const store = openStore(dbPath);
     projects = store.projects;
     assets = store.assets;
     jobs = store.jobs;
+    users = store.users;
   } else {
     projects = new InMemoryProjectRepo();
     assets = new InMemoryAssetRepo();
     jobs = new InMemoryJobRepo();
+    users = new InMemoryUserRepo();
   }
 
   const storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
@@ -237,7 +243,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**

@@ -21,3 +21,4 @@ export * from './adaudit';
 export * from './footage';
 export * from './contentguard';
 export * from './editor';
+export * from './auth';
