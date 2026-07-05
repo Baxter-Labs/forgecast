@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
-import type { EditorTimeline, EditorClip } from '@forgecast/core';
+import { toUI, toDoc } from '@/lib/timeline-ui';
 import { Palette, Activity } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
 import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
@@ -144,17 +144,7 @@ export function Studio() {
     if (!projectId) return;
     void loadTimeline().then((t) => {
       if (!t || t.clips.length === 0) return;
-      setTimeline({
-        aspect: t.aspectRatio,
-        musicAssetId: t.musicAssetId ?? null,
-        clips: t.clips.map((c) => ({
-          id: c.id,
-          assetId: c.assetId,
-          durationSec: c.durationSec,
-          caption: c.caption ?? '',
-          transition: c.transition ?? 'fade',
-        })),
-      });
+      setTimeline(toUI(t));
     });
   }, [projectId, loadTimeline]);
 
@@ -268,17 +258,8 @@ export function Studio() {
         voiceName: short.voiceName.trim() || undefined,
       }).then(attach);
     } else if (mode === 'timeline') {
-      const doc: EditorTimeline = {
-        aspectRatio: timeline.aspect,
-        clips: timeline.clips.map((c) => {
-          const clip: EditorClip = { id: c.id, assetId: c.assetId, durationSec: c.durationSec, transition: c.transition };
-          const caption = c.caption.trim();
-          if (caption) clip.caption = caption;
-          return clip;
-        }),
-      };
-      if (timeline.musicAssetId) doc.musicAssetId = timeline.musicAssetId;
       // Persist the arrangement (so agents see it over MCP), then render it.
+      const doc = toDoc(timeline);
       void saveTimeline(doc).then(() => renderTimeline(doc)).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);

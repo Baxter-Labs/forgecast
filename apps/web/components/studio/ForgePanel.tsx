@@ -629,6 +629,15 @@ export function ForgePanel({
       {/* TIMELINE EDITOR MODE — arrange existing assets into one video */}
       {mode === 'timeline' && (
         <>
+          <a
+            href="/editor"
+            className="flex items-center justify-between rounded-lg border px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] transition-all hover:border-[var(--ember-2)]"
+            style={{ borderColor: 'var(--forge-border)', color: 'var(--ember-1)', background: 'var(--forge-surface-2)' }}
+          >
+            Open the full editor
+            <span aria-hidden="true">→</span>
+          </a>
+
           <TimelineBuilder assets={assets} timeline={timeline} setTimeline={setTimeline} />
 
           <div>

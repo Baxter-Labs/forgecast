@@ -1,21 +1,11 @@
 'use client';
 import type { StudioAsset } from '@/lib/use-forgecast';
+import { TIMELINE_TRANSITIONS, newClipFrom, moveItem, totalDurationSec } from '@/lib/timeline-ui';
+import type { TimelineUIClip, TimelineControls } from '@/lib/timeline-ui';
 
-/** A clip as the Studio edits it (caption/transition always present for controlled inputs). */
-export interface TimelineUIClip {
-  id: string;
-  assetId: string;
-  durationSec: number;
-  caption: string;
-  transition: 'fade' | 'slide' | 'none';
-}
-
-/** The timeline as Studio state — mapped to the core EditorTimeline on save/render. */
-export interface TimelineControls {
-  clips: TimelineUIClip[];
-  aspect: string;
-  musicAssetId: string | null;
-}
+// The canonical timeline UI types live in lib/timeline-ui (shared with /editor);
+// re-exported here so existing imports keep working.
+export type { TimelineUIClip, TimelineControls };
 
 interface TimelineBuilderProps {
   assets: StudioAsset[];
@@ -23,17 +13,11 @@ interface TimelineBuilderProps {
   setTimeline: React.Dispatch<React.SetStateAction<TimelineControls>>;
 }
 
-const TRANSITIONS: TimelineUIClip['transition'][] = ['fade', 'slide', 'none'];
-
 const FIELD_CLASS = 'rounded bg-[var(--forge-bg)] border border-[var(--forge-border)] text-[var(--forge-text)] text-xs outline-none focus:border-[var(--ember-2)] transition-colors';
 const ICON_BTN_CLASS = 'w-7 h-7 shrink-0 rounded border font-mono text-xs flex items-center justify-center transition-all disabled:opacity-35 disabled:cursor-not-allowed';
 const ICON_BTN_STYLE = { borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' } as const;
 const SELECT_CLASS = 'w-full rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)] text-[var(--forge-text)] text-sm px-3 py-2.5 outline-none appearance-none cursor-pointer focus:border-[var(--ember-2)] transition-colors';
 const SELECT_ARROW = { backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b5e54' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat' as const, backgroundPosition: 'right 12px center' };
-
-function clipUid(): string {
-  return 'clip-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
 
 function assetLabel(a: StudioAsset): string {
   return a.params.prompt ?? a.params.text ?? a.id.slice(0, 8);
@@ -51,7 +35,7 @@ export function TimelineBuilder({ assets, timeline, setTimeline }: TimelineBuild
   const visual = assets.filter((a) => a.type === 'image' || a.type === 'video');
   const audio = assets.filter((a) => a.type === 'audio');
   const byId = new Map(assets.map((a) => [a.id, a]));
-  const totalSec = Math.round(timeline.clips.reduce((s, c) => s + (c.durationSec || 0), 0) * 10) / 10;
+  const totalSec = totalDurationSec(timeline.clips);
 
   // Functional updates so rapid taps (or an agent driving the DOM) never clobber
   // each other inside one React batch.
@@ -59,28 +43,13 @@ export function TimelineBuilder({ assets, timeline, setTimeline }: TimelineBuild
     setTimeline((prev) => ({ ...prev, clips: prev.clips.map((c) => (c.id === id ? { ...c, ...fields } : c)) }));
   }
   function moveClip(id: string, dir: -1 | 1) {
-    setTimeline((prev) => {
-      const i = prev.clips.findIndex((c) => c.id === id);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= prev.clips.length) return prev;
-      const next = [...prev.clips];
-      const moved = next.splice(i, 1)[0];
-      if (!moved) return prev;
-      next.splice(j, 0, moved);
-      return { ...prev, clips: next };
-    });
+    setTimeline((prev) => ({ ...prev, clips: moveItem(prev.clips, id, dir) }));
   }
   function removeClip(id: string) {
     setTimeline((prev) => ({ ...prev, clips: prev.clips.filter((c) => c.id !== id) }));
   }
   function addClip(asset: StudioAsset) {
-    setTimeline((prev) => ({
-      ...prev,
-      clips: [
-        ...prev.clips,
-        { id: clipUid(), assetId: asset.id, durationSec: asset.type === 'video' ? 5 : 3, caption: '', transition: 'fade' },
-      ],
-    }));
+    setTimeline((prev) => ({ ...prev, clips: [...prev.clips, newClipFrom(asset)] }));
   }
 
   return (
@@ -140,7 +109,7 @@ export function TimelineBuilder({ assets, timeline, setTimeline }: TimelineBuild
                       aria-label={`Clip ${i + 1} transition`}
                       className={`${FIELD_CLASS} px-1.5 py-1 cursor-pointer`}
                     >
-                      {TRANSITIONS.map((t) => (
+                      {TIMELINE_TRANSITIONS.map((t) => (
                         <option key={t} value={t} style={{ background: '#221b16', color: '#f5eee6' }}>{t}</option>
                       ))}
                     </select>
