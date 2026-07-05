@@ -2,13 +2,15 @@
 
 The short version: **everything depends inward on `@forgecast/core`'s pure contracts**, so any concrete piece — a model provider, a database, a storage backend, a publishing adapter — is a swappable adapter that drops in with zero changes to everything above it.
 
+> Looking for *which files are frontend vs backend vs AI*? See **“Frontend · Backend · AI — the production map”** in the [README](../README.md).
+
 ---
 
 ## 1. Principles
 
 - **Dependency inversion.** `@forgecast/core` defines interfaces (contracts) and pure types with **zero I/O**. Every other package depends on those contracts, never the reverse.
 - **Pluggable everything.** Generation, storage, persistence, publishing, voice, and distribution are all interfaces. The default implementations are cloud-backed (no GPU) and in-memory (for dev/tests); SQLite + filesystem and Cloudflare D1 + R2 are the production backends.
-- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection — the whole suite is mock-tested with no network, GPU, or database. 375 tests, all offline.
+- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection — the whole suite is mock-tested with no network, GPU, or database. 457 tests, all offline.
 - **Two front doors, one spine.** Each capability is exposed as an HTTP route (for humans and the Studio UI) and as an MCP tool (for agents and Claude Desktop).
 
 ---
@@ -238,7 +240,33 @@ See [`apps/mcp/README.md`](../apps/mcp/README.md) for configuration and the full
 
 ---
 
-## 9. Deployment profiles
+## 9. Auth & multi-tenancy
+
+Built in, hand-rolled (no auth SDK), and **env-gated** — unset means the open single-operator
+self-host mode; set `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `AUTH_SECRET`
+(+ a public `FORGECAST_BASE_URL`) and the same build becomes a multi-user website.
+
+**Flow.** `GET /api/auth/google` → Google consent (authorization-code + **PKCE S256**,
+`state` in a short-lived httpOnly cookie) → `GET /api/auth/callback` verifies state,
+exchanges the code and reads the profile through the injectable `fetch`, upserts the
+user, and issues `fc_session` — a **30-day HMAC-SHA256-signed cookie** (WebCrypto, so
+it runs on Node and Workers alike; sessions are stateless, sign-out just clears it).
+
+**Tenancy.** `Project.ownerId` scopes every workspace; assets, jobs and timelines
+inherit ownership through their project. Every route passes a guard —
+`requireUser` / `requireProject` / `requireAsset` / `requireJob` in
+[`apps/web/lib/auth-guard.ts`](../apps/web/lib/auth-guard.ts): no session → **401**,
+someone else's resource → **404** (ids can't be probed). Public by design: `health`,
+`auth/*`, the billing webhook, and `assets/[id]/raw` (an unguessable capability URL —
+renderers and social relays fetch media without cookies). Rows created before auth
+was enabled belong to the `local` operator.
+
+**Files.** [`packages/core/src/auth.ts`](../packages/core/src/auth.ts) (UserRecord/UserRepo +
+session sign/verify) · user repos in every store backend · [`apps/web/lib/auth.ts`](../apps/web/lib/auth.ts)
+(OAuth flow + cookies) · routes under [`apps/web/app/api/auth/`](../apps/web/app/api/auth/) ·
+[`apps/web/app/signin/`](../apps/web/app/signin/) (the sign-in page, `force-dynamic`).
+
+## 10. Deployment profiles
 
 The OSS core is cloud-agnostic; clouds are opt-in configuration, never a requirement.
 
@@ -254,7 +282,7 @@ See [`docs/DEPLOY-CLOUDFLARE.md`](DEPLOY-CLOUDFLARE.md) for the step-by-step Clo
 
 ---
 
-## 10. Testing philosophy
+## 11. Testing philosophy
 
 - **TDD per change**, every commit green.
 - **Strict TypeScript** (`strict` + `noUncheckedIndexedAccess`) — `pnpm typecheck` must pass across every package.

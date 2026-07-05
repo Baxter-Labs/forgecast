@@ -73,12 +73,13 @@ Most tools make you pick one compromise. Forgecast refuses the trade-offs:
 Two interfaces over one spine, driving generation modules through pluggable providers, backed by storage:
 
 ```
-        Humans ─▶ Web UI (Studio) ─┐
-                                   ├─▶  Platform Spine  ──▶  Job Engine ──▶  Provider Adapters
-        Agents ─▶ MCP Tools ───────┤   (API · projects ·     (async, with     ├─ Self-hosted (open-source): VoxCPM-2 voice · Remotion/ffmpeg montage · MoneyPrinter shorts
-        Voice  ─▶ Wispr / Vapi ────┘    jobs · agent · auth)   progress)        └─ Cloud (optional): fal (image/video/TTS) · OmniHuman (presenter) · OpenAI (agent) · IG/LI/YT
-                                              │                                          │
-                                  SQLite / D1 (metadata)  ◀──────────────────▶  Filesystem / R2 (asset bytes)
+        Humans ─▶ Studio + /editor ┐        Google OAuth ⇄ sessions ⇄ per-user workspaces
+                   (+ /signin)     ├─▶  Platform Spine  ──▶  Job Engine ──▶  Provider Adapters
+        Agents ─▶ MCP Tools ───────┤   (API · auth guards ·  (async, with     ├─ Self-hosted (open-source): VoxCPM-2 voice · Remotion/ffmpeg montage · MoneyPrinter shorts
+        Voice  ─▶ Wispr / Vapi ────┘    projects · jobs ·      progress)        └─ Cloud (optional): fal (image/video/TTS) · OmniHuman (presenter) · OpenAI/Claude/Ollama (agent) · IG/LI/YT
+                                        timelines · agent)          │
+                                              │                     │
+                                  SQLite / D1 (metadata)  ◀────────┴─────────▶  Filesystem / R2 (asset bytes)
 ```
 
 ### Package graph (the build of the spine)
@@ -171,6 +172,71 @@ forgecast/
 ├─ LICENSE              # MIT
 └─ NOTICE               # third-party attributions
 ```
+
+---
+
+## Frontend · Backend · AI — the production map
+
+One Next.js app serves both halves, but the split is strict — useful to know when you deploy, debug, or scale. A request flows:
+
+```
+Browser (React, client components)
+   │  fetch('/api/…')                      ← the ONLY way the frontend talks to the system
+   ▼
+API routes (thin HTTP shells)  ─▶  auth guards (session + ownership)
+   ▼
+lib/api.ts  (the spine — all endpoint logic, pure & unit-tested)
+   ▼
+packages/jobs (async job engine) ─▶ packages/providers (external AI/services calls)
+   ▼
+packages/store (SQLite+FS or D1+R2)        ← the ONLY stateful part you must provision
+```
+
+### 🖥 Frontend — runs in the browser
+
+Everything here compiles to client-side JS. It holds no secrets, calls nothing but `/api/*`, and is safe on any CDN/edge.
+
+| What | Where |
+|---|---|
+| Pages (App Router) | [`apps/web/app/page.tsx`](apps/web/app/page.tsx) (Studio) · [`app/editor/`](apps/web/app/editor/) (timeline workspace) · [`app/edit/[id]/`](apps/web/app/edit/) (asset editor) · [`app/signin/`](apps/web/app/signin/) (Google sign-in, server-rendered) |
+| Studio components | [`apps/web/components/studio/`](apps/web/components/studio/) — `Studio` (state hub) · `ForgePanel` (create modes) · `TimelineBuilder` · `Gallery`/`AssetCard` · `AgentChat` · `Header` (account chip) · `BrandKitModal` · `PerformancePanel` |
+| Editor components | [`apps/web/components/editor/`](apps/web/components/editor/) — `TimelineWorkspace` (drawer · lane · inspector) · `AssetEditor` |
+| Client state hooks | [`apps/web/lib/use-forgecast.ts`](apps/web/lib/use-forgecast.ts) (session gate, availability, generate+poll) · [`use-timeline-editor.ts`](apps/web/lib/use-timeline-editor.ts) (autosave + render) · [`use-asset-editor.ts`](apps/web/lib/use-asset-editor.ts) · [`use-brand-kit.ts`](apps/web/lib/use-brand-kit.ts) |
+| Shared UI logic + theme | [`apps/web/lib/timeline-ui.ts`](apps/web/lib/timeline-ui.ts) (pure timeline converters) · [`apps/web/app/globals.css`](apps/web/app/globals.css) (the Molten Forge design tokens) |
+
+### ⚙️ Backend — runs on the server (Node or Workers)
+
+This is where env vars live and requests are authorized. Stateless except the store — scale it horizontally as long as all instances share the same database + object storage.
+
+| What | Where |
+|---|---|
+| HTTP surface | [`apps/web/app/api/`](apps/web/app/api/) — `auth/*` (Google OAuth + session) · `projects/*` (+ nested generate/assets/timeline/brand-kit/ads) · `assets/[id]` (+ `raw` file serving) · `jobs/[id]` · `agent` · `footage` · `transcribe` · `billing` · `health`. Routes are thin: parse → guard → call the spine. |
+| Auth & tenancy | [`apps/web/lib/auth.ts`](apps/web/lib/auth.ts) (OAuth code+PKCE flow, HMAC cookie sessions) · [`lib/auth-guard.ts`](apps/web/lib/auth-guard.ts) (`requireUser/Project/Asset/Job` — 401/404 enforcement on every route) |
+| The spine | [`apps/web/lib/api.ts`](apps/web/lib/api.ts) — every endpoint's actual logic (create/generate/publish/timeline/brand-kit/ads/guardrails), framework-free and unit-tested |
+| Composition root | [`apps/web/lib/forgecast.ts`](apps/web/lib/forgecast.ts) — reads env ONCE, decides which providers/storage/handlers exist (`buildServices`); [`lib/cf-env.ts`](apps/web/lib/cf-env.ts) for Workers bindings |
+| Job engine | [`packages/jobs/`](packages/jobs/) — `JobRunner` + a handler per kind (image/video/short/montage/voiceover/narrate/presenter/enhance/edit/cutout) |
+| Persistence | [`packages/store/`](packages/store/) — repos + storage: in-memory (tests) · **SQLite + filesystem** (default, `FORGECAST_DB`/`FORGECAST_DATA_DIR`) · **Cloudflare D1 + R2** (edge profile). Schema self-creates/migrates on open. |
+| Contracts | [`packages/core/`](packages/core/) — shared types + provider/repo/session interfaces (zero I/O; imported by both halves) |
+
+### 🧠 AI / LLM layer — every model call in one place
+
+No model is called anywhere else. Swap or self-host by pointing an adapter elsewhere; the UI and spine don't change.
+
+| What | Where | Model / key |
+|---|---|---|
+| **Agent brain** (PLAN / AUTO-RUN) | [`packages/agent/`](packages/agent/) — `toolAgent.ts` (tool-calling loop + tools: `read_website`, generate image/b-roll/presenter) · `plan.ts` (planning prompts + montage directive) | LLM via [`apps/web/lib/agent/llm.ts`](apps/web/lib/agent/llm.ts): **OpenAI** (default, `OPENAI_API_KEY`) · **Claude** (`FORGECAST_AGENT_LLM=anthropic`) · **Ollama, free/local** (`FORGECAST_AGENT_LLM=ollama`) |
+| Agent → platform bridge | [`apps/web/lib/agent/forgecast-actions.ts`](apps/web/lib/agent/forgecast-actions.ts) (tools call the same spine) · [`trends.ts`](apps/web/lib/agent/trends.ts) (optional Agent-Reach trends) | — |
+| **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | fal (`FAL_KEY`, Nano Banana default) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`, free) |
+| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | fal (`FAL_KEY_VIDEO`): Seedance default, Veo 3.1 boost, WAN/Kling/… |
+| **Voice / TTS** | [`packages/providers/src/voice/`](packages/providers/src/voice/) | self-hosted **VoxCPM-2** (`VOXCPM_URL`, free) → fal TTS fallback |
+| **Presenter** (talking head) | [`packages/providers/src/presenter/`](packages/providers/src/presenter/) | OmniHuman via fal |
+| **Speech-to-text** (mic input) | [`packages/providers/src/transcribe/`](packages/providers/src/transcribe/) | Wispr Flow (`WISPRFLOW_API_KEY`) → browser speech fallback |
+| Model menus | [`packages/catalog/`](packages/catalog/) | which model ids the UI offers, typed, with per-model params |
+| Renderers (no LLM) | [`packages/jobs/…/localMontage.ts`](packages/jobs/) (bundled ffmpeg) · [`workers/montage/`](workers/montage/) (Remotion) | keyless |
+| Self-hosted model services | [`workers/voice/`](workers/voice/) (VoxCPM-2) · [`workers/shorts/`](workers/shorts/) (MoneyPrinter: local Ollama script + Edge-TTS, free) | keyless |
+| Agent-facing API | [`apps/mcp/`](apps/mcp/) — 33 MCP tools over the same spine (external agents drive the platform) | `FORGECAST_API_URL` |
+
+**At deploy time, the checklist collapses to:** frontend needs nothing · backend needs the auth trio (`GOOGLE_CLIENT_ID/SECRET`, `AUTH_SECRET`) + `FORGECAST_BASE_URL` + durable storage (volume or D1/R2) · AI layer needs whichever provider keys you actually use (`FAL_KEY` at minimum for cloud generation — or none for the free self-hosted stack).
 
 ---
 
