@@ -70,16 +70,75 @@ Most tools make you pick one compromise. Forgecast refuses the trade-offs:
 
 ## The spine (architecture)
 
-Two interfaces over one spine, driving generation modules through pluggable providers, backed by storage:
+Humans, agents, and the in-app agent all drive one spine, which runs generation through pluggable providers and lands everything in swappable storage:
 
-```
-        Humans ─▶ Studio + /editor ┐        Google OAuth ⇄ sessions ⇄ per-user workspaces
-                   (+ /signin)     ├─▶  Platform Spine  ──▶  Job Engine ──▶  Provider Adapters
-        Agents ─▶ MCP Tools ───────┤   (API · auth guards ·  (async, with     ├─ Self-hosted (open-source): VoxCPM-2 voice · Remotion/ffmpeg montage · MoneyPrinter shorts
-        Voice  ─▶ Wispr / Vapi ────┘    projects · jobs ·      progress)        └─ Cloud (optional): fal (image/video/TTS) · OmniHuman (presenter) · OpenAI/Claude/Ollama (agent) · IG/LI/YT
-                                        timelines · agent)          │
-                                              │                     │
-                                  SQLite / D1 (metadata)  ◀────────┴─────────▶  Filesystem / R2 (asset bytes)
+```mermaid
+flowchart TB
+    subgraph clients["Who drives it"]
+        direction LR
+        studio["🧑 Studio UI — /"]
+        editor["🎬 Timeline editor — /editor"]
+        mcp["🤖 MCP agents — 33 tools"]
+    end
+
+    subgraph web["apps/web — one Next.js deployable"]
+        direction TB
+        subgraph frontend["Frontend · client JS, no secrets"]
+            pages["pages · components · hooks"]
+        end
+        subgraph backend["Backend · env vars live here"]
+            routes["/api/* routes — thin shells"]
+            guards["auth guards — sessions + ownership<br/>lib/auth.ts · lib/auth-guard.ts"]
+            spine["THE SPINE — lib/api.ts<br/>every endpoint's logic, unit-tested"]
+            agentBrain["in-app agent — packages/agent<br/>campaign mode · editor mode"]
+        end
+    end
+
+    google["Google OAuth"]
+
+    subgraph engine["Async work"]
+        jobsEngine["packages/jobs — JobRunner<br/>image · video · montage · voice · presenter"]
+    end
+
+    subgraph adapters["packages/providers — every external call"]
+        cloud["cloud: fal image/video/TTS · OmniHuman"]
+        oss["self-hosted: VoxCPM-2 · Stable Diffusion<br/>MoneyPrinter shorts · Remotion/ffmpeg render"]
+        publish["publish: IG · LinkedIn · YouTube · webhook"]
+    end
+
+    llm["agent LLM<br/>OpenAI default · Claude · local Ollama"]
+
+    subgraph storage["packages/store — the stateful part"]
+        direction LR
+        sqlite["SQLite + filesystem<br/>(default)"]
+        d1["Cloudflare D1 + R2<br/>(edge profile)"]
+    end
+
+    core["packages/core — pure contracts, zero I/O<br/>every arrow above depends inward on this"]
+
+    studio --> pages
+    editor --> pages
+    pages -->|"fetch /api/*"| routes
+    mcp -->|HTTP| routes
+    routes --> guards
+    guards <-->|"sign-in · PKCE"| google
+    guards --> spine
+    spine --> jobsEngine
+    spine <-->|"tools call the spine"| agentBrain
+    agentBrain --> llm
+    jobsEngine --> adapters
+    spine --> storage
+    jobsEngine --> storage
+
+    adapters ~~~ core
+    storage ~~~ core
+
+    classDef molten fill:#ff7a1a,stroke:#e5331b,color:#1a0c03,font-weight:bold
+    classDef ember fill:#ffc24b,stroke:#ff7a1a,color:#1a0c03
+    classDef quiet fill:#f5eee6,stroke:#a2968a,color:#322821
+    class spine molten
+    class core ember
+    class guards,agentBrain quiet
 ```
 
 ### Package graph (the build of the spine)
