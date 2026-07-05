@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { StudioAsset } from './use-forgecast';
+import { ensureSignedIn, type StudioAsset } from './use-forgecast';
 import { emptyControls, toDoc, toUI, type TimelineControls } from './timeline-ui';
 
 interface RawAsset { id: string; type?: StudioAsset['type']; params?: StudioAsset['params']; provider?: string; createdAt?: string }
@@ -44,6 +44,10 @@ export function useTimelineEditor(requestedProjectId?: string | null) {
   // Boot: resolve the project (requested or first), then assets + saved timeline + availability.
   useEffect(() => {
     (async () => {
+      // Signed-out on an auth-enabled deployment → /signin (matches the Studio).
+      const info = await ensureSignedIn();
+      if (info.enabled && !info.user) return;
+
       const health = await fetch('/api/health').then((r) => r.json()).catch(() => null);
       setAvailable((health?.providers?.montage ?? []).length > 0);
 

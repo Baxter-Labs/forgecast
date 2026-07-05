@@ -119,10 +119,11 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Ads measure→optimize loop** — audit ad performance (0–100 health score + grade, per-creative **creative-fatigue** diagnosis, recommendations), then **regenerate** fatigued creatives on-brand in one click — closing create → publish → measure → optimize. Works **keyless** on metrics you provide, or auto-pulls from Meta / Google Ads.
 - ✅ **MCP server** — the whole platform as agent-drivable tools.
 - ✅ **Content guardrails** — every prompt/brief/script is checked before generation (hard-blocks sexual content involving minors; operator-extensible blocklist via `CONTENT_BLOCKLIST`), with instant in-Studio feedback + agent-prompt hardening.
+- ✅ **Sign-in & multi-user** — built-in **Google OAuth** (code + PKCE, hand-rolled, zero SDK deps) with 30-day signed-cookie sessions and **per-user workspaces** (projects/assets/jobs scoped + guarded on every route). Env-gated: unset = today's open self-host mode; three env vars = a real multi-user website. See *Deploy to the cloud*.
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**424 tests, strict TypeScript, every commit a passing TDD cycle.**
+**457 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -356,12 +357,34 @@ pnpm -C apps/web build && pnpm -C apps/web start    # serves on :3000
 
 Set the env vars in your host's dashboard. For durable storage, point `FORGECAST_DB` + `FORGECAST_DATA_DIR` at a mounted volume (don't use ephemeral container disk for production).
 
+### Turn on sign-in (Google) for a public website
+
+Forgecast ships with **built-in Google sign-in + per-user workspaces** — off by default (the open self-host mode), on with three env vars:
+
+1. **Google Cloud Console** → APIs & Services → Credentials → **Create OAuth client** (type *Web application*). Add the authorized redirect URI:
+   `https://<your-domain>/api/auth/callback`
+2. Generate a session-signing secret: `openssl rand -base64 32`
+3. Set the envs on your host (plus `FORGECAST_BASE_URL=https://<your-domain>`):
+
+```bash
+GOOGLE_CLIENT_ID=…apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=…
+AUTH_SECRET=…            # the openssl output
+FORGECAST_BASE_URL=https://<your-domain>
+```
+
+That's the whole integration — no auth SDK, no third-party service. What it turns on:
+
+- **`/signin`** page ("Continue with Google") with the OAuth code + PKCE flow handled at `/api/auth/*`; sessions are 30-day HMAC-signed httpOnly cookies.
+- **Per-user workspaces**: every project (and its assets, jobs, timelines) belongs to the signed-in user; the API rejects other users' resources. Data created before auth was enabled belongs to the operator's open-mode workspace.
+- Header shows the account (avatar + name + sign out); signed-out visitors are sent to `/signin`.
+
+Leave the three vars unset and nothing changes: the open, single-operator self-host mode (this is what the test suite runs against).
+
 ### ⚠️ Before you expose it publicly
 
-Forgecast ships as a **single instance with one global key set and no built-in per-user auth** (intentional — see the next section). So **anyone who can reach the URL can generate, and every generation spends *your* API keys.**
-
-- Private demo / internal tool / small team → deploy as-is, just keep the URL private.
-- Public launch → put an auth layer in front first (Cloudflare Access, reverse-proxy basic-auth, or your own login) and set spend caps on your provider keys. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access itself.
+- **Keys & spend:** generations run on *your* provider keys — sign-in gates who can spend them, but set provider spend caps anyway. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access.
+- **Media URLs:** rendered assets are served at unguessable capability URLs (`/api/assets/<uuid>/raw`) so renderers and social relays can fetch them — treat the links themselves as shareable.
 - **Content safety:** every generation runs through the built-in **guardrails** (sexual-content-involving-minors is always blocked); extend them for your policy with `CONTENT_BLOCKLIST=...` before opening it up.
 
 ---
