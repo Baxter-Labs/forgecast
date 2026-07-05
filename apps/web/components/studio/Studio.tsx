@@ -245,10 +245,12 @@ export function Studio() {
   }
 
   // ── Forge handler ────────────────────────────────────────────────────────────
+  // Campaigns are optional organizers: forging always works; results land in the
+  // Gallery, and additionally attach to the campaign active at forge time.
   function handleForge() {
-    if (!activeCampaignId) return;
+    const campaignId = activeCampaignId;
     const attach = (assetId: string | null | undefined) => {
-      if (assetId) appendVideoAssets(activeCampaignId, [assetId]);
+      if (assetId && campaignId) appendVideoAssets(campaignId, [assetId]);
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
