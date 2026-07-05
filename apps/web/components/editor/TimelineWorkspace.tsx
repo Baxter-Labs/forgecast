@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, Film, Music2, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { useTimelineEditor } from '@/lib/use-timeline-editor';
+import { EditorAgent } from './EditorAgent';
 import {
   TIMELINE_TRANSITIONS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
   type TimelineUIClip,
@@ -322,8 +323,10 @@ export function TimelineWorkspace() {
             )}
           </div>
 
+          <EditorAgent projectId={editor.projectId} onDone={(r) => void editor.applyAgentResult(r)} />
+
           <p className="font-mono text-[10px] text-[var(--forge-faint)] leading-relaxed">
-            agents edit this same timeline over MCP — changes here are theirs too
+            agents edit this same timeline over MCP too — changes land in the same document
           </p>
         </section>
       </main>

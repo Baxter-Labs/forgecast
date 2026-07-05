@@ -1,6 +1,7 @@
 import type { ForgecastActions } from '@forgecast/agent';
 import type { Services } from '../forgecast';
-import { createProject, generateImage, generatePresenter, generateVideo, publishAsset } from '../api';
+import { createProject, generateImage, generatePresenter, generateVideo, publishAsset, listAssets, getTimeline, saveTimeline, renderTimeline } from '../api';
+import { emptyTimeline } from '@forgecast/core';
 import { HttpWebsiteReader } from '@forgecast/providers';
 import type { WebsiteInfo } from '@forgecast/core';
 
@@ -67,6 +68,31 @@ export function makeForgecastActions(services: Services): ForgecastActions {
       } catch (e) {
         return { summary: 'Could not read that website: ' + (e instanceof Error ? e.message : String(e)) };
       }
+    },
+    // ── Video editor: the same timeline document the Studio + /editor drive ──
+    async listAssets(projectId) {
+      const r = await listAssets(services, projectId);
+      const assets = ((r.body as { assets?: { id: string; type?: string; params?: { prompt?: string; text?: string }; provider?: string }[] }).assets ?? []);
+      return {
+        assets: assets.map((a) => ({
+          id: a.id,
+          type: a.type ?? 'image',
+          description: (a.params?.prompt ?? a.params?.text ?? a.provider ?? '').slice(0, 90),
+        })),
+      };
+    },
+    async getTimeline(projectId) {
+      return { timeline: (await getTimeline(services, projectId)) ?? emptyTimeline() };
+    },
+    async setTimeline(projectId, timeline) {
+      const r = await saveTimeline(services, projectId, { timeline });
+      return { timeline: (r.body as { timeline?: unknown }).timeline ?? null };
+    },
+    async renderTimeline(projectId) {
+      const r = await renderTimeline(services, projectId, {});
+      const body = r.body as { job?: { id: string }; error?: string };
+      if (r.status !== 202 || !body.job) return { jobId: '', error: body.error ?? `status ${r.status}` };
+      return { jobId: body.job.id };
     },
   };
 }

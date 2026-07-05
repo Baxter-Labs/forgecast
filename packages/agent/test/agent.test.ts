@@ -33,6 +33,10 @@ function makeForgecast(): ForgecastActions {
     generatePresenter: vi.fn(async () => ({ jobId: 'j-pres' })),
     publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
     readWebsite: vi.fn(async () => ({ summary: '' })),
+    listAssets: vi.fn(async () => ({ assets: [] })),
+    getTimeline: vi.fn(async () => ({ timeline: { aspectRatio: '9:16', clips: [] } })),
+    setTimeline: vi.fn(async (_p: string, t: unknown) => ({ timeline: t })),
+    renderTimeline: vi.fn(async () => ({ jobId: 'tl-render-1' })),
   };
 }
 
