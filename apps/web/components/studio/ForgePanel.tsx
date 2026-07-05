@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { CatalogModel } from '@forgecast/catalog';
 import { imageModels } from '@forgecast/catalog';
+import { checkContent } from '@forgecast/core';
 import type { Availability, StudioAsset } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
@@ -257,9 +258,13 @@ export function ForgePanel({
 
   const isI2V = false; // boost-quality toggle only exposes t2v models
 
+  // Instant content-policy hint (the server enforces the full check incl. the operator blocklist).
+  const promptBlocked = mode !== 'montage' && prompt.trim().length > 0 && !checkContent(prompt).ok;
+
   const canForge =
     !forging &&
     hasCampaign &&
+    !promptBlocked &&
     (mode === 'image'
       ? prompt.trim().length > 0
       : mode === 'video'
@@ -607,6 +612,13 @@ export function ForgePanel({
             topic → script → stock footage → narration → captions → music (MoneyPrinterTurbo)
           </p>
         </>
+      )}
+
+      {/* Content-policy hint */}
+      {promptBlocked && (
+        <p role="alert" className="font-mono text-[10px] text-red-300 -mb-2">
+          This prompt is blocked by the content policy and can't be generated.
+        </p>
       )}
 
       {/* FORGE BUTTON */}

@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **403 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **414 tests, strict TypeScript.**
 
 ---
 
@@ -117,10 +117,11 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Publishing** — Instagram, LinkedIn, YouTube, OmniSocials. **Pro tier** billing (Mollie).
 - ✅ **Ads measure→optimize loop** — audit ad performance (0–100 health score + grade, per-creative **creative-fatigue** diagnosis, recommendations), then **regenerate** fatigued creatives on-brand in one click — closing create → publish → measure → optimize. Works **keyless** on metrics you provide, or auto-pulls from Meta / Google Ads.
 - ✅ **MCP server** — the whole platform as agent-drivable tools.
+- ✅ **Content guardrails** — every prompt/brief/script is checked before generation (hard-blocks sexual content involving minors; operator-extensible blocklist via `CONTENT_BLOCKLIST`), with instant in-Studio feedback + agent-prompt hardening.
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**403 tests, strict TypeScript, every commit a passing TDD cycle.**
+**414 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -179,7 +180,7 @@ forgecast/
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 403 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 414 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
@@ -360,6 +361,7 @@ Forgecast ships as a **single instance with one global key set and no built-in p
 
 - Private demo / internal tool / small team → deploy as-is, just keep the URL private.
 - Public launch → put an auth layer in front first (Cloudflare Access, reverse-proxy basic-auth, or your own login) and set spend caps on your provider keys. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access itself.
+- **Content safety:** every generation runs through the built-in **guardrails** (sexual-content-involving-minors is always blocked); extend them for your policy with `CONTENT_BLOCKLIST=...` before opening it up.
 
 ---
 
