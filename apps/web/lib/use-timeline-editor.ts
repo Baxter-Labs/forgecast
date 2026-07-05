@@ -100,6 +100,18 @@ export function useTimelineEditor(requestedProjectId?: string | null) {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [timeline, projectId, saveNow]);
 
+  // Poll one job to a terminal state; resolves with the result asset id (or null).
+  const pollJob = useCallback(async (jobId: string): Promise<string | null> => {
+    for (let i = 0; i < POLL_MAX_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const job = await fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((b) => b.job).catch(() => null);
+      if (job?.status === 'done') return (job.resultAssetId as string | undefined) ?? null;
+      if (job?.status === 'error') { setError(job.error ?? 'Render failed'); return null; }
+    }
+    setError('Timed out waiting for the render');
+    return null;
+  }, []);
+
   const render = useCallback(async (): Promise<string | null> => {
     if (!projectId) return null;
     if (latestRef.current.clips.length === 0) { setError('Add at least one clip'); setRenderState('error'); return null; }
@@ -112,29 +124,49 @@ export function useTimelineEditor(requestedProjectId?: string | null) {
       });
       const body = await res.json().catch(() => null);
       if (res.status !== 202) { setError(body?.error ?? 'Failed to start the render'); setRenderState('error'); return null; }
-      const jobId = body.job.id as string;
-      for (let i = 0; i < POLL_MAX_TRIES; i++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const job = await fetch(`/api/jobs/${jobId}`).then((r) => r.json()).then((b) => b.job).catch(() => null);
-        if (job?.status === 'done') {
-          await refreshAssets(projectId);
-          setRenderState('done');
-          setResultAssetId(job.resultAssetId ?? null);
-          return job.resultAssetId ?? null;
-        }
-        if (job?.status === 'error') { setError(job.error ?? 'Render failed'); setRenderState('error'); return null; }
-      }
-      setError('Timed out waiting for the render'); setRenderState('error'); return null;
+      const assetId = await pollJob(body.job.id as string);
+      if (!assetId) { setRenderState('error'); return null; }
+      await refreshAssets(projectId);
+      setRenderState('done');
+      setResultAssetId(assetId);
+      return assetId;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error'); setRenderState('error'); return null;
     }
-  }, [projectId, saveNow, refreshAssets]);
+  }, [projectId, saveNow, refreshAssets, pollJob]);
+
+  // Re-hydrate the timeline from the server (e.g. after the agent rearranged it).
+  const reloadTimeline = useCallback(async () => {
+    if (!projectId) return;
+    const tl = await fetch(`/api/projects/${projectId}/timeline`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (tl?.timeline) {
+      setTimeline(toUI(tl.timeline));
+      setSaveState('saved');
+    }
+  }, [projectId]);
+
+  /** After an in-editor agent run: show its arrangement, then follow its render jobs. */
+  const applyAgentResult = useCallback(async (result: { videoJobIds?: string[] }) => {
+    await reloadTimeline();
+    const jobIds = (result.videoJobIds ?? []).filter(Boolean);
+    if (!projectId || jobIds.length === 0) return;
+    setRenderState('rendering'); setError(null);
+    let lastAsset: string | null = null;
+    for (const id of jobIds) {
+      const assetId = await pollJob(id);
+      if (assetId) lastAsset = assetId;
+    }
+    await refreshAssets(projectId);
+    if (lastAsset) { setRenderState('done'); setResultAssetId(lastAsset); }
+    else setRenderState('error');
+  }, [projectId, reloadTimeline, pollJob, refreshAssets]);
 
   return {
     projectId, assets, loaded, available,
     timeline, setTimeline,
     saveState, saveNow,
     render, renderState, resultAssetId,
+    reloadTimeline, applyAgentResult,
     error,
   };
 }

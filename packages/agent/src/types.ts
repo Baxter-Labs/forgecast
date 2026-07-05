@@ -88,6 +88,13 @@ export interface TrendTool {
   trending(topic: string, platform: string): Promise<string>;
 }
 
+/** A compact view of an existing asset, enough for the agent to arrange timelines. */
+export interface AgentAssetInfo {
+  id: string;
+  type: string;
+  description: string;
+}
+
 /** The Forgecast actions the agent can take (implemented over the spine in apps/web). */
 export interface ForgecastActions {
   ensureProject(name: string): Promise<string>;
@@ -98,4 +105,13 @@ export interface ForgecastActions {
   publish(assetId: string, content: string, channels?: string[]): Promise<{ postId: string; status: string }>;
   /** Fetch and read a product's website, returning a compact LLM-readable summary. */
   readWebsite(url: string): Promise<{ summary: string }>;
+  // ── Video editor (the timeline document; same one the Studio + /editor drive) ──
+  /** The project's existing assets, compactly described, for arranging into a timeline. */
+  listAssets(projectId: string): Promise<{ assets: AgentAssetInfo[] }>;
+  /** The saved timeline document (or an empty one). */
+  getTimeline(projectId: string): Promise<{ timeline: unknown }>;
+  /** Replace the timeline; returns the server-normalized document. */
+  setTimeline(projectId: string, timeline: unknown): Promise<{ timeline: unknown }>;
+  /** Render the saved timeline into a video via the montage pipeline (async job). */
+  renderTimeline(projectId: string): Promise<{ jobId: string; error?: string }>;
 }

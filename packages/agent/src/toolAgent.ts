@@ -30,11 +30,19 @@ Safety: refuse and produce nothing sexual involving minors, non-consensual or ex
 
 If the brief contains a website URL or a domain name, your FIRST action must be to call read_website on it, then base the concept, visuals, and copy on the real product and brand from that site.
 
-Given the brief (and any trending notes), first brainstorm a tight campaign idea, then build it. You MUST make at least one image and at least one video. For every video, DECIDE which format best fits the beat:
+You work in one of two modes — pick from the brief:
+
+CAMPAIGN mode (make new content). Brainstorm a tight campaign idea, then build it. You MUST make at least one image and at least one video. For every video, DECIDE which format best fits the beat:
 - generate_broll_video → a silent, cinematic product b-roll clip (mood, beauty shots, the product in motion). No spokesperson.
 - generate_presenter_video → a real-looking person presenting the product to camera, lip-synced to a spoken voice-over. Use this when a spokesperson, explainer, or human hook adds value.
 
-Prefer 9:16 (vertical) for social. Keep presenter scripts under ~25 seconds of speech. Do not call more than a few tools — be decisive. When the campaign's assets are produced, call finish with a summary of what you made.`;
+EDITOR mode (the brief asks you to arrange, edit, cut, sequence, caption, or re-order EXISTING footage/assets into a video — e.g. "cut my clips into a 15s teaser"). Work the timeline instead of generating:
+1. Call list_assets to see what exists (and get_timeline if an arrangement may already exist).
+2. Call set_timeline with the full arrangement — clip order IS play order; give every clip a sensible durationSec, short punchy captions where they help, and transitions ("fade" is a safe default).
+3. Call render_timeline to produce the video.
+Do NOT generate new assets in editor mode unless the brief explicitly asks for extra shots.
+
+Prefer 9:16 (vertical) for social. Keep presenter scripts under ~25 seconds of speech. Do not call more than a few tools — be decisive. When done, call finish with a summary of what you made.`;
 
 const TOOLS: LlmTool[] = [
   {
@@ -87,12 +95,61 @@ const TOOLS: LlmTool[] = [
     },
   },
   {
-    name: 'finish',
-    description: 'Call when the campaign assets are produced; summary describes what you made.',
+    name: 'list_assets',
+    description: "List the project's existing assets (id · type · description) — call this first in EDITOR mode so you can arrange real asset ids into the timeline.",
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_timeline',
+    description: "Read the project's current timeline document (the video editor's arrangement).",
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'set_timeline',
+    description:
+      'Replace the timeline (the video-editor arrangement; clip order is play order). Returns the normalized document.',
     parameters: {
       type: 'object',
       properties: {
-        summary: { type: 'string', description: 'A short summary of the campaign you produced.' },
+        timeline: {
+          type: 'object',
+          description: 'The full timeline document.',
+          properties: {
+            aspectRatio: { type: 'string', description: '"9:16" (default), "16:9" or "1:1".' },
+            clips: {
+              type: 'array',
+              description: 'Ordered clips; order is play order.',
+              items: {
+                type: 'object',
+                properties: {
+                  assetId: { type: 'string', description: 'An existing asset id from list_assets.' },
+                  durationSec: { type: 'number', description: 'Seconds on screen (0.5–60).' },
+                  caption: { type: 'string', description: 'Optional short overlay text.' },
+                  transition: { type: 'string', description: '"fade" (safe default), "slide" or "none".' },
+                },
+                required: ['assetId', 'durationSec'],
+              },
+            },
+            musicAssetId: { type: 'string', description: 'Optional audio asset id for background music.' },
+          },
+          required: ['clips'],
+        },
+      },
+      required: ['timeline'],
+    },
+  },
+  {
+    name: 'render_timeline',
+    description: 'Render the saved timeline into a finished video (async job). Call set_timeline first.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'finish',
+    description: 'Call when the work is produced; summary describes what you made.',
+    parameters: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string', description: 'A short summary of what you produced.' },
       },
       required: ['summary'],
     },
@@ -191,6 +248,30 @@ export class ToolCallingAgent {
           if (jobId) presenterJobIds.push(jobId);
           result = `presenter video queued: ${jobId}`;
           steps.push({ tool: tc.name, summary: `${presenter} — "${script}"` });
+        } else if (tc.name === 'list_assets') {
+          const { assets } = await this.deps.forgecast.listAssets(projectId);
+          result = assets.length === 0
+            ? 'no assets in this project yet'
+            : assets.map((a) => `${a.id} · ${a.type} · ${a.description}`).join('\n');
+          steps.push({ tool: tc.name, summary: `${assets.length} asset${assets.length === 1 ? '' : 's'}` });
+        } else if (tc.name === 'get_timeline') {
+          const { timeline } = await this.deps.forgecast.getTimeline(projectId);
+          result = JSON.stringify(timeline);
+          steps.push({ tool: tc.name, summary: 'read the timeline' });
+        } else if (tc.name === 'set_timeline') {
+          const { timeline } = await this.deps.forgecast.setTimeline(projectId, args.timeline);
+          result = `timeline saved: ${JSON.stringify(timeline)}`;
+          const clips = (timeline as { clips?: unknown[] } | null)?.clips;
+          steps.push({ tool: tc.name, summary: `arranged ${Array.isArray(clips) ? clips.length : 0} clips` });
+        } else if (tc.name === 'render_timeline') {
+          const { jobId, error } = await this.deps.forgecast.renderTimeline(projectId);
+          if (jobId) {
+            videoJobIds.push(jobId);
+            result = `timeline render queued: ${jobId}`;
+          } else {
+            result = `render failed: ${error ?? 'unknown error'}`;
+          }
+          steps.push({ tool: tc.name, summary: jobId ? 'render queued' : `render failed: ${error ?? 'unknown'}` });
         } else if (tc.name === 'finish') {
           summary = asString(args.summary) ?? content;
           steps.push({ tool: tc.name, summary });

@@ -10,6 +10,10 @@ function makeForgecast(): ForgecastActions {
     generatePresenter: vi.fn(async () => ({ jobId: 'pres1' })),
     publish: vi.fn(async () => ({ postId: 'post1', status: 'publishing' })),
     readWebsite: vi.fn(async () => ({ summary: '' })),
+    listAssets: vi.fn(async () => ({ assets: [] })),
+    getTimeline: vi.fn(async () => ({ timeline: { aspectRatio: '9:16', clips: [] } })),
+    setTimeline: vi.fn(async (_p: string, t: unknown) => ({ timeline: t })),
+    renderTimeline: vi.fn(async () => ({ jobId: 'tl-render-1' })),
   };
 }
 
@@ -88,6 +92,60 @@ describe('ToolCallingAgent.run', () => {
     const result = await new ToolCallingAgent({ llm, forgecast }).run('a product', { projectId: 'EXISTING' });
     expect(forgecast.ensureProject).not.toHaveBeenCalled();
     expect(result.projectId).toBe('EXISTING');
+  });
+
+  it('drives EDITOR mode: list assets → arrange the timeline → render it', async () => {
+    const arrangement = {
+      aspectRatio: '9:16',
+      clips: [
+        { assetId: 'a1', durationSec: 3, caption: 'Forge it', transition: 'fade' },
+        { assetId: 'a2', durationSec: 5 },
+      ],
+    };
+    const responses: { content: string; toolCalls: LlmToolCall[] }[] = [
+      { content: '', toolCalls: [call('list_assets', {})] },
+      { content: '', toolCalls: [call('set_timeline', { timeline: arrangement })] },
+      { content: '', toolCalls: [call('render_timeline', {})] },
+      { content: '', toolCalls: [call('finish', { summary: 'cut a 8s teaser' })] },
+    ];
+    let n = 0;
+    const llm: LlmClient = { complete: vi.fn(), chat: vi.fn(async () => responses[n++]!) };
+    const forgecast = makeForgecast();
+    (forgecast.listAssets as ReturnType<typeof vi.fn>).mockResolvedValue({
+      assets: [
+        { id: 'a1', type: 'image', description: 'hero shot' },
+        { id: 'a2', type: 'video', description: 'product b-roll' },
+      ],
+    });
+
+    const result = await new ToolCallingAgent({ llm, forgecast }).run('cut my clips into a teaser', { projectId: 'p9' });
+
+    expect(forgecast.listAssets).toHaveBeenCalledWith('p9');
+    expect(forgecast.setTimeline).toHaveBeenCalledWith('p9', arrangement);
+    expect(forgecast.renderTimeline).toHaveBeenCalledWith('p9');
+    // The timeline render job rides videoJobIds so all existing job-polling UIs pick it up.
+    expect(result.videoJobIds).toEqual(['tl-render-1']);
+    expect(result.steps.map((s) => s.tool)).toEqual(['list_assets', 'set_timeline', 'render_timeline', 'finish']);
+    expect(result.steps[1]!.summary).toBe('arranged 2 clips');
+    expect(result.summary).toBe('cut a 8s teaser');
+    expect(forgecast.generateImage).not.toHaveBeenCalled();
+    expect(forgecast.generateVideo).not.toHaveBeenCalled();
+  });
+
+  it('feeds a render failure back to the LLM instead of a job id', async () => {
+    const responses: { content: string; toolCalls: LlmToolCall[] }[] = [
+      { content: '', toolCalls: [call('render_timeline', {})] },
+      { content: '', toolCalls: [call('finish', { summary: 'could not render' })] },
+    ];
+    let n = 0;
+    const llm: LlmClient = { complete: vi.fn(), chat: vi.fn(async () => responses[n++]!) };
+    const forgecast = makeForgecast();
+    (forgecast.renderTimeline as ReturnType<typeof vi.fn>).mockResolvedValue({ jobId: '', error: 'timeline has no clips to render' });
+
+    const result = await new ToolCallingAgent({ llm, forgecast }).run('render it', { projectId: 'p9' });
+
+    expect(result.videoJobIds).toEqual([]);
+    expect(result.steps[0]!.summary).toContain('render failed: timeline has no clips');
   });
 
   it('calls readWebsite when the LLM emits a read_website tool call and records a step', async () => {
