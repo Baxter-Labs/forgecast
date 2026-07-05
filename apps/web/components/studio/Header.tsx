@@ -1,12 +1,15 @@
 'use client';
 import { useState } from 'react';
+import type { SessionInfo } from '@/lib/use-forgecast';
 
 interface HeaderProps {
   providers: string[];
   pro: boolean;
+  session?: SessionInfo;
+  onSignOut?: () => void;
 }
 
-export function Header({ providers, pro }: HeaderProps) {
+export function Header({ providers, pro, session, onSignOut }: HeaderProps) {
   const hasFal = providers.includes('fal');
   const [billingNote, setBillingNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,6 +82,38 @@ export function Header({ providers, pro }: HeaderProps) {
               </>
             )}
           </div>
+
+          {session?.enabled && session.user && (
+            <div
+              className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border"
+              style={{ borderColor: 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+            >
+              {session.user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={session.user.avatarUrl} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="w-6 h-6 rounded-full flex items-center justify-center font-mono text-[11px] font-bold"
+                  style={{ background: 'var(--molten)', color: '#1a0c03' }}
+                >
+                  {(session.user.name ?? session.user.email).slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <span className="font-mono text-[11px] text-[var(--forge-muted)] max-w-[140px] truncate">
+                {session.user.name ?? session.user.email}
+              </span>
+              <button
+                type="button"
+                onClick={onSignOut}
+                aria-label="Sign out"
+                className="font-mono text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded-full border transition-colors hover:border-[var(--ember-2)] hover:text-[var(--ember-1)]"
+                style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
 
           {pro ? (
             <span

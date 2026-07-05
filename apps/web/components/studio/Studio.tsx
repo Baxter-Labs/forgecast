@@ -96,6 +96,7 @@ export function Studio() {
   const {
     projectId,
     providers, publishers, availability, pro, assets, status, error,
+    session, signOut,
     generateImage, generateVideo, generateMontage, generateVoiceover, generateShortVideo,
     composeVideo,
     loadTimeline, saveTimeline, renderTimeline,
@@ -268,7 +269,7 @@ export function Studio() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-6 flex flex-col gap-6">
-      <Header providers={providers} pro={pro} />
+      <Header providers={providers} pro={pro} session={session} onSignOut={signOut} />
 
       <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
         {/* Left: unified Create surface (Idea · Website · Upload) */}

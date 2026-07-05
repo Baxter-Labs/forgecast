@@ -22,6 +22,19 @@ export interface Availability {
   presenter: boolean;
 }
 
+export interface SessionUser { id: string; email: string; name?: string; avatarUrl?: string }
+export interface SessionInfo { enabled: boolean; user: SessionUser | null }
+
+/** Fetch the session; when auth is enabled and there is no user, bounce to /signin. */
+export async function ensureSignedIn(): Promise<SessionInfo> {
+  const session = (await fetch('/api/auth/session').then((r) => r.json()).catch(() => null)) as SessionInfo | null;
+  const info: SessionInfo = session ?? { enabled: false, user: null };
+  if (info.enabled && !info.user && typeof window !== 'undefined') {
+    window.location.href = '/signin';
+  }
+  return info;
+}
+
 interface RawAsset {
   id: string;
   type?: 'image' | 'video' | 'audio';
@@ -61,6 +74,7 @@ export function useForgecast() {
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<SessionInfo>({ enabled: false, user: null });
 
   const refreshPro = useCallback(async () => {
     const billing = await fetch('/api/billing/status').then((r) => r.json()).catch(() => null);
@@ -69,6 +83,12 @@ export function useForgecast() {
 
   useEffect(() => {
     (async () => {
+      // Session first: when auth is enabled and we're signed out, ensureSignedIn
+      // redirects to /signin — don't boot the rest against 401s.
+      const info = await ensureSignedIn();
+      setSession(info);
+      if (info.enabled && !info.user) return;
+
       const health = await fetch('/api/health').then((r) => r.json()).catch(() => null);
       const image: string[] = health?.providers?.image ?? [];
       const video: string[] = health?.providers?.video ?? [];
@@ -644,8 +664,14 @@ export function useForgecast() {
     return assetIds;
   }, [pollJob, refreshAssets]);
 
+  const signOut = useCallback(async () => {
+    await fetch('/api/auth/signout', { method: 'POST' }).catch(() => null);
+    window.location.href = '/signin';
+  }, []);
+
   return {
     projectId, providers, publishers, availability, pro, refreshPro,
+    session, signOut,
     assets, status, error,
     generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
