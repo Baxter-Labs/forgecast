@@ -31,6 +31,13 @@ const SCHEMA: string[] = [
      created_at TEXT NOT NULL,
      updated_at TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS users (
+     id TEXT PRIMARY KEY,
+     email TEXT NOT NULL UNIQUE,
+     name TEXT,
+     avatar_url TEXT,
+     created_at TEXT NOT NULL
+   )`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {
