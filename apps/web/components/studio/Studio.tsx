@@ -1,6 +1,7 @@
 'use client';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
+import type { EditorTimeline, EditorClip } from '@forgecast/core';
 import { Palette, Activity } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
 import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
@@ -8,6 +9,7 @@ import { BrandKitModal } from './BrandKitModal';
 import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode, type ShortControls } from './ForgePanel';
+import type { TimelineControls } from './TimelineBuilder';
 import { CreatePanel } from './CreatePanel';
 import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
@@ -96,6 +98,7 @@ export function Studio() {
     providers, publishers, availability, pro, assets, status, error,
     generateImage, generateVideo, generateMontage, generateVoiceover, generateShortVideo,
     composeVideo,
+    loadTimeline, saveTimeline, renderTimeline,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
@@ -115,6 +118,7 @@ export function Studio() {
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
+  const [timeline, setTimeline] = useState<TimelineControls>({ clips: [], aspect: '9:16', musicAssetId: null });
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   const [publishingAsset, setPublishingAsset] = useState<StudioAsset | null>(null);
   const [webBuilding, setWebBuilding] = useState(false);
@@ -134,6 +138,25 @@ export function Studio() {
     () => new Map(assets.map((a) => [a.id, a])),
     [assets],
   );
+
+  // ── Timeline hydration — pick up the saved arrangement (yours or an agent's) ─
+  useEffect(() => {
+    if (!projectId) return;
+    void loadTimeline().then((t) => {
+      if (!t || t.clips.length === 0) return;
+      setTimeline({
+        aspect: t.aspectRatio,
+        musicAssetId: t.musicAssetId ?? null,
+        clips: t.clips.map((c) => ({
+          id: c.id,
+          assetId: c.assetId,
+          durationSec: c.durationSec,
+          caption: c.caption ?? '',
+          transition: c.transition ?? 'fade',
+        })),
+      });
+    });
+  }, [projectId, loadTimeline]);
 
   // ── Campaign handlers ────────────────────────────────────────────────────────
   const addCampaign = useCallback((c: { brief: string; platforms: string[]; plan: ContentPlan; assetIds: string[] }) => {
@@ -242,6 +265,19 @@ export function Studio() {
         bgmType: short.music ? 'random' : '',
         voiceName: short.voiceName.trim() || undefined,
       }).then(attach);
+    } else if (mode === 'timeline') {
+      const doc: EditorTimeline = {
+        aspectRatio: timeline.aspect,
+        clips: timeline.clips.map((c) => {
+          const clip: EditorClip = { id: c.id, assetId: c.assetId, durationSec: c.durationSec, transition: c.transition };
+          const caption = c.caption.trim();
+          if (caption) clip.caption = caption;
+          return clip;
+        }),
+      };
+      if (timeline.musicAssetId) doc.musicAssetId = timeline.musicAssetId;
+      // Persist the arrangement (so agents see it over MCP), then render it.
+      void saveTimeline(doc).then(() => renderTimeline(doc)).then(attach);
     } else {
       void generateMontage({ prompts: montagePrompts, aspectRatio: ratio, model: videoModel }).then(attach);
     }
@@ -320,6 +356,8 @@ export function Studio() {
                 assets={assets}
                 montagePrompts={montagePrompts}
                 setMontagePrompts={setMontagePrompts}
+                timeline={timeline}
+                setTimeline={setTimeline}
                 campaigns={campaigns}
                 activeCampaignId={activeCampaignId}
                 setActiveCampaignId={setActiveCampaignId}

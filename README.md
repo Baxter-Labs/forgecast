@@ -112,7 +112,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Voice-over** — self-hosted **VoxCPM-2** (open-source, Apache-2.0); cloud fal TTS only as a fallback.
 - ✅ **Narrated video** — voice-over muxed onto a clip via in-process ffmpeg. **AI presenter** — talking-head avatar (OmniHuman).
 - ✅ **Montage** — in-process ffmpeg by default, or a Remotion render worker for longer pieces.
-- ✅ **Timeline video editor** — arrange a project's assets into a video (per-clip duration + trim, captions, transitions, background music), then render through the same Remotion/ffmpeg pipeline. Fully **agent-drivable over MCP** (get / set / render the timeline) — a clean-room take on [palmier-pro](https://github.com/palmier-io/palmier-pro)'s agent-native editor.
+- ✅ **Timeline video editor** — arrange a project's assets into a video (per-clip duration, captions, transitions, background music) in the Studio's **Editor** tab, or fully **agent-drivable over MCP** (get / set / render the timeline) — the same saved timeline either way, rendered through the Remotion/ffmpeg pipeline. Works **keyless** (bundled ffmpeg + your uploaded assets). A clean-room take on [palmier-pro](https://github.com/palmier-io/palmier-pro)'s agent-native editor.
 - ✅ **Tool-calling agent** — reads your product website, brainstorms, decides b-roll vs presenter, generates, and publishes.
 - ✅ **Voice input** — talk into the agent (Wispr Flow, with a browser-speech fallback).
 - ✅ **Publishing** — Instagram, LinkedIn, YouTube, OmniSocials. **Pro tier** billing (Mollie).
