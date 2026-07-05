@@ -20,3 +20,4 @@ export * from './fatigue';
 export * from './adaudit';
 export * from './footage';
 export * from './contentguard';
+export * from './editor';

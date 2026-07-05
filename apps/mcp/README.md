@@ -109,6 +109,9 @@ These need an LLM key on the web app (`OPENAI_API_KEY`, or `FORGECAST_AGENT_LLM=
 | `forgecast_optimize_creatives` | **Optimize:** find fatigued creatives and regenerate on-brand replacements into a project (degrades to a refresh plan when no FAL_KEY) — closes the create→measure→optimize loop |
 | `forgecast_search_footage` | **Find real footage:** search copyright-free stock video by topic (Pexels) — OpenMontage-style documentary footage |
 | `forgecast_import_footage` | Download a found footage clip into a project as a video asset (ready to montage / narrate / cross-post) |
+| `forgecast_get_timeline` | **Video editor:** read a project's timeline (ordered clips + captions, transitions, music) |
+| `forgecast_set_timeline` | **Video editor:** replace a project's timeline — arrange assets into clips with per-clip duration/trim, captions, transitions, and background music (server normalizes + assigns ids) |
+| `forgecast_render_timeline` | **Video editor:** render the saved (or a supplied) timeline into a finished video via the Remotion/ffmpeg montage pipeline → returns a job to poll |
 
 Every tool returns structured JSON; async ones return a job to poll with `forgecast_get_job`. The three agent tools need an LLM key on the web app.
 

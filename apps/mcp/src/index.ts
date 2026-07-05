@@ -856,6 +856,73 @@ server.registerTool(
   },
 );
 
+const timelineSchema = z.object({
+  aspectRatio: z.string().optional(),
+  fps: z.number().int().min(1).max(60).optional(),
+  musicAssetId: z.string().optional(),
+  clips: z.array(z.object({
+    id: z.string().optional(),
+    assetId: z.string(),
+    durationSec: z.number(),
+    trimStartSec: z.number().optional(),
+    caption: z.string().optional(),
+    transition: z.enum(['fade', 'slide', 'none']).optional(),
+  })),
+});
+
+// 28. forgecast_get_timeline
+server.registerTool(
+  'forgecast_get_timeline',
+  {
+    title: 'Get the project video-editor timeline',
+    description:
+      'Read a project\'s **timeline** — the ordered list of clips (each referencing an image/video asset with a ' +
+      'duration, optional caption + transition) that renders into a finished video. Returns an empty timeline if ' +
+      'none exists yet. Use `forgecast_list_assets` to find asset ids to place on it.',
+    inputSchema: z.object({ project_id: z.string() }).strict(),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id }) => {
+    try { return ok(await client.getTimeline(project_id)); } catch (e) { return fail(e); }
+  },
+);
+
+// 29. forgecast_set_timeline
+server.registerTool(
+  'forgecast_set_timeline',
+  {
+    title: 'Set the project video-editor timeline',
+    description:
+      'Build or edit a project\'s **timeline** — arrange its assets into a video. Pass the full timeline: ' +
+      '`aspectRatio` (9:16 default), optional `fps`/`musicAssetId`, and `clips` (each: `assetId`, `durationSec`, ' +
+      'optional `caption`, `transition` (fade|slide|none), `trimStartSec`). Invalid clips are dropped and ids are ' +
+      'assigned. This is the agent-drivable video editor — set the timeline, then `forgecast_render_timeline`.',
+    inputSchema: z.object({ project_id: z.string(), timeline: timelineSchema }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, timeline }) => {
+    try { return ok(await client.setTimeline(project_id, timeline)); } catch (e) { return fail(e); }
+  },
+);
+
+// 30. forgecast_render_timeline
+server.registerTool(
+  'forgecast_render_timeline',
+  {
+    title: 'Render the timeline into a finished video',
+    description:
+      'Render a project\'s **timeline** into a finished video via the montage engine (Remotion / in-process ffmpeg). ' +
+      'Renders the saved timeline, or a `timeline` you pass inline. ASYNC — returns a queued job; poll ' +
+      '`forgecast_get_job`, then the video asset is in the gallery. A 503 means montage isn\'t available; a 400 ' +
+      'means the timeline is empty.',
+    inputSchema: z.object({ project_id: z.string(), timeline: timelineSchema.optional() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  async ({ project_id, timeline }) => {
+    try { return ok(await client.renderTimeline(project_id, timeline)); } catch (e) { return fail(e); }
+  },
+);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ──────────────────────────────────────────────────────────────────────────────
