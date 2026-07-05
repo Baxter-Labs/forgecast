@@ -20,7 +20,7 @@ export interface TimelineControls {
 interface TimelineBuilderProps {
   assets: StudioAsset[];
   timeline: TimelineControls;
-  setTimeline: (t: TimelineControls) => void;
+  setTimeline: React.Dispatch<React.SetStateAction<TimelineControls>>;
 }
 
 const TRANSITIONS: TimelineUIClip['transition'][] = ['fade', 'slide', 'none'];
@@ -53,32 +53,34 @@ export function TimelineBuilder({ assets, timeline, setTimeline }: TimelineBuild
   const byId = new Map(assets.map((a) => [a.id, a]));
   const totalSec = Math.round(timeline.clips.reduce((s, c) => s + (c.durationSec || 0), 0) * 10) / 10;
 
-  function patch(next: Partial<TimelineControls>) {
-    setTimeline({ ...timeline, ...next });
-  }
+  // Functional updates so rapid taps (or an agent driving the DOM) never clobber
+  // each other inside one React batch.
   function updateClip(id: string, fields: Partial<TimelineUIClip>) {
-    patch({ clips: timeline.clips.map((c) => (c.id === id ? { ...c, ...fields } : c)) });
+    setTimeline((prev) => ({ ...prev, clips: prev.clips.map((c) => (c.id === id ? { ...c, ...fields } : c)) }));
   }
   function moveClip(id: string, dir: -1 | 1) {
-    const i = timeline.clips.findIndex((c) => c.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= timeline.clips.length) return;
-    const next = [...timeline.clips];
-    const moved = next.splice(i, 1)[0];
-    if (!moved) return;
-    next.splice(j, 0, moved);
-    patch({ clips: next });
+    setTimeline((prev) => {
+      const i = prev.clips.findIndex((c) => c.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.clips.length) return prev;
+      const next = [...prev.clips];
+      const moved = next.splice(i, 1)[0];
+      if (!moved) return prev;
+      next.splice(j, 0, moved);
+      return { ...prev, clips: next };
+    });
   }
   function removeClip(id: string) {
-    patch({ clips: timeline.clips.filter((c) => c.id !== id) });
+    setTimeline((prev) => ({ ...prev, clips: prev.clips.filter((c) => c.id !== id) }));
   }
   function addClip(asset: StudioAsset) {
-    patch({
+    setTimeline((prev) => ({
+      ...prev,
       clips: [
-        ...timeline.clips,
+        ...prev.clips,
         { id: clipUid(), assetId: asset.id, durationSec: asset.type === 'video' ? 5 : 3, caption: '', transition: 'fade' },
       ],
-    });
+    }));
   }
 
   return (
@@ -204,7 +206,7 @@ export function TimelineBuilder({ assets, timeline, setTimeline }: TimelineBuild
         <select
           id="timeline-music"
           value={timeline.musicAssetId ?? ''}
-          onChange={(e) => patch({ musicAssetId: e.target.value || null })}
+          onChange={(e) => { const v = e.target.value || null; setTimeline((prev) => ({ ...prev, musicAssetId: v })); }}
           className={SELECT_CLASS}
           style={SELECT_ARROW}
         >

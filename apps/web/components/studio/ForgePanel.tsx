@@ -45,7 +45,7 @@ interface ForgePanelProps {
   montagePrompts: string[];
   setMontagePrompts: (prompts: string[]) => void;
   timeline: TimelineControls;
-  setTimeline: (t: TimelineControls) => void;
+  setTimeline: React.Dispatch<React.SetStateAction<TimelineControls>>;
   campaigns: StoredCampaign[];
   activeCampaignId: string | null;
   setActiveCampaignId: (id: string | null) => void;
@@ -636,7 +636,7 @@ export function ForgePanel({
             <RatioRow
               ratios={VIDEO_RATIOS}
               ratio={timeline.aspect}
-              setRatio={(v) => setTimeline({ ...timeline, aspect: v })}
+              setRatio={(v) => setTimeline((prev) => ({ ...prev, aspect: v }))}
             />
           </div>
 
