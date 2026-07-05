@@ -64,6 +64,24 @@ export interface AdCreativeMetrics {
 /** Input for the ads endpoints: hand in `metrics` (keyless) or pull from a connected `source`. */
 export interface AdsMetricsInput { metrics?: AdCreativeMetrics[]; source?: string; sinceDays?: number }
 
+/** One clip on the timeline editor. */
+export interface EditorClip {
+  id?: string;
+  assetId: string;
+  durationSec: number;
+  trimStartSec?: number;
+  caption?: string;
+  transition?: 'fade' | 'slide' | 'none';
+}
+/** The timeline video-editor document (agent- and UI-drivable). The server normalizes
+ * it, so `aspectRatio` may be omitted on input (defaults to 9:16). */
+export interface EditorTimeline {
+  aspectRatio?: string;
+  fps?: number;
+  clips: EditorClip[];
+  musicAssetId?: string;
+}
+
 /** One real footage clip found by a search. */
 export interface FootageClip {
   id: string; url: string; thumbnailUrl?: string; width?: number; height?: number;
@@ -238,6 +256,21 @@ export class SpineClient {
   importFootage(projectId: string, input: { url: string; query?: string; source?: string }): Promise<{ asset: Asset }> {
     return this.req(`/api/projects/${projectId}/footage/import`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+  }
+
+  // ── Timeline video editor (agent-drivable) ────────────────────────────────
+  getTimeline(projectId: string): Promise<{ timeline: EditorTimeline }> {
+    return this.req(`/api/projects/${projectId}/timeline`);
+  }
+  setTimeline(projectId: string, timeline: EditorTimeline): Promise<{ timeline: EditorTimeline }> {
+    return this.req(`/api/projects/${projectId}/timeline`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ timeline }),
+    });
+  }
+  renderTimeline(projectId: string, timeline?: EditorTimeline): Promise<{ job: Job }> {
+    return this.req(`/api/projects/${projectId}/timeline/render`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(timeline ? { timeline } : {}),
     });
   }
 }

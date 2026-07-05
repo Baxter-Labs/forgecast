@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent } from '@forgecast/core';
-import type { MontageSpec, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
@@ -699,6 +699,85 @@ async function buildSpecFromAssets(services: Services, assetIds: string[], aspec
     scenes.push({ url, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
+}
+
+// ── Timeline video editor (agent- and UI-drivable; renders via the montage pipeline) ──
+
+const timelineKey = (projectId: string): string => `projects/${projectId}/timeline.json`;
+
+/** Load a project's saved timeline (or null if none). */
+export async function getTimeline(services: Services, projectId: string): Promise<EditorTimeline | null> {
+  const stored = await services.storage.get(timelineKey(projectId));
+  if (!stored) return null;
+  try {
+    return normalizeTimeline(JSON.parse(new TextDecoder().decode(stored.data)), services.ids.randomId);
+  } catch {
+    return null;
+  }
+}
+
+/** Read the timeline for the editor (empty timeline when none saved yet). */
+export async function readTimeline(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  return { status: 200, body: { timeline: (await getTimeline(services, projectId)) ?? emptyTimeline() } };
+}
+
+/** Save (normalize + persist) a timeline for a project. */
+export async function saveTimeline(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const fields = (input ?? {}) as { timeline?: unknown };
+  const timeline = normalizeTimeline(fields.timeline ?? input, services.ids.randomId);
+  await services.storage.put(timelineKey(projectId), new TextEncoder().encode(JSON.stringify(timeline)), 'application/json');
+  return { status: 200, body: { timeline } };
+}
+
+/** Resolve a timeline into a renderable MontageSpec (each clip → a scene). */
+export async function buildTimelineSpec(services: Services, timeline: EditorTimeline): Promise<MontageSpec | null> {
+  const scenes: MontageScene[] = [];
+  for (const clip of timeline.clips) {
+    const asset = await services.assets.get(clip.assetId);
+    if (!asset) continue;
+    const url = await resolveAssetUrl(services, clip.assetId);
+    if (!url) continue;
+    const scene: MontageScene = { url, kind: asset.type === 'video' ? 'video' : 'image', durationSec: clip.durationSec };
+    if (clip.caption) scene.caption = clip.caption;
+    if (clip.transition) scene.transition = clip.transition;
+    scenes.push(scene);
+  }
+  if (scenes.length === 0) return null;
+  const spec: MontageSpec = { scenes, aspectRatio: timeline.aspectRatio };
+  if (timeline.fps) spec.fps = timeline.fps;
+  if (timeline.musicAssetId) {
+    const musicUrl = await resolveAssetUrl(services, timeline.musicAssetId);
+    if (musicUrl) spec.musicUrl = musicUrl;
+  }
+  return spec;
+}
+
+/** Render a timeline into a finished video via the montage renderer (async job). */
+export async function renderTimeline(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.montageAvailable) {
+    return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
+  }
+  // Render the timeline passed in, or the project's saved one.
+  const fields = (input ?? {}) as { timeline?: unknown };
+  const timeline = fields.timeline !== undefined
+    ? normalizeTimeline(fields.timeline, services.ids.randomId)
+    : ((await getTimeline(services, projectId)) ?? emptyTimeline());
+  if (timeline.clips.length === 0) return { status: 400, body: { error: 'timeline has no clips to render' } };
+
+  const spec = await buildTimelineSpec(services, timeline);
+  if (!spec) return { status: 400, body: { error: 'timeline clips could not be resolved to assets' } };
+
+  const job = await services.jobs.create(
+    newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  runBackground(services.runner.run(job.id));
+  return { status: 202, body: { job } };
 }
 
 export async function generateMontage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
