@@ -32,19 +32,21 @@ export interface ApiResult {
   body: unknown;
 }
 
-export async function createProject(services: Services, input: unknown): Promise<ApiResult> {
+export async function createProject(services: Services, input: unknown, ownerId?: string): Promise<ApiResult> {
   const name = (input as { name?: unknown } | null)?.name;
   if (typeof name !== 'string' || name.trim().length === 0) {
     return { status: 400, body: { error: 'name is required' } };
   }
+  const fields: { name: string; ownerId?: string } = { name };
+  if (ownerId && ownerId !== 'local') fields.ownerId = ownerId;
   const project = await services.projects.create(
-    newProject({ name }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+    newProject(fields, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
   return { status: 201, body: { project } };
 }
 
-export async function listProjects(services: Services): Promise<ApiResult> {
-  return { status: 200, body: { projects: await services.projects.list() } };
+export async function listProjects(services: Services, ownerId?: string): Promise<ApiResult> {
+  return { status: 200, body: { projects: await services.projects.list(ownerId) } };
 }
 
 export async function generateImage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {

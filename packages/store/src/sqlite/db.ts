@@ -6,7 +6,8 @@ const SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
      id TEXT PRIMARY KEY,
      name TEXT NOT NULL,
-     created_at TEXT NOT NULL
+     created_at TEXT NOT NULL,
+     owner_id TEXT
    )`,
   `CREATE TABLE IF NOT EXISTS assets (
      id TEXT PRIMARY KEY,
@@ -50,6 +51,15 @@ export function openDatabase(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
   for (const statement of SCHEMA) {
     db.prepare(statement).run();
+  }
+  // Additive migrations for databases created before a column existed.
+  // "duplicate column name" on re-run is the expected no-op.
+  for (const alter of ['ALTER TABLE projects ADD COLUMN owner_id TEXT']) {
+    try {
+      db.prepare(alter).run();
+    } catch {
+      /* column already exists */
+    }
   }
   return db;
 }

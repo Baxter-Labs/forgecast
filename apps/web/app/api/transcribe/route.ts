@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
 import { getServices } from '@/lib/forgecast';
+import { requireUser } from '@/lib/auth-guard';
 
 /** Spawn ffmpeg with the given args; resolves on exit 0, rejects otherwise. */
 function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
@@ -19,6 +20,8 @@ function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
 }
 
 export async function POST(req: Request) {
+  const who = await requireUser(getServices(), req.headers.get('cookie'));
+  if (!who.ok) return NextResponse.json(who.body, { status: who.status });
   const svc = getServices();
 
   if (!svc.transcribeAvailable) {

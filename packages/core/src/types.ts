@@ -6,6 +6,8 @@ export interface Project {
   id: string;
   name: string;
   createdAt: string;
+  /** Owning user id; absent/'local' = the open single-operator mode. */
+  ownerId?: string;
 }
 
 export interface Asset {
