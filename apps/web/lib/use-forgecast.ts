@@ -1,8 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import type { ShortVideoOptions } from '@forgecast/core';
+import type { ShortVideoOptions, EditorTimeline } from '@forgecast/core';
 
-export type { ShortVideoOptions };
+export type { ShortVideoOptions, EditorTimeline };
 
 export interface StudioAsset {
   id: string;
@@ -524,6 +524,48 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  // ── Timeline editor (get / save / render a project's clip arrangement) ──────
+  const loadTimeline = useCallback(async (): Promise<EditorTimeline | null> => {
+    if (!projectId) return null;
+    const body = await fetch(`/api/projects/${projectId}/timeline`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    return (body?.timeline as EditorTimeline | undefined) ?? null;
+  }, [projectId]);
+
+  const saveTimeline = useCallback(async (timeline: EditorTimeline): Promise<EditorTimeline | null> => {
+    if (!projectId) return null;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/timeline`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ timeline }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Failed to save timeline'); return null; }
+      return (body?.timeline as EditorTimeline) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); return null;
+    }
+  }, [projectId]);
+
+  const renderTimeline = useCallback(async (timeline?: EditorTimeline): Promise<string | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/timeline/render`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(timeline ? { timeline } : {}),
+      });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start timeline render')); setStatus('error'); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      setStatus(outcome === 'done' ? 'idle' : 'error');
+      return assetId ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId, pollJob]);
+
   const animateAsset = useCallback(async (assetId: string, opts?: AnimateAssetOpts): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
@@ -607,6 +649,7 @@ export function useForgecast() {
     assets, status, error,
     generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
+    loadTimeline, saveTimeline, renderTimeline,
     generateVoiceover, narrateVideo, generatePresenter,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,

@@ -5,12 +5,13 @@ import { imageModels } from '@forgecast/catalog';
 import { checkContent } from '@forgecast/core';
 import type { Availability, StudioAsset } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
+import { TimelineBuilder, type TimelineControls } from './TimelineBuilder';
 import type { StoredCampaign } from './CampaignPanel';
 
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
 
-export type ForgeMode = 'image' | 'video' | 'montage' | 'voice' | 'short';
+export type ForgeMode = 'image' | 'video' | 'montage' | 'voice' | 'short' | 'timeline';
 
 /** UI knobs for the MoneyPrinterTurbo short-video tab. */
 export interface ShortControls {
@@ -43,6 +44,8 @@ interface ForgePanelProps {
   assets: StudioAsset[];
   montagePrompts: string[];
   setMontagePrompts: (prompts: string[]) => void;
+  timeline: TimelineControls;
+  setTimeline: (t: TimelineControls) => void;
   campaigns: StoredCampaign[];
   activeCampaignId: string | null;
   setActiveCampaignId: (id: string | null) => void;
@@ -74,6 +77,7 @@ const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'montage', label: 'Montage' },
   { id: 'voice', label: 'Voice' },
   { id: 'short', label: 'Short' },
+  { id: 'timeline', label: 'Editor' },
 ];
 
 function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string; setRatio: (v: string) => void }) {
@@ -224,6 +228,7 @@ export function ForgePanel({
   ratio, setRatio, onForge, forging, availability,
   assets,
   montagePrompts, setMontagePrompts,
+  timeline, setTimeline,
   campaigns, activeCampaignId, setActiveCampaignId, onCreateCampaign,
 }: ForgePanelProps) {
   const [newCampaignMode, setNewCampaignMode] = useState(false);
@@ -239,6 +244,7 @@ export function ForgePanel({
     if (id === 'montage') return availability.video && availability.montage;
     if (id === 'voice') return availability.voice;
     if (id === 'short') return availability.short;
+    if (id === 'timeline') return availability.montage; // renders existing assets — only the stitcher is needed
     return true;
   }
 
@@ -252,14 +258,17 @@ export function ForgePanel({
           ? 'voice offline · set VOXCPM_URL (self-hosted) or FAL_KEY_VOICE'
           : mode === 'short' && !availability.short
             ? 'short video offline · run the MoneyPrinterTurbo worker + set FORGECAST_VIDEO_WORKER_URL'
-            : null;
+            : mode === 'timeline' && !availability.montage
+              ? 'editor offline · needs the montage renderer (bundled ffmpeg or MONTAGE_WORKER_URL)'
+              : null;
 
   const hasCampaign = !!activeCampaignId;
 
   const isI2V = false; // boost-quality toggle only exposes t2v models
 
   // Instant content-policy hint (the server enforces the full check incl. the operator blocklist).
-  const promptBlocked = mode !== 'montage' && prompt.trim().length > 0 && !checkContent(prompt).ok;
+  // Montage and the timeline editor have no prompt field, so a stale prompt must not block them.
+  const promptBlocked = mode !== 'montage' && mode !== 'timeline' && prompt.trim().length > 0 && !checkContent(prompt).ok;
 
   const canForge =
     !forging &&
@@ -273,7 +282,9 @@ export function ForgePanel({
           ? prompt.trim().length > 0 && availability.voice
           : mode === 'short'
             ? prompt.trim().length > 0 && availability.short
-            : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
+            : mode === 'timeline'
+              ? timeline.clips.length >= 1 && availability.montage
+              : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
     !hasCampaign ? '⚒ SELECT A CAMPAIGN FIRST'
@@ -281,10 +292,11 @@ export function ForgePanel({
         : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
           : mode === 'voice' ? (forging ? '⚒ FORGING…' : '⚒ FORGE VOICE →')
             : mode === 'short' ? (forging ? '⚒ FORGING…' : '⚒ FORGE SHORT →')
-              : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
+              : mode === 'timeline' ? (forging ? '⚒ FORGING…' : '⚒ RENDER TIMELINE →')
+                : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
   const forgeAction =
-    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : mode === 'short' ? 'Forge short video' : 'Forge image';
+    mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : mode === 'short' ? 'Forge short video' : mode === 'timeline' ? 'Render timeline' : 'Forge image';
 
   function submitNewCampaign() {
     const name = newCampaignName.trim();
@@ -373,7 +385,7 @@ export function ForgePanel({
 
       {/* MODE TOGGLE */}
       <div>
-        <div className="grid grid-cols-5 gap-1 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
+        <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
           {SEGMENTS.map((seg) => {
             const active = seg.id === mode;
             const available = segmentAvailable(seg.id);
@@ -610,6 +622,26 @@ export function ForgePanel({
 
           <p className="font-mono text-[10px] text-[var(--forge-faint)]">
             topic → script → stock footage → narration → captions → music (MoneyPrinterTurbo)
+          </p>
+        </>
+      )}
+
+      {/* TIMELINE EDITOR MODE — arrange existing assets into one video */}
+      {mode === 'timeline' && (
+        <>
+          <TimelineBuilder assets={assets} timeline={timeline} setTimeline={setTimeline} />
+
+          <div>
+            <FieldHeading>Ratio</FieldHeading>
+            <RatioRow
+              ratios={VIDEO_RATIOS}
+              ratio={timeline.aspect}
+              setRatio={(v) => setTimeline({ ...timeline, aspect: v })}
+            />
+          </div>
+
+          <p className="font-mono text-[10px] text-[var(--forge-faint)]">
+            arranges your assets into one video (ffmpeg/Remotion) — agents can drive the same timeline over MCP
           </p>
         </>
       )}
