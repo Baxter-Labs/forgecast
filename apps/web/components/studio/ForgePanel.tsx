@@ -272,7 +272,6 @@ export function ForgePanel({
 
   const canForge =
     !forging &&
-    hasCampaign &&
     !promptBlocked &&
     (mode === 'image'
       ? prompt.trim().length > 0
@@ -287,13 +286,12 @@ export function ForgePanel({
               : montagePrompts.filter((p) => p.trim()).length >= 2 && availability.video && availability.montage);
 
   const forgeLabel =
-    !hasCampaign ? '⚒ SELECT A CAMPAIGN FIRST'
-      : mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
-        : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
-          : mode === 'voice' ? (forging ? '⚒ FORGING…' : '⚒ FORGE VOICE →')
-            : mode === 'short' ? (forging ? '⚒ FORGING…' : '⚒ FORGE SHORT →')
-              : mode === 'timeline' ? (forging ? '⚒ FORGING…' : '⚒ RENDER TIMELINE →')
-                : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
+    mode === 'video' ? (forging ? '⚒ FORGING…' : '⚒ FORGE CLIP →')
+      : mode === 'montage' ? (forging ? '⚒ FORGING…' : '⚒ FORGE MONTAGE →')
+        : mode === 'voice' ? (forging ? '⚒ FORGING…' : '⚒ FORGE VOICE →')
+          : mode === 'short' ? (forging ? '⚒ FORGING…' : '⚒ FORGE SHORT →')
+            : mode === 'timeline' ? (forging ? '⚒ FORGING…' : '⚒ RENDER TIMELINE →')
+              : (forging ? '⚒ FORGING…' : '⚒ FORGE →');
 
   const forgeAction =
     mode === 'video' ? 'Forge video clip' : mode === 'montage' ? 'Forge montage' : mode === 'voice' ? 'Forge voice-over' : mode === 'short' ? 'Forge short video' : mode === 'timeline' ? 'Render timeline' : 'Forge image';
@@ -312,7 +310,9 @@ export function ForgePanel({
     <div className="panel p-5 flex flex-col gap-6">
       {/* CAMPAIGN SELECTOR */}
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">Campaign</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] mb-2">
+          Campaign <span className="normal-case tracking-normal">(optional)</span>
+        </p>
         {newCampaignMode ? (
           <div className="flex gap-2">
             <input
@@ -378,7 +378,7 @@ export function ForgePanel({
         )}
         {!hasCampaign && !newCampaignMode && (
           <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-1.5">
-            select or create a campaign to enable generation
+            optional — everything you forge lands in the Gallery; pick a campaign to also organize it there
           </p>
         )}
       </div>
