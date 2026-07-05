@@ -19,7 +19,8 @@ export const D1_SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
      id TEXT PRIMARY KEY,
      name TEXT NOT NULL,
-     created_at TEXT NOT NULL
+     created_at TEXT NOT NULL,
+     owner_id TEXT
    )`,
   `CREATE TABLE IF NOT EXISTS assets (
      id TEXT PRIMARY KEY,
@@ -65,6 +66,11 @@ export function ensureD1Schema(db: D1Like): Promise<void> {
   if (existing) return existing;
   const ready = (async () => {
     for (const statement of D1_SCHEMA) await db.prepare(statement).run();
+    // Additive migrations for databases created before a column existed;
+    // "duplicate column" failures are the expected no-op.
+    for (const alter of ['ALTER TABLE projects ADD COLUMN owner_id TEXT']) {
+      await db.prepare(alter).run().catch(() => undefined);
+    }
   })();
   schemaReady.set(db, ready);
   return ready;

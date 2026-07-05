@@ -2,6 +2,7 @@ import type { Project, Asset, AssetType } from './types';
 
 export interface NewProjectInput {
   name: string;
+  ownerId?: string;
 }
 
 export interface NewProjectDeps {
@@ -10,7 +11,9 @@ export interface NewProjectDeps {
 }
 
 export function newProject(input: NewProjectInput, deps: NewProjectDeps): Project {
-  return { id: deps.id, name: input.name, createdAt: deps.now };
+  const project: Project = { id: deps.id, name: input.name, createdAt: deps.now };
+  if (input.ownerId) project.ownerId = input.ownerId;
+  return project;
 }
 
 export interface NewAssetInput {

@@ -12,7 +12,9 @@ export class InMemoryProjectRepo implements ProjectRepo {
     return this.items.get(id) ?? null;
   }
 
-  async list(): Promise<Project[]> {
-    return [...this.items.values()];
+  async list(ownerId?: string): Promise<Project[]> {
+    const all = [...this.items.values()];
+    if (!ownerId) return all;
+    return all.filter((p) => (p.ownerId ?? 'local') === ownerId);
   }
 }

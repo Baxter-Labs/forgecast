@@ -3,7 +3,8 @@ import type { Project, Asset, Job } from './types';
 export interface ProjectRepo {
   create(project: Project): Promise<Project>;
   get(id: string): Promise<Project | null>;
-  list(): Promise<Project[]>;
+  /** All projects, or only those owned by `ownerId` (absent ownerId on a row = 'local'). */
+  list(ownerId?: string): Promise<Project[]>;
 }
 
 export interface AssetRepo {
