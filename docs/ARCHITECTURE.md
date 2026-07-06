@@ -10,7 +10,7 @@ The short version: **everything depends inward on `@forgecast/core`'s pure contr
 
 - **Dependency inversion.** `@forgecast/core` defines interfaces (contracts) and pure types with **zero I/O**. Every other package depends on those contracts, never the reverse.
 - **Pluggable everything.** Generation, storage, persistence, publishing, voice, and distribution are all interfaces. The default implementations are cloud-backed (no GPU) and in-memory (for dev/tests); SQLite + filesystem and Cloudflare D1 + R2 are the production backends.
-- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection — the whole suite is mock-tested with no network, GPU, or database. 457 tests, all offline.
+- **Offline-testable.** Every adapter takes its I/O (HTTP `fetch`, clock, id generator) by injection — the whole suite is mock-tested with no network, GPU, or database. 473 tests, all offline.
 - **Two front doors, one spine.** Each capability is exposed as an HTTP route (for humans and the Studio UI) and as an MCP tool (for agents and Claude Desktop).
 
 ---

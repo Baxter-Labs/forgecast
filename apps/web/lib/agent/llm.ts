@@ -245,9 +245,18 @@ export class AnthropicLlmClient implements LlmClient {
  * shape at `${OLLAMA_URL}/v1`, including tool-calling — so the OpenAI adapter
  * drives it directly with a dummy key (Ollama ignores it). Zero per-use cost.
  */
-export function makeLlmClient(): LlmClient & { isAvailable(): boolean } {
+export interface LlmKeyOverrides {
+  /** A user's own OpenAI key (BYO keys from the UI); falls back to OPENAI_API_KEY. */
+  openaiKey?: string;
+  /** A user's own Anthropic key; falls back to ANTHROPIC_API_KEY. */
+  anthropicKey?: string;
+}
+
+export function makeLlmClient(overrides: LlmKeyOverrides = {}): LlmClient & { isAvailable(): boolean } {
   const provider = (process.env.FORGECAST_AGENT_LLM ?? '').trim().toLowerCase();
-  if (provider === 'anthropic' || provider === 'claude') return new AnthropicLlmClient();
+  if (provider === 'anthropic' || provider === 'claude') {
+    return new AnthropicLlmClient(overrides.anthropicKey ? { apiKey: overrides.anthropicKey } : {});
+  }
   if (provider === 'ollama' || provider === 'local') {
     const host = (process.env.OLLAMA_URL ?? 'http://localhost:11434').replace(/\/+$/, '');
     return new OpenAiLlmClient({
@@ -258,5 +267,5 @@ export function makeLlmClient(): LlmClient & { isAvailable(): boolean } {
       model: process.env.OLLAMA_MODEL ?? 'llama3.1',
     });
   }
-  return new OpenAiLlmClient();
+  return new OpenAiLlmClient(overrides.openaiKey ? { apiKey: overrides.openaiKey } : {});
 }

@@ -76,6 +76,23 @@ export function useForgecast() {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionInfo>({ enabled: false, user: null });
 
+  // Re-read provider availability (e.g. right after keys change in the Keys panel).
+  const refreshAvailability = useCallback(async () => {
+    const health = await fetch('/api/health').then((r) => r.json()).catch(() => null);
+    if (!health?.providers) return;
+    const p = health.providers;
+    setProviders(p.image ?? []);
+    setAvailability({
+      image: (p.image ?? []).length > 0,
+      video: (p.video ?? []).length > 0,
+      montage: (p.montage ?? []).length > 0,
+      short: (p.short ?? []).length > 0,
+      voice: (p.voice ?? []).length > 0,
+      transcribe: (p.transcribe ?? []).length > 0,
+      presenter: (p.presenter ?? []).length > 0,
+    });
+  }, []);
+
   const refreshPro = useCallback(async () => {
     const billing = await fetch('/api/billing/status').then((r) => r.json()).catch(() => null);
     setPro(Boolean(billing?.pro));
@@ -670,7 +687,7 @@ export function useForgecast() {
   }, []);
 
   return {
-    projectId, providers, publishers, availability, pro, refreshPro,
+    projectId, providers, publishers, availability, pro, refreshPro, refreshAvailability,
     session, signOut,
     assets, status, error,
     generateImage, generateVideo, generateMontage, generateShortVideo,

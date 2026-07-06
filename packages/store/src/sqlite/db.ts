@@ -39,6 +39,13 @@ const SCHEMA: string[] = [
      avatar_url TEXT,
      created_at TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS user_keys (
+     owner_id TEXT NOT NULL,
+     key_id TEXT NOT NULL,
+     value TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (owner_id, key_id)
+   )`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {
