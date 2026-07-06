@@ -7,9 +7,10 @@ interface HeaderProps {
   pro: boolean;
   session?: SessionInfo;
   onSignOut?: () => void;
+  onOpenKeys?: () => void;
 }
 
-export function Header({ providers, pro, session, onSignOut }: HeaderProps) {
+export function Header({ providers, pro, session, onSignOut, onOpenKeys }: HeaderProps) {
   const hasFal = providers.includes('fal');
   const [billingNote, setBillingNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,9 +63,12 @@ export function Header({ providers, pro, session, onSignOut }: HeaderProps) {
 
         {/* Provider chip + Pro */}
         <div className="flex items-center gap-2.5">
-          <div
-            className="font-mono text-xs flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--forge-border)] bg-[var(--forge-surface-2)]"
-            aria-label={hasFal ? 'Image provider: fal connected' : 'No image provider key configured'}
+          <button
+            type="button"
+            onClick={onOpenKeys}
+            className="font-mono text-xs flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--forge-border)] bg-[var(--forge-surface-2)] transition-colors hover:border-[var(--ember-2)] cursor-pointer"
+            aria-label={hasFal ? 'Image provider: fal connected — manage keys' : 'No image provider key configured — add keys'}
+            title="Manage provider keys"
           >
             {hasFal ? (
               <>
@@ -81,7 +85,8 @@ export function Header({ providers, pro, session, onSignOut }: HeaderProps) {
                 <span className="text-[var(--forge-faint)]">no key</span>
               </>
             )}
-          </div>
+            <span aria-hidden="true" className="text-[var(--forge-faint)]">· keys</span>
+          </button>
 
           {session?.enabled && session.user && (
             <div

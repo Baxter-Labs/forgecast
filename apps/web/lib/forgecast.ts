@@ -4,6 +4,7 @@ import {
   InMemoryAssetRepo,
   InMemoryJobRepo,
   InMemoryUserRepo,
+  InMemoryKeyRepo,
   InMemoryStorage,
   openStore,
   d1Store,
@@ -13,10 +14,11 @@ import {
   type D1Like,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding } from './cf-env';
+import { resolveOwnerKeys } from './keys';
 
 export interface Services {
   imageRegistry: ImageProviderRegistry;
@@ -25,6 +27,7 @@ export interface Services {
   assets: AssetRepo;
   jobs: JobRepo;
   users: UserRepo;
+  keys: KeyRepo;
   storage: StorageDriver;
   runner: JobRunner;
   ids: { randomId: () => string; nowIso: () => string };
@@ -61,6 +64,15 @@ export interface BuildServicesOptions {
   profile?: string;
   /** Cloudflare D1 binding for edge-durable metadata (baxter-cloud). When set, repos persist to D1 instead of in-memory. */
   d1?: D1Like;
+  /** fal key for cloud TTS. Falls back to voice→image key, then env. */
+  voiceKey?: string;
+  /** Wispr Flow transcription key. Falls back to WISPRFLOW_API_KEY env. */
+  wisprKey?: string;
+  /** Pexels stock-footage key. Falls back to PEXELS_API_KEY env. */
+  pexelsKey?: string;
+  /** Reuse an existing instance's repos + storage (per-user provider overlays).
+   *  Providers/handlers are rebuilt with the key overrides; state is shared. */
+  shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'storage'>;
   /** Injectable fetch for the image handler's download step (tests). */
   fetchFn?: typeof fetch;
 }
@@ -122,7 +134,12 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   let assets: AssetRepo;
   let jobs: JobRepo;
   let users: UserRepo;
-  if (opts.d1) {
+  let keys: KeyRepo;
+  let storage: StorageDriver;
+  if (opts.shared) {
+    // Per-user provider overlay: same state, different keys.
+    ({ projects, assets, jobs, users, keys, storage } = opts.shared);
+  } else if (opts.d1) {
     // Edge-durable metadata: D1 (SQLite at the edge), so projects/assets/jobs
     // persist across Worker isolates.
     const store = d1Store(opts.d1);
@@ -130,20 +147,24 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     assets = store.assets;
     jobs = store.jobs;
     users = store.users;
+    keys = store.keys;
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
   } else if (dbPath) {
     const store = openStore(dbPath);
     projects = store.projects;
     assets = store.assets;
     jobs = store.jobs;
     users = store.users;
+    keys = store.keys;
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
   } else {
     projects = new InMemoryProjectRepo();
     assets = new InMemoryAssetRepo();
     jobs = new InMemoryJobRepo();
     users = new InMemoryUserRepo();
+    keys = new InMemoryKeyRepo();
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
   }
-
-  const storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
 
   const imageHandler = new ImageJobHandler({
     registry: imageRegistry,
@@ -200,7 +221,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     montageAvailable = true;
   }
   const voxcpm = new VoxCpmVoiceProvider({ fetchFn: opts.fetchFn });
-  const voiceProvider: VoiceProvider = voxcpm.isAvailable() ? voxcpm : new FalTtsProvider({ fetchFn: opts.fetchFn });
+  // User voice key → user image key → env (the provider's own fallback chain).
+  const ttsKey = opts.voiceKey ?? falKey;
+  const voiceProvider: VoiceProvider = voxcpm.isAvailable()
+    ? voxcpm
+    : new FalTtsProvider({ fetchFn: opts.fetchFn, ...(ttsKey !== undefined ? { apiKey: ttsKey } : {}) });
   if (voiceProvider.isAvailable()) {
     handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
@@ -209,7 +234,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   }
   const voiceAvailable = voiceProvider.isAvailable();
 
-  const transcriber: Transcriber = new WisprFlowTranscriber({ fetchFn: opts.fetchFn });
+  const transcriber: Transcriber = new WisprFlowTranscriber({ fetchFn: opts.fetchFn, ...(opts.wisprKey !== undefined ? { apiKey: opts.wisprKey } : {}) });
   const transcribeAvailable = transcriber.isAvailable();
 
   const presenterProvider: PresenterProvider = new OmniHumanPresenterProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
@@ -238,12 +263,12 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   // Real-footage search (OpenMontage-style). Keyless-friendly UI; needs PEXELS_API_KEY to pull.
   const footage = new FootageRegistry();
-  footage.register(new PexelsFootageProvider({ fetchFn: opts.fetchFn }));
+  footage.register(new PexelsFootageProvider({ fetchFn: opts.fetchFn, ...(opts.pexelsKey !== undefined ? { apiKey: opts.pexelsKey } : {}) }));
   const footageAvailable = footage.available();
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, users, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**
@@ -278,4 +303,50 @@ export function getServices(): Services {
     }
   }
   return cached;
+}
+
+// ── Per-user services: BYO keys set from the UI ───────────────────────────────
+// The owner's stored keys (see lib/keys.ts) override the instance env vars.
+// Repos + storage are shared with the singleton; only providers/handlers are
+// rebuilt, so state is identical and construction is cheap. Cached briefly per
+// owner; key writes invalidate immediately in this process.
+
+const userServicesCache = new Map<string, { at: number; services: Services }>();
+const USER_SERVICES_TTL_MS = 30_000;
+
+export function invalidateUserServices(ownerId: string): void {
+  userServicesCache.delete(ownerId);
+}
+
+/**
+ * The Services an owner's requests should run on: the base singleton when they
+ * have no stored keys, or a provider overlay with their keys applied.
+ * Pass `base` explicitly in tests to stay off the process-wide singleton.
+ */
+export async function getServicesForUser(ownerId: string, base: Services = getServices()): Promise<Services> {
+  const hit = userServicesCache.get(ownerId);
+  if (hit && Date.now() - hit.at < USER_SERVICES_TTL_MS) return hit.services;
+
+  const own = await resolveOwnerKeys(base, ownerId);
+  let services = base;
+  if (Object.keys(own).length > 0) {
+    const opts: BuildServicesOptions = {
+      shared: {
+        projects: base.projects, assets: base.assets, jobs: base.jobs,
+        users: base.users, keys: base.keys, storage: base.storage,
+      },
+      fetchFn: base.fetchFn,
+    };
+    // Only set the fields the owner actually stored — buildServices treats a
+    // *present* option as authoritative, so an undefined here would kill the
+    // env fallback.
+    if (own.fal !== undefined) opts.falKey = own.fal;
+    if (own.fal_video !== undefined) opts.falVideoKey = own.fal_video;
+    if (own.fal_voice !== undefined) opts.voiceKey = own.fal_voice;
+    if (own.pexels !== undefined) opts.pexelsKey = own.pexels;
+    if (own.wisprflow !== undefined) opts.wisprKey = own.wisprflow;
+    services = buildServices(opts);
+  }
+  userServicesCache.set(ownerId, { at: Date.now(), services });
+  return services;
 }

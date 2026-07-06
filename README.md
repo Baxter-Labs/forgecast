@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **414 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **473 tests, strict TypeScript.**
 
 ---
 
@@ -179,11 +179,12 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Ads measure→optimize loop** — audit ad performance (0–100 health score + grade, per-creative **creative-fatigue** diagnosis, recommendations), then **regenerate** fatigued creatives on-brand in one click — closing create → publish → measure → optimize. Works **keyless** on metrics you provide, or auto-pulls from Meta / Google Ads.
 - ✅ **MCP server** — the whole platform as agent-drivable tools.
 - ✅ **Content guardrails** — every prompt/brief/script is checked before generation (hard-blocks sexual content involving minors; operator-extensible blocklist via `CONTENT_BLOCKLIST`), with instant in-Studio feedback + agent-prompt hardening.
+- ✅ **Keys from the UI** — paste provider keys in the Studio's **Keys panel** (the `· keys` chip in the header) instead of editing env files: they take effect **immediately, no restart or redeploy**, are stored **encrypted at rest** (AES-256-GCM under `AUTH_SECRET`), never leave the server (masked previews only), and are **per-user** on a hosted deployment — each signed-in user brings their own keys, with the instance env as fallback.
 - ✅ **Sign-in & multi-user** — built-in **Google OAuth** (code + PKCE, hand-rolled, zero SDK deps) with 30-day signed-cookie sessions and **per-user workspaces** (projects/assets/jobs scoped + guarded on every route). Env-gated: unset = today's open self-host mode; three env vars = a real multi-user website. See *Deploy to the cloud*.
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**457 tests, strict TypeScript, every commit a passing TDD cycle.**
+**473 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -307,7 +308,7 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 414 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 473 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
@@ -327,6 +328,8 @@ Without any keys the Studio runs fine and shows clear "not configured" states �
 ---
 
 ## Configure it — API keys (cheat sheet)
+
+> **You don't have to touch env files for provider keys:** the Studio's **Keys panel** (header → `· keys`) sets fal / OpenAI / Anthropic / Pexels / Wispr keys at runtime — per user, encrypted, effective immediately. Env vars remain the instance-wide defaults; everything below still works exactly as documented.
 
 Every capability is a swappable adapter. **You set keys once, as server-side environment variables** — they live on the server and are never sent to the browser. Set only the ones you want; anything missing degrades to a clean "not configured" state in the UI. Locally they go in `apps/web/.env.local`; in the cloud they go in your host's secrets (see [Deploy](#deploy-to-the-cloud)).
 
@@ -508,7 +511,7 @@ Leave the three vars unset and nothing changes: the open, single-operator self-h
 
 ### ⚠️ Before you expose it publicly
 
-- **Keys & spend:** generations run on *your* provider keys — sign-in gates who can spend them, but set provider spend caps anyway. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access.
+- **Keys & spend:** by default generations run on the instance keys — but with the **Keys panel** each signed-in user can (and should) bring their own, so a public deployment doesn't have to subsidize anyone: ship with **no instance generation keys** and let users paste theirs. Set provider spend caps on any key you do ship. The optional **Pro tier** (`MOLLIE_API_KEY`) gates *premium features*, not access.
 - **Media URLs:** rendered assets are served at unguessable capability URLs (`/api/assets/<uuid>/raw`) so renderers and social relays can fetch them — treat the links themselves as shareable.
 - **Content safety:** every generation runs through the built-in **guardrails** (sexual-content-involving-minors is always blocked); extend them for your policy with `CONTENT_BLOCKLIST=...` before opening it up.
 

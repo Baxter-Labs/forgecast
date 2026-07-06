@@ -22,3 +22,4 @@ export * from './footage';
 export * from './contentguard';
 export * from './editor';
 export * from './auth';
+export * from './secrets';

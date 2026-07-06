@@ -6,6 +6,7 @@ import { Palette, Activity } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
 import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
 import { BrandKitModal } from './BrandKitModal';
+import { KeysModal } from './KeysModal';
 import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
 import { ForgePanel, type ForgeMode, type ShortControls } from './ForgePanel';
@@ -96,6 +97,7 @@ export function Studio() {
   const {
     projectId,
     providers, publishers, availability, pro, assets, status, error,
+    refreshAvailability,
     session, signOut,
     generateImage, generateVideo, generateMontage, generateVoiceover, generateShortVideo,
     composeVideo,
@@ -107,6 +109,7 @@ export function Studio() {
 
   const brand = useBrandKit(projectId);
   const [brandKitOpen, setBrandKitOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [perfOpen, setPerfOpen] = useState(false);
 
   const [mode, setMode] = useState<ForgeMode>('image');
@@ -269,7 +272,7 @@ export function Studio() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-6 flex flex-col gap-6">
-      <Header providers={providers} pro={pro} session={session} onSignOut={signOut} />
+      <Header providers={providers} pro={pro} session={session} onSignOut={signOut} onOpenKeys={() => setKeysOpen(true)} />
 
       <main aria-label="Forgecast Studio" className="grid lg:grid-cols-[380px_1fr] gap-6 items-start">
         {/* Left: unified Create surface (Idea · Website · Upload) */}
@@ -440,6 +443,7 @@ export function Studio() {
       </main>
 
       <BrandKitModal open={brandKitOpen} onClose={() => setBrandKitOpen(false)} brand={brand} />
+      <KeysModal open={keysOpen} onClose={() => setKeysOpen(false)} onChanged={() => void refreshAvailability()} />
       <PerformancePanel open={perfOpen} onClose={() => setPerfOpen(false)} onAudit={auditAds} onOptimize={optimizeCreatives} />
     </div>
   );

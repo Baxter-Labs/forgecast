@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { ContentAgent, ToolCallingAgent, type ContentPlan } from '@forgecast/agent';
-import { getServices } from '@/lib/forgecast';
+import { getServices, getServicesForUser } from '@/lib/forgecast';
 import { requireUser, requireProject } from '@/lib/auth-guard';
 import { guardText } from '@/lib/api';
 import { makeForgecastActions } from '@/lib/agent/forgecast-actions';
 import { makeLlmClient } from '@/lib/agent/llm';
+import { resolveOwnerKeys } from '@/lib/keys';
 import { maybeTrendTool } from '@/lib/agent/trends';
 
 function msg(e: unknown): string { return e instanceof Error ? e.message : String(e); }
@@ -22,14 +23,18 @@ export async function POST(req: Request) {
     : await requireUser(getServices(), req.headers.get('cookie'));
   if (!who.ok) return NextResponse.json(who.body, { status: who.status });
 
+  // BYO keys: run providers AND the agent brain on the owner's keys when set.
+  const services = await getServicesForUser(who.userId);
+  const ownKeys = await resolveOwnerKeys(services, who.userId);
+
   // Content guardrails — block a disallowed brief before the agent plans/produces anything.
   if (typeof body.brief === 'string' && body.brief.length > 0) {
     const blocked = guardText(body.brief);
     if (blocked) return NextResponse.json(blocked.body, { status: blocked.status });
   }
 
-  const llm = makeLlmClient();
-  const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
+  const llm = makeLlmClient({ openaiKey: ownKeys.openai, anthropicKey: ownKeys.anthropic });
+  const agent = new ContentAgent({ llm, forgecast: makeForgecastActions(services), trends: maybeTrendTool() });
 
   if (body.mode === 'plan') {
     if (!llm.isAvailable()) return NextResponse.json({ error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' }, { status: 503 });
@@ -40,7 +45,7 @@ export async function POST(req: Request) {
       let planBrief = body.brief;
       if (urlMatch) {
         try {
-          const { summary } = await makeForgecastActions(getServices()).readWebsite(urlMatch[0]);
+          const { summary } = await makeForgecastActions(services).readWebsite(urlMatch[0]);
           planBrief = `Website context:\n${summary}\n\nBrief: ${body.brief}`;
         } catch {
           // On error, proceed with the original brief unchanged.
@@ -71,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'brief is required' }, { status: 400 });
     }
     try {
-      const toolAgent = new ToolCallingAgent({ llm, forgecast: makeForgecastActions(getServices()), trends: maybeTrendTool() });
+      const toolAgent = new ToolCallingAgent({ llm, forgecast: makeForgecastActions(services), trends: maybeTrendTool() });
       const result = await toolAgent.run(body.brief, { projectId: body.projectId, platforms: body.platforms });
       return NextResponse.json({ result });
     } catch (e) {
