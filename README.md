@@ -78,7 +78,7 @@ flowchart TB
         direction LR
         studio["🧑 Studio UI — /"]
         editor["🎬 Timeline editor — /editor"]
-        mcp["🤖 MCP agents — 33 tools"]
+        mcp["🤖 MCP agents — 30 tools"]
     end
 
     subgraph web["apps/web — one Next.js deployable"]
@@ -86,7 +86,7 @@ flowchart TB
         subgraph frontend["Frontend · client JS, no secrets"]
             pages["pages · components · hooks"]
         end
-        subgraph backend["Backend · env vars live here"]
+        subgraph backend["Backend · secrets live here — env vars + UI-set keys"]
             routes["/api/* routes — thin shells"]
             guards["auth guards — sessions + ownership<br/>lib/auth.ts · lib/auth-guard.ts"]
             spine["THE SPINE — lib/api.ts<br/>every endpoint's logic, unit-tested"]
@@ -259,9 +259,9 @@ Everything here compiles to client-side JS. It holds no secrets, calls nothing b
 | What | Where |
 |---|---|
 | Pages (App Router) | [`apps/web/app/page.tsx`](apps/web/app/page.tsx) (Studio) · [`app/editor/`](apps/web/app/editor/) (timeline workspace) · [`app/edit/[id]/`](apps/web/app/edit/) (asset editor) · [`app/signin/`](apps/web/app/signin/) (Google sign-in, server-rendered) |
-| Studio components | [`apps/web/components/studio/`](apps/web/components/studio/) — `Studio` (state hub) · `ForgePanel` (create modes) · `TimelineBuilder` · `Gallery`/`AssetCard` · `AgentChat` · `Header` (account chip) · `BrandKitModal` · `PerformancePanel` |
+| Studio components | [`apps/web/components/studio/`](apps/web/components/studio/) — `Studio` (state hub) · `ForgePanel` (create modes) · `TimelineBuilder` · `Gallery`/`AssetCard` · `AgentChat` · `Header` (account chip + keys entry) · `KeysModal` (BYO provider keys) · `BrandKitModal` · `PerformancePanel` |
 | Editor components | [`apps/web/components/editor/`](apps/web/components/editor/) — `TimelineWorkspace` (drawer · lane · inspector) · `AssetEditor` |
-| Client state hooks | [`apps/web/lib/use-forgecast.ts`](apps/web/lib/use-forgecast.ts) (session gate, availability, generate+poll) · [`use-timeline-editor.ts`](apps/web/lib/use-timeline-editor.ts) (autosave + render) · [`use-asset-editor.ts`](apps/web/lib/use-asset-editor.ts) · [`use-brand-kit.ts`](apps/web/lib/use-brand-kit.ts) |
+| Client state hooks | [`apps/web/lib/use-forgecast.ts`](apps/web/lib/use-forgecast.ts) (session gate, availability, generate+poll) · [`use-timeline-editor.ts`](apps/web/lib/use-timeline-editor.ts) (autosave + render) · [`use-asset-editor.ts`](apps/web/lib/use-asset-editor.ts) · [`use-brand-kit.ts`](apps/web/lib/use-brand-kit.ts) · [`use-keys.ts`](apps/web/lib/use-keys.ts) |
 | Shared UI logic + theme | [`apps/web/lib/timeline-ui.ts`](apps/web/lib/timeline-ui.ts) (pure timeline converters) · [`apps/web/app/globals.css`](apps/web/app/globals.css) (the Molten Forge design tokens) |
 
 ### ⚙️ Backend — runs on the server (Node or Workers)
@@ -270,8 +270,9 @@ This is where env vars live and requests are authorized. Stateless except the st
 
 | What | Where |
 |---|---|
-| HTTP surface | [`apps/web/app/api/`](apps/web/app/api/) — `auth/*` (Google OAuth + session) · `projects/*` (+ nested generate/assets/timeline/brand-kit/ads) · `assets/[id]` (+ `raw` file serving) · `jobs/[id]` · `agent` · `footage` · `transcribe` · `billing` · `health`. Routes are thin: parse → guard → call the spine. |
+| HTTP surface | [`apps/web/app/api/`](apps/web/app/api/) — `auth/*` (Google OAuth + session) · `projects/*` (+ nested generate/assets/timeline/brand-kit/ads) · `assets/[id]` (+ `raw` file serving) · `jobs/[id]` · `agent` · `keys` (BYO keys, masked) · `footage` · `transcribe` · `billing` · `health`. Routes are thin: parse → guard → call the spine. |
 | Auth & tenancy | [`apps/web/lib/auth.ts`](apps/web/lib/auth.ts) (OAuth code+PKCE flow, HMAC cookie sessions) · [`lib/auth-guard.ts`](apps/web/lib/auth-guard.ts) (`requireUser/Project/Asset/Job` — 401/404 enforcement on every route) |
+| BYO keys | [`apps/web/lib/keys.ts`](apps/web/lib/keys.ts) — whitelisted key catalog + sealed storage (AES-GCM under `AUTH_SECRET`), masked previews only; `getServicesForUser` in the composition root overlays each request onto the caller's keys (env = fallback) |
 | The spine | [`apps/web/lib/api.ts`](apps/web/lib/api.ts) — every endpoint's actual logic (create/generate/publish/timeline/brand-kit/ads/guardrails), framework-free and unit-tested |
 | Composition root | [`apps/web/lib/forgecast.ts`](apps/web/lib/forgecast.ts) — reads env ONCE, decides which providers/storage/handlers exist (`buildServices`); [`lib/cf-env.ts`](apps/web/lib/cf-env.ts) for Workers bindings |
 | Job engine | [`packages/jobs/`](packages/jobs/) — `JobRunner` + a handler per kind (image/video/short/montage/voiceover/narrate/presenter/enhance/edit/cutout) |
@@ -294,7 +295,7 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 | Model menus | [`packages/catalog/`](packages/catalog/) | which model ids the UI offers, typed, with per-model params |
 | Renderers (no LLM) | [`packages/jobs/…/localMontage.ts`](packages/jobs/) (bundled ffmpeg) · [`workers/montage/`](workers/montage/) (Remotion) | keyless |
 | Self-hosted model services | [`workers/voice/`](workers/voice/) (VoxCPM-2) · [`workers/shorts/`](workers/shorts/) (MoneyPrinter: local Ollama script + Edge-TTS, free) | keyless |
-| Agent-facing API | [`apps/mcp/`](apps/mcp/) — 33 MCP tools over the same spine (external agents drive the platform) | `FORGECAST_API_URL` |
+| Agent-facing API | [`apps/mcp/`](apps/mcp/) — 30 MCP tools over the same spine (external agents drive the platform) | `FORGECAST_API_URL` |
 
 **At deploy time, the checklist collapses to:** frontend needs nothing · backend needs the auth trio (`GOOGLE_CLIENT_ID/SECRET`, `AUTH_SECRET`) + `FORGECAST_BASE_URL` + durable storage (volume or D1/R2) · AI layer needs whichever provider keys you actually use (`FAL_KEY` at minimum for cloud generation — or none for the free self-hosted stack).
 
