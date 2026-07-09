@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { AppNav } from '@/components/AppNav';
 import type { SessionInfo } from '@/lib/use-forgecast';
 
 interface HeaderProps {
@@ -39,7 +40,7 @@ export function Header({ providers, pro, session, onSignOut, onOpenKeys }: Heade
 
   return (
     <header className="rise">
-      <div className="flex items-center justify-between py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-4">
         {/* Wordmark */}
         <div className="flex flex-col gap-0.5">
           <div className="flex items-baseline gap-0 leading-none tracking-tight">
@@ -60,6 +61,9 @@ export function Header({ providers, pro, session, onSignOut, onOpenKeys }: Heade
             forge it · cast it
           </p>
         </div>
+
+        {/* Top-level tabs: Studio ⇄ Editor */}
+        <AppNav />
 
         {/* Provider chip + Pro */}
         <div className="flex items-center gap-2.5">

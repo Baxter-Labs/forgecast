@@ -77,7 +77,7 @@ const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'montage', label: 'Montage' },
   { id: 'voice', label: 'Voice' },
   { id: 'short', label: 'Short' },
-  { id: 'timeline', label: 'Editor' },
+  { id: 'timeline', label: 'Timeline' },
 ];
 
 function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string; setRatio: (v: string) => void }) {
@@ -632,9 +632,9 @@ export function ForgePanel({
           <a
             href="/editor"
             className="flex items-center justify-between rounded-lg border px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] transition-all hover:border-[var(--ember-2)]"
-            style={{ borderColor: 'var(--forge-border)', color: 'var(--ember-1)', background: 'var(--forge-surface-2)' }}
+            style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)', background: 'rgba(255,122,26,0.08)', boxShadow: '0 0 12px var(--ember-glow)' }}
           >
-            Open the full editor
+            Open the full Editor + agent
             <span aria-hidden="true">→</span>
           </a>
 
@@ -650,7 +650,7 @@ export function ForgePanel({
           </div>
 
           <p className="font-mono text-[10px] text-[var(--forge-faint)]">
-            arranges your assets into one video (ffmpeg/Remotion) — agents can drive the same timeline over MCP
+            a quick arrange — the <span className="text-[var(--ember-1)] opacity-80">Editor</span> tab up top has the full workspace (drag-to-reorder, per-clip inspector, and the agent). Same saved timeline either way.
           </p>
         </>
       )}

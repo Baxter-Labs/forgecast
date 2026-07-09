@@ -2,9 +2,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, Film, Music2, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { Film, Music2, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import type { StudioAsset } from '@/lib/use-forgecast';
 import { useTimelineEditor } from '@/lib/use-timeline-editor';
+import { AppNav } from '@/components/AppNav';
 import { EditorAgent } from './EditorAgent';
 import {
   TIMELINE_TRANSITIONS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
@@ -71,12 +72,7 @@ export function TimelineWorkspace() {
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--forge-bg)', color: 'var(--forge-text)' }}>
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <header className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3 border-b" style={{ borderColor: 'var(--forge-border)' }}>
-        <Link href="/" className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--forge-muted)] hover:text-[var(--ember-1)] transition-colors">
-          <ArrowLeft size={14} aria-hidden="true" /> Studio
-        </Link>
-        <p className="font-mono text-sm tracking-[0.2em] uppercase">
-          <span style={{ background: 'var(--molten)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>Editor</span>
-        </p>
+        <AppNav />
 
         <div className="flex items-center gap-1.5" role="group" aria-label="Aspect ratio">
           {ASPECTS.map((r) => {
