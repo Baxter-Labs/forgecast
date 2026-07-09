@@ -474,9 +474,11 @@ pnpm -C apps/web cf:preview     # build + preview on the real Workers runtime
 pnpm -C apps/web cf:deploy      # build + deploy to your Cloudflare account
 ```
 
-- **Keys** → store as Worker secrets: `wrangler secret put FAL_KEY` (repeat per key), or paste them in the Cloudflare dashboard.
-- **Durable edge storage** → set `FORGECAST_PROFILE=baxter-cloud`, bind an **R2** bucket (the `R2_*` vars) and a **D1** database named `DB` in `wrangler.jsonc`. Without them, metadata is ephemeral in-memory — fine for a demo, not for production.
-- Set **`FORGECAST_BASE_URL`** to your Worker's public URL so publishing and the montage worker can fetch generated assets.
+**→ Full step-by-step for a public, multi-user, bring-your-own-keys site: [`docs/DEPLOY-CLOUDFLARE.md`](docs/DEPLOY-CLOUDFLARE.md)** (R2 + D1 + Google sign-in + secrets).
+
+- **Provider keys** → users set their own in the **Keys** panel (encrypted at rest); optionally seed an instance default with `wrangler secret put FAL_KEY`.
+- **Durable edge storage** → `FORGECAST_PROFILE=baxter-cloud`, an **R2** bucket (the `R2_*` secrets) + a **D1** database bound as `DB` in `wrangler.jsonc`. Without them, metadata is ephemeral — fine for a demo, not production.
+- **Sign-in** → set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `AUTH_SECRET` as Worker secrets and `FORGECAST_BASE_URL` to your Worker's public URL (also used so publishing/montage can fetch generated assets).
 
 ### B) Any Node host (Vercel, Fly, a VPS, Docker)
 
