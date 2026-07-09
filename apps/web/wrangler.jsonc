@@ -14,18 +14,21 @@
   },
   "vars": {
     // Store generated asset bytes in Cloudflare R2 (via the S3 API in R2Storage).
-    "FORGECAST_PROFILE": "baxter-cloud",
-    // Public origin so image-to-video, montage, and publish can resolve asset URLs.
-    "FORGECAST_BASE_URL": "https://forgecast-web.saikiran-vanamala1990.workers.dev"
+    "FORGECAST_PROFILE": "baxter-cloud"
+    // FORGECAST_BASE_URL is the site's public origin — REQUIRED for the Google OAuth
+    // redirect and for resolving asset URLs. It is the deployed URL, so set it AFTER
+    // the first deploy (see docs/DEPLOY-CLOUDFLARE.md): run `pnpm cf:deploy`, note the
+    // printed https://…workers.dev (or your custom domain), then add it here as a var
+    // and redeploy. Until it's set, OAuth falls back to http://localhost:3210.
   },
-  // Edge-durable metadata (projects/assets/jobs) so state survives across isolates.
-  // Schema self-initializes on first use; or run:
-  //   wrangler d1 execute forgecast-db --remote --file d1/schema.sql
+  // Edge-durable metadata (projects/assets/jobs/users/keys) so state survives across
+  // isolates. Schema self-initializes on first use. Provisioned in the deploy account
+  // (see docs/DEPLOY-CLOUDFLARE.md).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "forgecast-db",
-      "database_id": "29652570-edb0-40f1-aef7-297db4e43910"
+      "database_id": "ac1bb4bc-4d4c-4a5a-b8b6-fb5fdbf4233b"
     }
   ]
   // R2 credentials are secrets — set them with `wrangler secret put`:
