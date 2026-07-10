@@ -194,8 +194,8 @@ Forgecast is **model-agnostic** (every model is a swappable adapter), but it shi
 
 | Modality | Default | Best (opt-in) | Engine |
 |---|---|---|---|
-| **Image** | **`fal-ai/nano-banana`** (Google Gemini 2.5 Flash Image) — fast, low-cost, great | **`fal-ai/nano-banana-pro`** — state-of-the-art detail + text · FLUX.1 [dev]/[schnell] also in the picker | fal.ai text-to-image · **or free self-hosted Stable Diffusion** (`provider: "stablediffusion"`, `SD_WEBUI_URL`) |
-| **Video** | **`bytedance/seedance/v1.5/pro`** — best value, native audio (the Studio's standard) | **`fal-ai/veo3.1/fast`** — 4K + native audio (the **Boost Quality** toggle) · **Kling 3 Pro** for cinematic motion (premium) | fal.ai text→video **and** image→video |
+| **Image** | **`fal-ai/nano-banana`** (Google Gemini 2.5 Flash Image) — fast, low-cost, great | **`fal-ai/nano-banana-pro`** — state-of-the-art detail + text · FLUX.1 [dev]/[schnell] also in the picker | fal.ai text-to-image · **or your own OpenAI key** (`gpt-image-1`) · **or free self-hosted Stable Diffusion** (`SD_WEBUI_URL`) — pick the provider in the Studio |
+| **Video** | **`bytedance/seedance/v1.5/pro`** — best value, native audio (the Studio's standard) | **`fal-ai/veo3.1/fast`** — 4K + native audio (the **Boost Quality** toggle) · **Kling 3 Pro** for cinematic motion (premium) | fal.ai text→video **and** image→video · **or your own Replicate key** (any Replicate video model) |
 | **Voice** | self-hosted **VoxCPM-2** (open-source, Apache-2.0) | cloud **fal TTS** (automatic fallback) | `VoiceProvider` |
 
 > Image models come in two sizing families: **Nano Banana** uses an `aspect_ratio` enum, **FLUX** uses pixel `image_size` — Forgecast sends the right one per model, and the picked model now flows all the way to fal (it previously always fell back to FLUX schnell). The Studio's image picker is a **curated, fal-runnable** set; the full vendored open-model list stays available as `openImageModels`.
@@ -287,8 +287,8 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 |---|---|---|
 | **Agent brain** (PLAN / AUTO-RUN) | [`packages/agent/`](packages/agent/) — `toolAgent.ts` (tool-calling loop + tools: `read_website`, generate image/b-roll/presenter, `list_assets`, timeline get/set/render) · `plan.ts` (planning prompts + montage directive) | LLM via [`apps/web/lib/agent/llm.ts`](apps/web/lib/agent/llm.ts): **OpenAI** (default, `OPENAI_API_KEY`) · **Claude** (`FORGECAST_AGENT_LLM=anthropic`) · **Ollama, free/local** (`FORGECAST_AGENT_LLM=ollama`) |
 | Agent → platform bridge | [`apps/web/lib/agent/forgecast-actions.ts`](apps/web/lib/agent/forgecast-actions.ts) (tools call the same spine) · [`trends.ts`](apps/web/lib/agent/trends.ts) (optional Agent-Reach trends) | — |
-| **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | fal (`FAL_KEY`, Nano Banana default) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`, free) |
-| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | fal (`FAL_KEY_VIDEO`): Seedance default, Veo 3.1 boost, WAN/Kling/… |
+| **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | fal (`FAL_KEY`, Nano Banana default) · **OpenAI** (`OPENAI_API_KEY`, gpt-image-1) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`, free) — provider chosen in the Studio |
+| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | fal (`FAL_KEY_VIDEO`): Seedance default, Veo 3.1 boost, WAN/Kling/… · **Replicate** (`REPLICATE_API_TOKEN`) as a non-fal alternative |
 | **Voice / TTS** | [`packages/providers/src/voice/`](packages/providers/src/voice/) | self-hosted **VoxCPM-2** (`VOXCPM_URL`, free) → fal TTS fallback |
 | **Presenter** (talking head) | [`packages/providers/src/presenter/`](packages/providers/src/presenter/) | OmniHuman via fal |
 | **Speech-to-text** (mic input) | [`packages/providers/src/transcribe/`](packages/providers/src/transcribe/) | Wispr Flow (`WISPRFLOW_API_KEY`) → browser speech fallback |
