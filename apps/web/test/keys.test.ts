@@ -71,6 +71,22 @@ describe('per-user services overlay', () => {
     expect(mine.jobs).toBe(base.jobs);
   });
 
+  it('wires non-fal image (OpenAI) and video (Replicate) providers from BYO keys', async () => {
+    const base = buildServices({});
+    expect(base.imageRegistry.available()).toEqual([]);
+    expect(base.videoProvider.isAvailable()).toBe(false);
+
+    await setUserKey(base, 'u1', { id: 'openai', value: 'sk-openai' });
+    await setUserKey(base, 'u1', { id: 'replicate', value: 'r8-token' });
+    invalidateUserServices('u1');
+    const mine = await getServicesForUser('u1', base);
+
+    expect(mine.imageRegistry.available()).toContain('openai'); // image via OpenAI, no fal
+    expect(mine.videoProvider.name).toBe('replicate');           // video via Replicate, no fal
+    expect(mine.videoProvider.isAvailable()).toBe(true);
+    expect(base.imageRegistry.available()).toEqual([]);          // base untouched
+  });
+
   it('returns the base singleton for owners with no stored keys, and caches per owner', async () => {
     const base = buildServices({});
     invalidateUserServices('u1');

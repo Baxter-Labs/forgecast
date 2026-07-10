@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, MoneyPrinterWorker, FalVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -70,6 +70,10 @@ export interface BuildServicesOptions {
   wisprKey?: string;
   /** Pexels stock-footage key. Falls back to PEXELS_API_KEY env. */
   pexelsKey?: string;
+  /** OpenAI key for the non-fal image provider (gpt-image-1). Falls back to OPENAI_API_KEY env. */
+  openaiKey?: string;
+  /** Replicate token for the non-fal video provider. Falls back to REPLICATE_API_TOKEN env. */
+  replicateKey?: string;
   /** Reuse an existing instance's repos + storage (per-user provider overlays).
    *  Providers/handlers are rebuilt with the key overrides; state is shared. */
   shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'storage'>;
@@ -109,6 +113,10 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   // Self-hosted, free image generation via a local Stable Diffusion WebUI. Available
   // only when SD_WEBUI_URL is set (the registry filters by isAvailable()).
   imageRegistry.register(new StableDiffusionImageProvider({ fetchFn: opts.fetchFn }));
+  // Non-fal cloud image generation via OpenAI (gpt-image-1) — a BYO-key alternative.
+  // Available when the user's OpenAI key (or OPENAI_API_KEY) is set.
+  const openaiImageProvider = new OpenAiImageProvider({ apiKey: opts.openaiKey, fetchFn: opts.fetchFn });
+  imageRegistry.register(openaiImageProvider);
 
   const publishers = new PublisherRegistry();
   publishers.register(new WebhookPublisher({ fetchFn: opts.fetchFn }));
@@ -199,7 +207,15 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     fetchFn: opts.fetchFn,
   });
   const videoWorker = new MoneyPrinterWorker({ fetchFn: opts.fetchFn });
-  const videoProvider: VideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
+  // Video: prefer fal when its key is set, else Replicate (a BYO-key alternative),
+  // else fall back to the unavailable fal provider (so health reports it cleanly).
+  const falVideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
+  const replicateVideoProvider = new ReplicateVideoProvider({ apiKey: opts.replicateKey, fetchFn: opts.fetchFn });
+  const videoProvider: VideoProvider = falVideoProvider.isAvailable()
+    ? falVideoProvider
+    : replicateVideoProvider.isAvailable()
+      ? replicateVideoProvider
+      : falVideoProvider;
   const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
@@ -345,6 +361,8 @@ export async function getServicesForUser(ownerId: string, base: Services = getSe
     if (own.fal_voice !== undefined) opts.voiceKey = own.fal_voice;
     if (own.pexels !== undefined) opts.pexelsKey = own.pexels;
     if (own.wisprflow !== undefined) opts.wisprKey = own.wisprflow;
+    if (own.openai !== undefined) opts.openaiKey = own.openai;
+    if (own.replicate !== undefined) opts.replicateKey = own.replicate;
     services = buildServices(opts);
   }
   userServicesCache.set(ownerId, { at: Date.now(), services });
