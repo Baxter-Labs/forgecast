@@ -53,7 +53,7 @@ function normalizeAsset(a: RawAsset): StudioAsset {
   };
 }
 
-interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number }
+interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number; provider?: string }
 interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
