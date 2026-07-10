@@ -59,10 +59,15 @@ export async function generateImage(services: Services, projectId: string, input
   }
   const blockedImage = guardText(fields.prompt); if (blockedImage) return blockedImage;
 
-  const providerName = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
-  // A non-fal provider (e.g. self-hosted Stable Diffusion) must actually be configured.
-  if (providerName !== 'fal' && !services.imageRegistry.available().includes(providerName)) {
-    return { status: 503, body: { error: `image provider '${providerName}' not configured` } };
+  const requested = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
+  const availableImage = services.imageRegistry.available();
+  let providerName = requested;
+  if (!availableImage.includes(providerName)) {
+    // The requested provider isn't configured. If it's just the default (fal) and the
+    // user brought a different image key (OpenAI or self-hosted SD), use that instead.
+    // An explicit non-default request that isn't configured → 503.
+    if (requested === 'fal' && availableImage.length > 0) providerName = availableImage[0]!;
+    else return { status: 503, body: { error: `image provider '${requested}' not configured` } };
   }
   // Ground the generation in the project's brand kit (no-op when none is set).
   const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
