@@ -27,6 +27,10 @@ interface ForgePanelProps {
   setPrompt: (v: string) => void;
   model: string;
   setModel: (v: string) => void;
+  /** Available image provider names (e.g. ['fal','openai','stablediffusion']). */
+  imageProviders: string[];
+  imageProvider: string;
+  setImageProvider: (p: string) => void;
   voiceName: string;
   setVoiceName: (v: string) => void;
   short: ShortControls;
@@ -218,8 +222,10 @@ function ImageSourcePicker({
   );
 }
 
+const IMAGE_PROVIDER_LABELS: Record<string, string> = { fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
+
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
+  mode, setMode, prompt, setPrompt, model, setModel, imageProviders, imageProvider, setImageProvider, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
   videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
   assets,
@@ -424,31 +430,69 @@ export function ForgePanel({
             />
           </div>
 
-          <div>
-            <FieldLabel htmlFor="forge-model">Model</FieldLabel>
-            <select
-              id="forge-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className={SELECT_CLASS}
-              style={SELECT_ARROW}
-            >
-              {imageModels.map((m) => (
-                <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2 flex items-center gap-2">
-              <span className="text-[var(--ember-1)] opacity-70">{model}</span>
-              {selectedModel?.note && (
-                <>
-                  <span className="text-[var(--forge-faint)]">·</span>
-                  <span>{selectedModel.note}</span>
-                </>
-              )}
+          {imageProviders.length > 1 && (
+            <div>
+              <FieldHeading>Provider</FieldHeading>
+              <div className="flex flex-wrap gap-2">
+                {imageProviders.map((p) => {
+                  const selected = p === imageProvider;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setImageProvider(p)}
+                      aria-pressed={selected}
+                      className="font-mono text-xs px-3 py-1.5 rounded border transition-all"
+                      style={selected
+                        ? { borderColor: 'var(--ember-2)', color: 'var(--ember-1)', boxShadow: '0 0 12px var(--ember-glow)', background: 'rgba(255,122,26,0.06)' }
+                        : { borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+                    >
+                      {IMAGE_PROVIDER_LABELS[p] ?? p}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
+                bring your own key in <span className="text-[var(--ember-1)] opacity-70">· keys</span> to add providers
+              </p>
+            </div>
+          )}
+
+          {imageProvider === 'fal' ? (
+            <div>
+              <FieldLabel htmlFor="forge-model">Model</FieldLabel>
+              <select
+                id="forge-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className={SELECT_CLASS}
+                style={SELECT_ARROW}
+              >
+                {imageModels.map((m) => (
+                  <option key={m.id} value={m.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2 flex items-center gap-2">
+                <span className="text-[var(--ember-1)] opacity-70">{model}</span>
+                {selectedModel?.note && (
+                  <>
+                    <span className="text-[var(--forge-faint)]">·</span>
+                    <span>{selectedModel.note}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="font-mono text-[10px] text-[var(--forge-faint)]">
+              {imageProvider === 'openai'
+                ? <>generating with <span className="text-[var(--ember-1)] opacity-70">OpenAI gpt-image-1</span> (your OpenAI key)</>
+                : imageProvider === 'stablediffusion'
+                  ? <>generating with your <span className="text-[var(--ember-1)] opacity-70">self-hosted Stable Diffusion</span></>
+                  : <>generating with <span className="text-[var(--ember-1)] opacity-70">{imageProvider}</span></>}
             </p>
-          </div>
+          )}
 
           <div>
             <FieldHeading>Ratio</FieldHeading>

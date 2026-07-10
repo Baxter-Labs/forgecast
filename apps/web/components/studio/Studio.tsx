@@ -112,6 +112,14 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
+  const [imageProvider, setImageProvider] = useState('fal');
+  // Keep the selected image provider valid as availability loads (e.g. a user with
+  // only an OpenAI key defaults to 'openai' instead of the absent 'fal').
+  useEffect(() => {
+    if (providers.length > 0 && !providers.includes(imageProvider)) {
+      setImageProvider(providers.includes('fal') ? 'fal' : providers[0]!);
+    }
+  }, [providers, imageProvider]);
   const [voiceName, setVoiceName] = useState('');
   const [short, setShort] = useState<ShortControls>({ subtitles: true, count: 1, music: true, voiceName: '' });
   const [boostQuality, setBoostQuality] = useState(false);
@@ -235,7 +243,7 @@ export function Studio() {
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
-      void generateImage({ prompt, model, aspectRatio: ratio, width, height }).then(attach);
+      void generateImage({ prompt, model, aspectRatio: ratio, width, height, provider: imageProvider }).then(attach);
     } else if (mode === 'video') {
       void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
     } else if (mode === 'voice') {
@@ -310,6 +318,9 @@ export function Studio() {
                 setPrompt={setPrompt}
                 model={model}
                 setModel={setModel}
+                imageProviders={providers}
+                imageProvider={imageProvider}
+                setImageProvider={setImageProvider}
                 voiceName={voiceName}
                 setVoiceName={setVoiceName}
                 short={short}
