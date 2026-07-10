@@ -261,6 +261,13 @@ someone else's resource → **404** (ids can't be probed). Public by design: `he
 renderers and social relays fetch media without cookies). Rows created before auth
 was enabled belong to the `local` operator.
 
+**Edge gate.** [`apps/web/proxy.ts`](../apps/web/proxy.ts) (Next proxy/middleware) verifies
+the session cookie **before** the app pages (`/`, `/editor`, `/edit/*`) render, so a
+signed-out visitor is redirected to `/signin` at the edge — no flash of protected UI, and
+the gate holds even with JS disabled. It's a no-op in open mode (a no-op when the auth env
+vars are unset), and API routes keep their own per-request guards. `verifySession` is pure
+WebCrypto, so this runs on the Cloudflare Worker.
+
 **Files.** [`packages/core/src/auth.ts`](../packages/core/src/auth.ts) (UserRecord/UserRepo +
 session sign/verify) · user repos in every store backend · [`apps/web/lib/auth.ts`](../apps/web/lib/auth.ts)
 (OAuth flow + cookies) · routes under [`apps/web/app/api/auth/`](../apps/web/app/api/auth/) ·
