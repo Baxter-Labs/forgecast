@@ -14,6 +14,8 @@ export interface EditorAvailability {
   image: boolean;
   video: boolean;
   voice: boolean;
+  /** Voice+video narrate (ffmpeg mux) — node-only, false on the Workers/edge deploy. */
+  narrate: boolean;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -50,7 +52,7 @@ export function useAssetEditor(assetId: string) {
   const [error, setError] = useState<string | null>(null);
   /** Name of the op currently running (for spinners), or null. */
   const [busy, setBusy] = useState<string | null>(null);
-  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false });
+  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false, narrate: false });
   const [variations, setVariations] = useState<EditorAsset[]>([]);
 
   const load = useCallback(async () => {
@@ -69,6 +71,7 @@ export function useAssetEditor(assetId: string) {
           image: (health.providers.image ?? []).length > 0,
           video: (health.providers.video ?? []).length > 0,
           voice: (health.providers.voice ?? []).length > 0,
+          narrate: (health.providers.narrate ?? []).length > 0,
         });
       }
     } catch (e) {
