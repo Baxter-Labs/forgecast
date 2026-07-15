@@ -19,3 +19,4 @@ export * from './d1/keyRepo';
 export * from './d1/store';
 export * from './fs/storage';
 export * from './r2/storage';
+export * from './r2/binding';
