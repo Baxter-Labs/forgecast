@@ -90,11 +90,13 @@ Add these three tools to the Vapi assistant under **Tools → Custom**.
 
 | Variable | Purpose |
 |---|---|
+| `VAPI_WEBHOOK_SECRET` | **Required.** Shared secret — the webhook is disabled (503) until it's set. Configure the SAME value as your Vapi assistant's server secret so Vapi sends it as the `x-vapi-secret` header; requests without the matching header are rejected (401). |
 | `OPENAI_API_KEY` | Required for the content agent to generate campaign plans. |
 | `FAL_KEY` | Required for AI image generation via fal.ai. |
 | `FORGECAST_BASE_URL` | Public URL of the Forgecast app (used for asset URLs). |
+| `VAPI_OWNER` | Optional — on a multi-user deploy, scope the assistant to one user's workspace (by user id). Defaults to the local operator. |
 
-Without `OPENAI_API_KEY`, the `create_content` tool returns a friendly "not configured" message instead of running.
+Without `VAPI_WEBHOOK_SECRET` the webhook is **disabled** (503). Without `OPENAI_API_KEY`, `create_content` returns a friendly "not configured" message instead of running.
 
 ## Notes
 

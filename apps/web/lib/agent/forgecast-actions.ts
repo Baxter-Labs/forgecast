@@ -26,10 +26,10 @@ const RATIO_TO_DIM: Record<string, { width: number; height: number }> = {
   '3:4': { width: 768, height: 1024 },
 };
 
-export function makeForgecastActions(services: Services): ForgecastActions {
+export function makeForgecastActions(services: Services, ownerId?: string): ForgecastActions {
   return {
     async ensureProject(name: string): Promise<string> {
-      const r = await createProject(services, { name });
+      const r = await createProject(services, { name }, ownerId);
       return (r.body as { project: { id: string } }).project.id;
     },
     async generateImage(projectId, prompt, aspectRatio) {
