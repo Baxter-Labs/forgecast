@@ -40,6 +40,14 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             <span className="font-display text-4xl font-extrabold text-molten" style={{ fontWeight: 800 }}>CAST</span>
           </div>
           <p className="font-mono text-[11px] tracking-widest text-[var(--forge-muted)] uppercase">forge it · cast it</p>
+          <a
+            href="https://baxter-labs.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[10px] tracking-wide text-[var(--forge-faint)] transition-colors hover:text-[var(--ember-1)]"
+          >
+            by Baxter Labs ↗
+          </a>
         </div>
 
         <p className="text-sm text-[var(--forge-muted)] leading-relaxed">

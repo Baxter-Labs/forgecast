@@ -60,6 +60,14 @@ export function Header({ providers, pro, session, onSignOut, onOpenKeys }: Heade
           <p className="font-mono text-xs tracking-widest text-[var(--forge-muted)] uppercase">
             forge it · cast it
           </p>
+          <a
+            href="https://baxter-labs.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit font-mono text-[10px] tracking-wide text-[var(--forge-faint)] transition-colors hover:text-[var(--ember-1)]"
+          >
+            by Baxter Labs ↗
+          </a>
         </div>
 
         {/* Top-level tabs: Studio ⇄ Editor */}
