@@ -17,6 +17,8 @@ export interface UserRepo {
   getByEmail(email: string): Promise<UserRecord | null>;
   /** Insert, or refresh profile fields of the user with the same email (id/createdAt kept). */
   upsert(user: UserRecord): Promise<UserRecord>;
+  /** All users, newest first — for operator/admin views. */
+  list(): Promise<UserRecord[]>;
 }
 
 export function newUser(
