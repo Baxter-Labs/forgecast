@@ -59,14 +59,16 @@ export async function generateImage(services: Services, projectId: string, input
   }
   const blockedImage = guardText(fields.prompt); if (blockedImage) return blockedImage;
 
-  const requested = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : 'fal';
   const availableImage = services.imageRegistry.available();
+  // Default to the keyless Cloudflare Workers AI provider when available (the
+  // on-deploy free tier); otherwise fall back to fal. An explicit `provider` wins.
+  const defaultProvider = availableImage.includes('cloudflare') ? 'cloudflare' : 'fal';
+  const requested = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : defaultProvider;
   let providerName = requested;
   if (!availableImage.includes(providerName)) {
-    // The requested provider isn't configured. If it's just the default (fal) and the
-    // user brought a different image key (OpenAI or self-hosted SD), use that instead.
-    // An explicit non-default request that isn't configured → 503.
-    if (requested === 'fal' && availableImage.length > 0) providerName = availableImage[0]!;
+    // The requested provider isn't configured. If it's just the default, use whatever
+    // IS available (e.g. a BYO OpenAI/SD key). An explicit unavailable request → 503.
+    if (requested === defaultProvider && availableImage.length > 0) providerName = availableImage[0]!;
     else return { status: 503, body: { error: `image provider '${requested}' not configured` } };
   }
   // Ground the generation in the project's brand kit (no-op when none is set).
@@ -88,6 +90,9 @@ export async function generateImage(services: Services, projectId: string, input
       if (typeof fields.width === 'number') params.width = fields.width;
       if (typeof fields.height === 'number') params.height = fields.height;
     }
+  } else if (providerName === 'cloudflare') {
+    // FLUX.1 [schnell]: prompt only (fixed size; no model picker). The brand kit is
+    // already folded into the prompt above.
   } else {
     // Self-hosted / other provider: raw prompt + pixel dimensions (+ optional checkpoint).
     if (typeof fields.model === 'string' && fields.model.length > 0) params.model = fields.model;

@@ -112,12 +112,12 @@ export function Studio() {
   const [mode, setMode] = useState<ForgeMode>('image');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState(imageModels[0]?.id ?? '');
-  const [imageProvider, setImageProvider] = useState('fal');
-  // Keep the selected image provider valid as availability loads (e.g. a user with
-  // only an OpenAI key defaults to 'openai' instead of the absent 'fal').
+  const [imageProvider, setImageProvider] = useState('cloudflare');
+  // Keep the selected image provider valid as availability loads. Keyless-first:
+  // default to the free Cloudflare provider, then fal, then whatever's configured.
   useEffect(() => {
     if (providers.length > 0 && !providers.includes(imageProvider)) {
-      setImageProvider(providers.includes('fal') ? 'fal' : providers[0]!);
+      setImageProvider(providers.includes('cloudflare') ? 'cloudflare' : providers.includes('fal') ? 'fal' : providers[0]!);
     }
   }, [providers, imageProvider]);
   const [voiceName, setVoiceName] = useState('');
