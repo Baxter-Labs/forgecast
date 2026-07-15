@@ -1,0 +1,55 @@
+<!--
+  Evaluations for the hosted Forgecast MCP endpoint (apps/web/app/api/mcp, apps/web/lib/mcp.ts).
+
+  Forgecast's MCP is a *generative / action* surface over a per-user workspace that starts
+  empty, so classic "query a fixed dataset for a stable answer" evals don't apply to the
+  generated content (which is non-deterministic). These questions instead pin the
+  DETERMINISTIC, workspace-fresh behaviors an agent must get right: workflow bookkeeping
+  (create → list), protocol/tool metadata, ownership, and actionable errors. Each is
+  answerable by an agent connected to a fresh account with no prior projects/assets.
+
+  Automated coverage of the same behaviors lives in apps/web/test/mcp.test.ts. Run these
+  against a live connection (a fresh user + their MCP token) via an agent harness.
+-->
+<evaluation>
+  <qa_pair>
+    <question>Create a Forgecast project named "Nebula", then call the list-projects tool. What exact integer does the "count" field report?</question>
+    <answer>1</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Create three projects named "One", "Two", and "Three" (in that order), then list your projects. What integer is in the "count" field?</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Create a project named "Empty" and note its id. Call the list-assets tool for that project id. What integer does the "count" field report?</question>
+    <answer>0</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Call the get-asset tool with assetId "does-not-exist-123". The call returns a tool error. What two-word phrase does the error message end with?</question>
+    <answer>not found</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>List the available tools. How many tools does the hosted Forgecast MCP server expose?</question>
+    <answer>14</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the tool list, does the health tool (forgecast_health) have readOnlyHint set to true in its annotations? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the tool list, is forgecast_generate_image marked with readOnlyHint true? Answer yes or no.</question>
+    <answer>no</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Each project object returned by list-projects has exactly three fields. Which field name holds an ISO timestamp?</question>
+    <answer>createdAt</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the name reported in the initialize response's serverInfo?</question>
+    <answer>forgecast</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Call get-job with jobId "no-such-job". Does the tool return an error result? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+</evaluation>
