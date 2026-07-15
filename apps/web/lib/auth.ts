@@ -193,3 +193,34 @@ export async function sessionUser(services: Services, cfg: AuthConfig | null, co
   if (!payload) return null;
   return services.users.get(payload.uid);
 }
+
+// ── API tokens (for MCP / machine clients) ────────────────────────────────────
+// A long-lived signed session token the user pastes into their Claude/ChatGPT MCP
+// config as a Bearer token. Same HMAC signing as the session cookie, so no new
+// storage; rotating AUTH_SECRET invalidates all tokens (there is no per-token
+// revocation yet — see the Connect panel copy).
+
+export const API_TOKEN_TTL_SEC = 365 * 24 * 60 * 60; // 1 year
+
+/** Extracts the token from an `Authorization: Bearer <token>` header. */
+export function bearerToken(authHeader: string | null | undefined): string | null {
+  if (!authHeader) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(authHeader);
+  return m ? m[1]!.trim() : null;
+}
+
+/** The user for a Bearer API token, or null (missing/invalid/expired token or auth off). */
+export async function userFromBearer(services: Services, cfg: AuthConfig | null, authHeader: string | null): Promise<UserRecord | null> {
+  if (!cfg) return null;
+  const token = bearerToken(authHeader);
+  if (!token) return null;
+  const payload = await verifySession(token, cfg.secret, Math.floor(Date.now() / 1000));
+  if (!payload) return null;
+  return services.users.get(payload.uid);
+}
+
+/** Mint a long-lived API token for the given user (for the MCP Connect panel). */
+export async function mintApiToken(cfg: AuthConfig, uid: string): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + API_TOKEN_TTL_SEC;
+  return signSession({ uid, exp }, cfg.secret);
+}
