@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { handleVapiToolCalls, type VoiceActions } from '../lib/voice/vapi';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { newJob } from '@forgecast/core';
+import { handleVapiToolCalls, verifyVapiSecret, type VoiceActions } from '../lib/voice/vapi';
+import { makeVoiceActions } from '../lib/voice/actions';
+import { buildServices } from '../lib/forgecast';
 
 function actions(): VoiceActions {
   return {
@@ -36,5 +39,43 @@ describe('handleVapiToolCalls', () => {
       { id: 'b', function: { name: 'check_job', arguments: { jobId: 'j9' } } },
     ] } }, actions());
     expect(res.results.map((r) => r.toolCallId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('verifyVapiSecret (fail-closed auth)', () => {
+  const saved = process.env.VAPI_WEBHOOK_SECRET;
+  afterEach(() => { if (saved === undefined) delete process.env.VAPI_WEBHOOK_SECRET; else process.env.VAPI_WEBHOOK_SECRET = saved; });
+
+  it('503 when VAPI_WEBHOOK_SECRET is unset — the webhook is disabled', () => {
+    delete process.env.VAPI_WEBHOOK_SECRET;
+    const r = verifyVapiSecret('anything');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status).toBe(503);
+  });
+
+  it('401 when the x-vapi-secret header is missing or wrong', () => {
+    process.env.VAPI_WEBHOOK_SECRET = 's3cret';
+    expect((verifyVapiSecret(null) as { ok: false; status: number }).status).toBe(401);
+    expect((verifyVapiSecret('wrong') as { ok: false; status: number }).status).toBe(401);
+  });
+
+  it('ok only when the header matches', () => {
+    process.env.VAPI_WEBHOOK_SECRET = 's3cret';
+    expect(verifyVapiSecret('s3cret')).toEqual({ ok: true });
+  });
+});
+
+describe('makeVoiceActions is owner-scoped (no cross-tenant leak)', () => {
+  it('listProjects + checkJob only see the owner’s workspace', async () => {
+    const services = buildServices({});
+    await services.projects.create({ id: 'p1', name: 'Mine', createdAt: 'T', ownerId: 'owner' });
+    await services.projects.create({ id: 'p2', name: 'Theirs', createdAt: 'T', ownerId: 'other' });
+    await services.jobs.create(newJob({ projectId: 'p2', kind: 'image', provider: 'x', params: {} }, { id: 'j1', now: 'T' }));
+
+    const owner = makeVoiceActions(services, 'owner');
+    const list = await owner.listProjects();
+    expect(list).toContain('Mine');
+    expect(list).not.toContain('Theirs');
+    expect(await owner.checkJob({ jobId: 'j1' })).toContain("couldn't find"); // another owner's job is invisible
   });
 });
