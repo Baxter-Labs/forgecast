@@ -1,0 +1,11 @@
+# SkyReels-V2 video worker dependencies.
+# SkyReels-V2 is GPU-only — install a CUDA build of torch matching your driver.
+fastapi
+uvicorn[standard]
+torch
+diffusers>=0.32.0
+transformers
+accelerate
+imageio
+imageio-ffmpeg
+ftfy

@@ -4,6 +4,7 @@ packages:
   - workers/*
   - "!workers/montage"
   - "!workers/voice"
+  - "!workers/skyreels"
 allowBuilds:
   esbuild: true
   ffmpeg-static: true
