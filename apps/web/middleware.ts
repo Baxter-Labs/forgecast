@@ -10,8 +10,13 @@ import { authConfig, SESSION_COOKIE } from '@/lib/auth';
  * no-op. API routes keep their own per-request guards; this only covers pages.
  *
  * verifySession is pure WebCrypto, so this runs on the Cloudflare Worker / edge.
+ *
+ * NOTE: this is `middleware.ts` (Edge runtime), NOT the Next 16 `proxy.ts`
+ * convention. OpenNext's Cloudflare adapter only supports Edge-runtime middleware,
+ * and Next 16 proxy files force the (unsupported) Node.js runtime. `middleware.ts`
+ * still works on Next 16 (with a deprecation warning) and deploys cleanly.
  */
-export async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const cfg = authConfig();
   if (!cfg) return NextResponse.next(); // open mode — nothing to gate
 

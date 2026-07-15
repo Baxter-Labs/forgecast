@@ -13,13 +13,11 @@
     "enabled": true
   },
   "vars": {
-    // Store generated asset bytes in Cloudflare R2 (via the S3 API in R2Storage).
-    "FORGECAST_PROFILE": "baxter-cloud"
-    // FORGECAST_BASE_URL is the site's public origin — REQUIRED for the Google OAuth
-    // redirect and for resolving asset URLs. It is the deployed URL, so set it AFTER
-    // the first deploy (see docs/DEPLOY-CLOUDFLARE.md): run `pnpm cf:deploy`, note the
-    // printed https://…workers.dev (or your custom domain), then add it here as a var
-    // and redeploy. Until it's set, OAuth falls back to http://localhost:3210.
+    // Generated asset bytes go to Cloudflare R2 via the native MEDIA_BUCKET binding.
+    "FORGECAST_PROFILE": "baxter-cloud",
+    // The site's public origin — Google OAuth redirect + asset URL resolution. Set to
+    // the deployed URL; change here + redeploy to move to a custom domain.
+    "FORGECAST_BASE_URL": "https://forgecast-web.eshwarpk.workers.dev"
   },
   // Keyless DEFAULT generator: Workers AI (env.AI) — FLUX.1 schnell for images and
   // Vidu/Runway/etc. for video. No API key; billed to this account (free 10k
