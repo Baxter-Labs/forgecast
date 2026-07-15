@@ -65,8 +65,9 @@ SKYREELS_URL=http://<this-host>:8780
 FORGECAST_VIDEO_PROVIDER=skyreels
 ```
 
-With `SKYREELS_URL` set, `skyreels` becomes a selectable video provider (visible in
-`/api/health` and usable via `provider: "skyreels"`). With
+With `SKYREELS_URL` set, **SkyReels appears in the Studio's Video → Provider picker**
+(labeled "Free · SkyReels · self-hosted") and is usable via `/api/health` and
+`provider: "skyreels"`. With
 `FORGECAST_VIDEO_PROVIDER=skyreels` it becomes the default. Otherwise Forgecast's
 default video provider is the keyless **Cloudflare Workers AI** (a configured
 BYO fal / Replicate key takes precedence over Cloudflare).
