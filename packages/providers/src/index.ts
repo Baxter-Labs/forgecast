@@ -7,6 +7,8 @@ export * from './video/moneyprinter';
 export * from './video/pixverse';
 export * from './video/fal';
 export * from './video/replicate';
+export * from './video/cloudflare';
+export * from './video/registry';
 export * from './publish/registry';
 export * from './publish/webhook';
 export * from './publish/omnisocials';

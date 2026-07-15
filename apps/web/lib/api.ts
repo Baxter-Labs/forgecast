@@ -121,7 +121,10 @@ async function advanceVideoJob(services: Services, job: Job): Promise<Job> {
 
   let task: VideoGenTask;
   try {
-    task = await services.videoProvider.getTask(taskId);
+    // Resolve the provider that created THIS job (keyless Cloudflare, fal, …) so the
+    // taskId is polled by the right adapter; fall back to the default.
+    const provider = services.videoRegistry.has(job.provider) ? services.videoRegistry.get(job.provider) : services.videoProvider;
+    task = await provider.getTask(taskId);
   } catch {
     return job; // transient — the next poll retries
   }
@@ -620,11 +623,9 @@ export async function generateShortVideo(services: Services, projectId: string, 
 export async function generateVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
-  if (!services.videoProvider.isAvailable()) {
-    return { status: 503, body: { error: 'video provider not configured (set FAL_KEY_VIDEO)' } };
-  }
   const fields = (input ?? {}) as {
     prompt?: unknown;
+    provider?: unknown;
     aspectRatio?: unknown;
     duration?: unknown;
     quality?: unknown;
@@ -637,7 +638,26 @@ export async function generateVideo(services: Services, projectId: string, input
   }
   const blockedVideo = guardText(fields.prompt); if (blockedVideo) return blockedVideo;
 
-  const modelId = typeof fields.model === 'string' ? fields.model : undefined;
+  // Resolve the video provider: keyless Cloudflare by default, BYO fal/Replicate (or
+  // an explicit `provider`) "on top". Each job records its provider so polling resolves
+  // back to the right adapter (see advanceVideoJob).
+  const availableVideo = services.videoProviders;
+  if (availableVideo.length === 0) {
+    return { status: 503, body: { error: 'no video provider configured' } };
+  }
+  const defaultVideo = services.videoProvider.name;
+  const requestedVideo = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : defaultVideo;
+  let videoProviderName = requestedVideo;
+  if (!availableVideo.includes(videoProviderName)) {
+    if (requestedVideo === defaultVideo) videoProviderName = availableVideo[0]!;
+    else return { status: 503, body: { error: `video provider '${requestedVideo}' not configured` } };
+  }
+  const videoProvider = services.videoRegistry.get(videoProviderName);
+
+  // Cloudflare uses its own video catalog (Vidu, etc.), not fal ids — ignore any fal
+  // model/boost that came from the UI so an unknown-to-CF model id can't 404 the request.
+  const isCloudflareVideo = videoProviderName === 'cloudflare';
+  const modelId = !isCloudflareVideo && typeof fields.model === 'string' ? fields.model : undefined;
   const modelDef = modelId ? videoModelById(modelId) : undefined;
 
   // Resolve image source for image-to-video models
@@ -667,7 +687,7 @@ export async function generateVideo(services: Services, projectId: string, input
   if (modelDef?.params) params.extra = modelDef.params;
 
   const job = await services.jobs.create(
-    newJob({ projectId, kind: 'video', provider: services.videoProvider.name, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+    newJob({ projectId, kind: 'video', provider: videoProviderName, params }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
 
   // Submit to the provider synchronously (a fast queue POST), then let the client
@@ -675,7 +695,7 @@ export async function generateVideo(services: Services, projectId: string, input
   // request short so heavy/slow models complete reliably on Cloudflare Workers,
   // which kill background work once the response is returned.
   try {
-    const { taskId } = await services.videoProvider.create({
+    const { taskId } = await videoProvider.create({
       prompt: brandedPrompt,
       aspectRatio: typeof fields.aspectRatio === 'string' ? fields.aspectRatio : undefined,
       duration: typeof fields.duration === 'number' ? fields.duration : undefined,

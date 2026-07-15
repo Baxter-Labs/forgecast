@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, type WorkersAiRunner } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -33,6 +33,9 @@ export interface Services {
   ids: { randomId: () => string; nowIso: () => string };
   videoWorker: ShortVideoWorker;
   videoProvider: VideoProvider;
+  videoRegistry: VideoProviderRegistry;
+  /** Names of available video providers (e.g. ['cloudflare','fal-video']). */
+  videoProviders: string[];
   montageWorker: MontageWorker;
   montageAvailable: boolean;
   voiceProvider: VoiceProvider;
@@ -215,15 +218,25 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     fetchFn: opts.fetchFn,
   });
   const videoWorker = new MoneyPrinterWorker({ fetchFn: opts.fetchFn });
-  // Video: prefer fal when its key is set, else Replicate (a BYO-key alternative),
-  // else fall back to the unavailable fal provider (so health reports it cleanly).
+  // Video providers → a registry, so each job resolves back to the provider that
+  // created it (by name). Keyless DEFAULT: Cloudflare Workers AI via the AI binding;
+  // BYO fal / Replicate keys are selectable "on top".
+  const videoRegistry = new VideoProviderRegistry();
+  const cloudflareVideoProvider = new CloudflareVideoProvider({ runner: opts.ai, fetchFn: opts.fetchFn });
   const falVideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
   const replicateVideoProvider = new ReplicateVideoProvider({ apiKey: opts.replicateKey, fetchFn: opts.fetchFn });
+  videoRegistry.register(cloudflareVideoProvider);
+  videoRegistry.register(falVideoProvider);
+  videoRegistry.register(replicateVideoProvider);
+  // Default pick when a request names no provider: a configured BYO key wins (fal,
+  // then Replicate) so a user's own key is used "on top"; otherwise the keyless
+  // Cloudflare provider (which also serves as the unavailable placeholder for health).
   const videoProvider: VideoProvider = falVideoProvider.isAvailable()
     ? falVideoProvider
     : replicateVideoProvider.isAvailable()
       ? replicateVideoProvider
-      : falVideoProvider;
+      : cloudflareVideoProvider;
+  const videoProviders = videoRegistry.available();
   const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
@@ -292,7 +305,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**

@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     ok: true,
     providers: {
       image: svc.imageRegistry.available(),
-      video: svc.videoProvider.isAvailable() ? [svc.videoProvider.name] : [],
+      video: svc.videoProviders,
       montage: svc.montageAvailable ? ['ffmpeg'] : [],
       short: svc.videoWorker.isAvailable() ? [svc.videoWorker.name] : [],
       voice: svc.voiceAvailable ? [svc.voiceProvider.name] : [],
