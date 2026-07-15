@@ -1,0 +1,44 @@
+# Fly.io deploy for the Forgecast montage / editor render worker (Remotion + Chromium).
+#
+# The Editor's timeline export and Montage mode stitch clips into one mp4 — compute
+# that can't run inside a Cloudflare Worker. Host this small service anywhere with
+# Docker; Fly.io is a cheap always-on option.
+#
+#   cd workers/montage
+#   fly launch --no-deploy                 # create the app (accept this fly.toml)
+#   fly deploy                             # build the Dockerfile + deploy
+#   fly secrets set MONTAGE_PUBLIC_URL=https://<your-app>.fly.dev
+#
+# Then point the site at it and redeploy the Worker:
+#   cd ../../apps/web
+#   npx wrangler secret put MONTAGE_WORKER_URL   # https://<your-app>.fly.dev
+#   pnpm cf:deploy
+#
+app = "forgecast-montage"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Suspend when idle to save cost; the render create→poll flow tolerates a cold start.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/health"
+
+# Remotion's headless Chromium is memory-hungry — bump memory for larger montages.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

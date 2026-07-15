@@ -8,9 +8,12 @@ across Worker isolates.
 
 This runbook targets the **public, multi-user, bring-your-own-keys** deployment: each
 visitor signs in with Google, gets a private workspace, and sets their own provider keys
-in the Studio's **Keys** panel — nobody can see or spend anyone else's keys. Heavy GPU
-work (MoneyPrinter shorts, Remotion montage, local SD/VoxCPM) does not run on Workers and
-stays on a container/GPU back-end (see `docs/ARCHITECTURE.md`).
+in the Studio's **Keys** panel — nobody can see or spend anyone else's keys. Image and
+video generation work **keyless by default** via Cloudflare Workers AI (the `ai` binding,
+free daily neuron tier), so the site is usable the moment it's deployed; BYO keys add
+premium models on top. Heavy GPU work (MoneyPrinter shorts, Remotion montage, local
+SD/VoxCPM) does not run on Workers and stays on a container/GPU back-end (see
+`docs/ARCHITECTURE.md`).
 
 All commands run from `apps/web/`.
 
@@ -65,15 +68,17 @@ npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
 # optional:
 npx wrangler secret put R2_PUBLIC_BASE_URL      # public bucket / CDN domain for serving media
-npx wrangler secret put FAL_KEY                 # a keyless default so the site works before users add keys
+npx wrangler secret put FAL_KEY                 # OPTIONAL premium image/video; generation is already keyless via Workers AI
 npx wrangler secret put OMNISOCIALS_API_KEY     # enable the "Cast" publish panel
 npx wrangler secret put WISPRFLOW_API_KEY       # enable voice input in the agent
 ```
 
-> **Provider keys are the users' job.** fal / OpenAI / Anthropic / Pexels / Wispr are set
-> per-user in the Keys panel (encrypted at rest with `AUTH_SECRET`). Setting an instance
-> `FAL_KEY` above just gives a shared default; leave it out to make everyone bring their own.
-> A `.env` / `.dev.vars` value does **not** reach production — it must be a `wrangler secret`.
+> **Generation is keyless by default** via Cloudflare Workers AI (the `ai` binding) — no
+> key needed to forge images or video. Premium **provider keys are the users' job**: fal /
+> OpenAI / Anthropic / Pexels / Wispr are set per-user in the Keys panel (encrypted at rest
+> with `AUTH_SECRET`) and take precedence over any instance secret. An instance `FAL_KEY`
+> just adds a shared premium option. A `.env` / `.dev.vars` value does **not** reach
+> production — it must be a `wrangler secret`.
 
 ### 5. First deploy
 
@@ -91,6 +96,35 @@ Note the printed URL, e.g. `https://forgecast-web.<your-subdomain>.workers.dev`.
 2. In the Google OAuth client (step 2), add the Authorized redirect URI
    `https://forgecast-web.<your-subdomain>.workers.dev/api/auth/callback`.
 3. `pnpm cf:deploy` again.
+
+### 7. (Optional) Editor & montage export — deploy the render worker
+
+The **Editor** timeline export and **Montage** mode stitch clips into one mp4 with
+Remotion + headless Chromium — compute that can't run inside a Worker. Deploy the bundled
+render worker to any always-on Docker host and point the site at it. Without this, image
+and video **generation** still work; only timeline/montage **export** is disabled on the site.
+
+Using Fly.io (a `fly.toml` is included):
+
+```bash
+cd workers/montage
+fly launch --no-deploy        # create the app (accept the included fly.toml)
+fly deploy                    # build the Docker image + deploy
+fly secrets set MONTAGE_PUBLIC_URL=https://<your-app>.fly.dev   # so returned mp4 URLs are reachable
+```
+
+Any Docker host works — the service exposes `POST /render`, `GET /render/:id` and
+`GET /health` on port 8787 (see `workers/montage/README.md`). Then tell the Worker where it
+is and redeploy:
+
+```bash
+cd apps/web
+npx wrangler secret put MONTAGE_WORKER_URL     # https://<your-app>.fly.dev
+pnpm cf:deploy
+```
+
+`/api/health` will then list `montage` and the Editor's export button works (with captions
++ transitions, via Remotion).
 
 ## Verify it's live
 
