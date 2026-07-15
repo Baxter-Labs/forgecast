@@ -22,7 +22,7 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. **473 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. Image and video generation are **keyless by default** on the Cloudflare deploy (Workers AI); bring your own keys for premium models on top. **499 tests, strict TypeScript.**
 
 ---
 
@@ -166,7 +166,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 ## What's built today
 
 - ✅ **Typed core** — domain model + the pluggable-provider, repository, storage, and job contracts. Zero I/O, fully mock-testable.
-- ✅ **Image generation** — model-agnostic fal.ai adapter (50+ models); graceful "unavailable" when no key.
+- ✅ **Image generation** — **keyless by default** on Cloudflare (Workers AI · FLUX schnell, free daily tier), or bring a key: model-agnostic fal.ai adapter (50+ models), OpenAI, or self-hosted Stable Diffusion.
 - ✅ **Asset Studio** — bring your own product: **upload** an image or clip, then **enhance/upscale** it, **edit** it from a text instruction, **cut out** the background to a transparent PNG, **animate** it to video (image→video), **compose** a montage from any selection, **narrate** any clip with a voice-over, and **download** the result. Every step works with just a fal key — no public URL (assets resolve to a `data:` URI when no `FORGECAST_BASE_URL` is set).
 - ✅ **Video generation** — text→video **and** image→video, model-agnostic (WAN, Veo 3.1, PixVerse, Kling, Seedance, Hailuo).
 - ✅ **Voice-over** — self-hosted **VoxCPM-2** (open-source, Apache-2.0); cloud fal TTS only as a fallback.
@@ -184,7 +184,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**473 tests, strict TypeScript, every commit a passing TDD cycle.**
+**499 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -287,14 +287,14 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 |---|---|---|
 | **Agent brain** (PLAN / AUTO-RUN) | [`packages/agent/`](packages/agent/) — `toolAgent.ts` (tool-calling loop + tools: `read_website`, generate image/b-roll/presenter, `list_assets`, timeline get/set/render) · `plan.ts` (planning prompts + montage directive) | LLM via [`apps/web/lib/agent/llm.ts`](apps/web/lib/agent/llm.ts): **OpenAI** (default, `OPENAI_API_KEY`) · **Claude** (`FORGECAST_AGENT_LLM=anthropic`) · **Ollama, free/local** (`FORGECAST_AGENT_LLM=ollama`) |
 | Agent → platform bridge | [`apps/web/lib/agent/forgecast-actions.ts`](apps/web/lib/agent/forgecast-actions.ts) (tools call the same spine) · [`trends.ts`](apps/web/lib/agent/trends.ts) (optional Agent-Reach trends) | — |
-| **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | fal (`FAL_KEY`, Nano Banana default) · **OpenAI** (`OPENAI_API_KEY`, gpt-image-1) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`, free) — provider chosen in the Studio |
-| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | fal (`FAL_KEY_VIDEO`): Seedance default, Veo 3.1 boost, WAN/Kling/… · **Replicate** (`REPLICATE_API_TOKEN`) as a non-fal alternative |
+| **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | **Cloudflare Workers AI** (`ai` binding, FLUX schnell — **keyless default**, free tier) · fal (`FAL_KEY`, Nano Banana) · **OpenAI** (`OPENAI_API_KEY`, gpt-image-1) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`) — provider chosen in the Studio |
+| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | **Cloudflare Workers AI** (`ai` binding, Vidu/Runway/Seedance — **keyless default**) · fal (`FAL_KEY_VIDEO`): Seedance, Veo 3.1 boost, WAN/Kling/… · **Replicate** (`REPLICATE_API_TOKEN`) · self-hosted **SkyReels-V2** (`SKYREELS_URL`, BYO GPU) |
 | **Voice / TTS** | [`packages/providers/src/voice/`](packages/providers/src/voice/) | self-hosted **VoxCPM-2** (`VOXCPM_URL`, free) → fal TTS fallback |
 | **Presenter** (talking head) | [`packages/providers/src/presenter/`](packages/providers/src/presenter/) | OmniHuman via fal |
 | **Speech-to-text** (mic input) | [`packages/providers/src/transcribe/`](packages/providers/src/transcribe/) | Wispr Flow (`WISPRFLOW_API_KEY`) → browser speech fallback |
 | Model menus | [`packages/catalog/`](packages/catalog/) | which model ids the UI offers, typed, with per-model params |
 | Renderers (no LLM) | [`packages/jobs/…/localMontage.ts`](packages/jobs/) (bundled ffmpeg) · [`workers/montage/`](workers/montage/) (Remotion) | keyless |
-| Self-hosted model services | [`workers/voice/`](workers/voice/) (VoxCPM-2) · [`workers/shorts/`](workers/shorts/) (MoneyPrinter: local Ollama script + Edge-TTS, free) | keyless |
+| Self-hosted model services | [`workers/voice/`](workers/voice/) (VoxCPM-2) · [`workers/shorts/`](workers/shorts/) (MoneyPrinter: local Ollama script + Edge-TTS) · [`workers/skyreels/`](workers/skyreels/) (SkyReels-V2 video, BYO GPU) | keyless |
 | Agent-facing API | [`apps/mcp/`](apps/mcp/) — 30 MCP tools over the same spine (external agents drive the platform) | `FORGECAST_API_URL` |
 
 **At deploy time, the checklist collapses to:** frontend needs nothing · backend needs the auth trio (`GOOGLE_CLIENT_ID/SECRET`, `AUTH_SECRET`) + `FORGECAST_BASE_URL` + durable storage (volume or D1/R2) · AI layer needs whichever provider keys you actually use (`FAL_KEY` at minimum for cloud generation — or none for the free self-hosted stack).
@@ -309,7 +309,7 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 git clone https://github.com/eshwarpk/forgecast.git
 cd forgecast
 pnpm install
-pnpm test          # 473 tests, all offline — no keys, no GPU, no Docker
+pnpm test          # 499 tests, all offline — no keys, no GPU, no Docker
 pnpm typecheck     # strict tsc across every package
 ```
 
