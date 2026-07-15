@@ -286,9 +286,9 @@ server.registerTool(
 server.registerTool(
   'forgecast_generate_video',
   {
-    title: 'Generate Video Clip (Pixverse)',
+    title: 'Generate Video Clip',
     description:
-      'Generates an AI video CLIP via Pixverse for the specified project. ' +
+      'Generates an AI video CLIP for the specified project (keyless by default via Cloudflare Workers AI; fal / Replicate / self-hosted SkyReels used when configured). ' +
       'This is ASYNC — it immediately returns a queued job. ' +
       'Tell the caller to poll `forgecast_get_job` with the returned job ID to track progress.\n\n' +
       'Args:\n' +
@@ -301,7 +301,7 @@ server.registerTool(
       'Example: `forgecast_generate_video({ project_id: "p_xyz", prompt: "a fox running at sunset", aspect_ratio: "9:16" })`\n' +
       '→ `{ "job": { "id": "j_abc", "kind": "video", "status": "queued" } }`\n' +
       'Then poll: `forgecast_get_job({ job_id: "j_abc" })` until status = "done".\n\n' +
-      'Error guidance: A 503 means PIXVERSE_API_KEY is not configured on the Forgecast app. ' +
+      'Error guidance: A 503 means no video provider is available on the Forgecast app. ' +
       'A 404 means the project does not exist. ' +
       'A 400 means the prompt is missing or empty.',
     inputSchema: z
