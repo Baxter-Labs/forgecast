@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -225,17 +225,26 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const cloudflareVideoProvider = new CloudflareVideoProvider({ runner: opts.ai, fetchFn: opts.fetchFn });
   const falVideoProvider = new FalVideoProvider({ apiKey: falVideoKey, fetchFn: opts.fetchFn });
   const replicateVideoProvider = new ReplicateVideoProvider({ apiKey: opts.replicateKey, fetchFn: opts.fetchFn });
+  // Optional self-hosted SkyReels-V2 (bring-your-own-GPU). Available only when
+  // SKYREELS_URL points at a running worker (see workers/skyreels).
+  const skyReelsVideoProvider = new SkyReelsVideoProvider({ fetchFn: opts.fetchFn });
   videoRegistry.register(cloudflareVideoProvider);
   videoRegistry.register(falVideoProvider);
   videoRegistry.register(replicateVideoProvider);
-  // Default pick when a request names no provider: a configured BYO key wins (fal,
-  // then Replicate) so a user's own key is used "on top"; otherwise the keyless
-  // Cloudflare provider (which also serves as the unavailable placeholder for health).
-  const videoProvider: VideoProvider = falVideoProvider.isAvailable()
-    ? falVideoProvider
-    : replicateVideoProvider.isAvailable()
-      ? replicateVideoProvider
-      : cloudflareVideoProvider;
+  videoRegistry.register(skyReelsVideoProvider);
+  // Default pick when a request names no provider. An operator can pin any available
+  // provider via FORGECAST_VIDEO_PROVIDER (e.g. a self-hosted 'skyreels'); otherwise a
+  // configured BYO key wins (fal, then Replicate) so a user's own key is used "on top";
+  // else the keyless Cloudflare provider (also the unavailable placeholder for health).
+  const pinnedVideo = process.env.FORGECAST_VIDEO_PROVIDER;
+  const videoProvider: VideoProvider =
+    pinnedVideo && videoRegistry.has(pinnedVideo) && videoRegistry.get(pinnedVideo).isAvailable()
+      ? videoRegistry.get(pinnedVideo)
+      : falVideoProvider.isAvailable()
+        ? falVideoProvider
+        : replicateVideoProvider.isAvailable()
+          ? replicateVideoProvider
+          : cloudflareVideoProvider;
   const videoProviders = videoRegistry.available();
   const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
