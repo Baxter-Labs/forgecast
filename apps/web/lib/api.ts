@@ -26,6 +26,9 @@ export function guardText(text: string): ApiResult | null {
 // Reserved job-param key holding the provider's async task reference (response_url).
 // Stripped before it ever lands on the produced asset's params.
 const VIDEO_TASK_KEY = '__videoTaskId';
+// Same, for the remote montage worker (Remotion): submit-then-poll so a long render
+// completes across short client polls, never relying on a Worker background task.
+const MONTAGE_TASK_KEY = '__montageTaskId';
 
 export interface ApiResult {
   status: number;
@@ -148,11 +151,46 @@ async function advanceVideoJob(services: Services, job: Job): Promise<Job> {
   return services.jobs.update(job.id, { status: 'done', progress: 1, resultAssetId: asset.id, updatedAt: services.ids.nowIso() });
 }
 
+// Advance an in-flight montage job by one worker poll — client-driven (like video),
+// so a long Remotion render completes across short requests instead of a Worker
+// background task that Cloudflare kills once the response is sent.
+async function advanceMontageJob(services: Services, job: Job): Promise<Job> {
+  const taskId = job.params[MONTAGE_TASK_KEY];
+  if (typeof taskId !== 'string' || taskId.length === 0) return job;
+
+  let task: VideoGenTask;
+  try {
+    task = await services.montageWorker.getTask(taskId);
+  } catch {
+    return job; // transient — the next poll retries
+  }
+  if (task.state === 'failed') {
+    return services.jobs.update(job.id, { status: 'error', error: 'montage worker reported failure', updatedAt: services.ids.nowIso() });
+  }
+  if (task.state !== 'complete' || !task.videoUrl) return job;
+
+  const res = await services.fetchFn(task.videoUrl);
+  if (!res.ok) return job; // transient download failure — retry next poll
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const id = services.ids.randomId();
+  const key = `projects/${job.projectId}/videos/${id}.mp4`;
+  const stored = await services.storage.put(key, bytes, 'video/mp4');
+
+  const assetParams = { ...job.params };
+  delete assetParams[MONTAGE_TASK_KEY];
+  const asset = await services.assets.create(
+    newAsset({ projectId: job.projectId, type: 'video', provider: job.provider, storageKey: stored.key, params: assetParams }, { id, now: services.ids.nowIso() }),
+  );
+  return services.jobs.update(job.id, { status: 'done', progress: 1, resultAssetId: asset.id, updatedAt: services.ids.nowIso() });
+}
+
 export async function getJob(services: Services, jobId: string): Promise<ApiResult> {
   let job = await services.jobs.get(jobId);
   if (!job) return { status: 404, body: { error: 'job not found' } };
   if (job.kind === 'video' && job.status === 'running') {
     job = await advanceVideoJob(services, job);
+  } else if (job.kind === 'montage' && job.status === 'running' && typeof job.params[MONTAGE_TASK_KEY] === 'string') {
+    job = await advanceMontageJob(services, job);
   }
   return { status: 200, body: { job } };
 }
@@ -788,6 +826,33 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
   return spec;
 }
 
+/** Kick off a montage job. The remote Remotion worker is submit-then-poll (the client
+ *  drives completion via GET /api/jobs/:id — Cloudflare-safe for long renders); the local
+ *  in-process ffmpeg path renders in a background task (Node only). */
+async function submitMontage(services: Services, job: Job, spec: MontageSpec): Promise<ApiResult> {
+  if (services.montageWorker.isAvailable()) {
+    try {
+      const { taskId } = await services.montageWorker.render(spec);
+      const running = await services.jobs.update(job.id, {
+        status: 'running',
+        progress: 0.05,
+        params: { ...job.params, [MONTAGE_TASK_KEY]: taskId },
+        updatedAt: services.ids.nowIso(),
+      });
+      return { status: 202, body: { job: running } };
+    } catch (e) {
+      const errored = await services.jobs.update(job.id, {
+        status: 'error',
+        error: e instanceof Error ? e.message : String(e),
+        updatedAt: services.ids.nowIso(),
+      });
+      return { status: 202, body: { job: errored } };
+    }
+  }
+  runBackground(services.runner.run(job.id));
+  return { status: 202, body: { job } };
+}
+
 /** Render a timeline into a finished video via the montage renderer (async job). */
 export async function renderTimeline(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
@@ -808,8 +873,7 @@ export async function renderTimeline(services: Services, projectId: string, inpu
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  runBackground(services.runner.run(job.id));
-  return { status: 202, body: { job } };
+  return submitMontage(services, job, spec);
 }
 
 export async function generateMontage(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
@@ -835,8 +899,7 @@ export async function generateMontage(services: Services, projectId: string, inp
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
-  runBackground(services.runner.run(job.id));
-  return { status: 202, body: { job } };
+  return submitMontage(services, job, spec);
 }
 
 export async function generateVoiceover(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
