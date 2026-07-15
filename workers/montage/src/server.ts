@@ -136,6 +136,12 @@ async function router(req: http.IncomingMessage, res: http.ServerResponse): Prom
   const method = req.method ?? 'GET';
   const url = req.url ?? '/';
 
+  // GET /health — liveness for the deploy host's health checks.
+  if (method === 'GET' && url === '/health') {
+    send(res, 200, { ok: true });
+    return;
+  }
+
   // POST /render
   if (method === 'POST' && url === '/render') {
     await handlePostRender(req, res);
