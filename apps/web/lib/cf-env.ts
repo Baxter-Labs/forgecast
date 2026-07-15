@@ -1,5 +1,6 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { D1Like } from '@forgecast/store';
+import type { WorkersAiRunner } from '@forgecast/providers';
 
 /**
  * Returns the D1 binding (`DB`) from the Cloudflare Workers runtime, or null when
@@ -11,6 +12,21 @@ export function getD1Binding(): D1Like | null {
   try {
     const env = getCloudflareContext().env as unknown as { DB?: D1Like };
     return env.DB ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns the Workers AI binding (`AI`) from the Cloudflare runtime, or null when
+ * running off-Workers (Node tests, `next build`, local dev). Mirrors getD1Binding:
+ * getCloudflareContext() throws outside a Worker request, so callers transparently
+ * fall back to the REST path (or a BYO-key provider).
+ */
+export function getAiBinding(): WorkersAiRunner | null {
+  try {
+    const env = getCloudflareContext().env as unknown as { AI?: WorkersAiRunner };
+    return env.AI ?? null;
   } catch {
     return null;
   }

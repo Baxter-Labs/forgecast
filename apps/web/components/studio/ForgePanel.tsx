@@ -222,7 +222,7 @@ function ImageSourcePicker({
   );
 }
 
-const IMAGE_PROVIDER_LABELS: Record<string, string> = { fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
+const IMAGE_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
 
 export function ForgePanel({
   mode, setMode, prompt, setPrompt, model, setModel, imageProviders, imageProvider, setImageProvider, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
@@ -486,7 +486,9 @@ export function ForgePanel({
             </div>
           ) : (
             <p className="font-mono text-[10px] text-[var(--forge-faint)]">
-              {imageProvider === 'openai'
+              {imageProvider === 'cloudflare'
+                ? <>generating free with <span className="text-[var(--ember-1)] opacity-70">Cloudflare Workers AI</span> · no key needed</>
+                : imageProvider === 'openai'
                 ? <>generating with <span className="text-[var(--ember-1)] opacity-70">OpenAI gpt-image-1</span> (your OpenAI key)</>
                 : imageProvider === 'stablediffusion'
                   ? <>generating with your <span className="text-[var(--ember-1)] opacity-70">self-hosted Stable Diffusion</span></>

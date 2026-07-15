@@ -21,6 +21,10 @@
     // printed https://…workers.dev (or your custom domain), then add it here as a var
     // and redeploy. Until it's set, OAuth falls back to http://localhost:3210.
   },
+  // Keyless DEFAULT generator: Workers AI (env.AI) — FLUX.1 schnell for images and
+  // Vidu/Runway/etc. for video. No API key; billed to this account (free 10k
+  // neurons/day for @cf/ models). One AI binding per Worker.
+  "ai": { "binding": "AI" },
   // Edge-durable metadata (projects/assets/jobs/users/keys) so state survives across
   // isolates. Schema self-initializes on first use. Provisioned in the deploy account
   // (see docs/DEPLOY-CLOUDFLARE.md).

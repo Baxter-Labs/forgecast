@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -17,7 +17,7 @@ import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, Cut
 import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
-import { getD1Binding } from './cf-env';
+import { getD1Binding, getAiBinding } from './cf-env';
 import { resolveOwnerKeys } from './keys';
 
 export interface Services {
@@ -74,6 +74,9 @@ export interface BuildServicesOptions {
   openaiKey?: string;
   /** Replicate token for the non-fal video provider. Falls back to REPLICATE_API_TOKEN env. */
   replicateKey?: string;
+  /** Cloudflare Workers AI binding (env.AI) — powers the keyless default image/video
+   *  provider. Present on the Cloudflare deploy; absent (undefined) off-Workers. */
+  ai?: WorkersAiRunner;
   /** Reuse an existing instance's repos + storage (per-user provider overlays).
    *  Providers/handlers are rebuilt with the key overrides; state is shared. */
   shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'storage'>;
@@ -117,6 +120,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   // Available when the user's OpenAI key (or OPENAI_API_KEY) is set.
   const openaiImageProvider = new OpenAiImageProvider({ apiKey: opts.openaiKey, fetchFn: opts.fetchFn });
   imageRegistry.register(openaiImageProvider);
+  // Keyless DEFAULT: Cloudflare Workers AI (FLUX.1 schnell) via the Worker's `AI`
+  // binding — no API key, billed to the account's free daily neuron allowance.
+  // Available on the Cloudflare deploy (binding) or off-Workers with
+  // CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AI_API_TOKEN; else the registry filters it out.
+  imageRegistry.register(new CloudflareImageProvider({ runner: opts.ai, fetchFn: opts.fetchFn }));
 
   const publishers = new PublisherRegistry();
   publishers.register(new WebhookPublisher({ fetchFn: opts.fetchFn }));
@@ -310,11 +318,12 @@ export function getServices(): Services {
             'persist across Worker isolates. Bind a D1 database named DB in wrangler.jsonc.',
         );
       }
-      cached = buildServices({ profile, d1: d1 ?? undefined });
+      cached = buildServices({ profile, d1: d1 ?? undefined, ai: getAiBinding() ?? undefined });
     } else {
       cached = buildServices({
         db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
         dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
+        ai: getAiBinding() ?? undefined,
       });
     }
   }
@@ -352,6 +361,7 @@ export async function getServicesForUser(ownerId: string, base: Services = getSe
         users: base.users, keys: base.keys, storage: base.storage,
       },
       fetchFn: base.fetchFn,
+      ai: getAiBinding() ?? undefined,
     };
     // Only set the fields the owner actually stored — buildServices treats a
     // *present* option as authoritative, so an undefined here would kill the
