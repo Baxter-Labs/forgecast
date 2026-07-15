@@ -29,6 +29,31 @@ export async function requireUser(
   return user ? { ok: true, userId: user.id } : UNAUTHORIZED;
 }
 
+/** Operator admin allowlist (ADMIN_EMAILS, comma-separated, case-insensitive). */
+export function adminEmails(env: Record<string, string | undefined> = process.env): string[] {
+  return (env.ADMIN_EMAILS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * Admin-only guard for operator views (e.g. the users dashboard). In open self-host
+ * mode (auth off) the single local operator is trusted. With auth on, the signed-in
+ * user's email must be in ADMIN_EMAILS — an empty allowlist admits NO ONE (fail closed),
+ * so the sensitive user list is never exposed to ordinary signed-in users.
+ */
+export async function requireAdmin(
+  services: Services,
+  cookieHeader: string | null,
+  cfg: AuthConfig | null = authConfig(),
+): Promise<GuardResult> {
+  if (!cfg) return { ok: true, userId: LOCAL_OWNER };
+  const user = await sessionUser(services, cfg, cookieHeader);
+  if (!user) return UNAUTHORIZED;
+  if (!adminEmails().includes(user.email.toLowerCase())) {
+    return { ok: false, status: 403, body: { error: 'admin access required' } };
+  }
+  return { ok: true, userId: user.id };
+}
+
 export async function requireProject(
   services: Services,
   cookieHeader: string | null,

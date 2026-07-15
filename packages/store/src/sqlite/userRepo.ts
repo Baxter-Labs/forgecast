@@ -39,4 +39,9 @@ export class SqliteUserRepo implements UserRepo {
       .run(user.id, user.email, user.name ?? null, user.avatarUrl ?? null, user.createdAt);
     return user;
   }
+
+  async list(): Promise<UserRecord[]> {
+    const rows = this.db.prepare('SELECT * FROM users ORDER BY created_at DESC, id DESC').all() as unknown as UserRow[];
+    return rows.map(toUser);
+  }
 }

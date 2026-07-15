@@ -43,4 +43,10 @@ export class D1UserRepo implements UserRepo {
       .run();
     return user;
   }
+
+  async list(): Promise<UserRecord[]> {
+    await ensureD1Schema(this.db);
+    const { results } = await this.db.prepare('SELECT * FROM users ORDER BY created_at DESC, id DESC').all<UserRow>();
+    return results.map(toUser);
+  }
 }

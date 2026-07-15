@@ -25,4 +25,8 @@ export class InMemoryUserRepo implements UserRepo {
     this.items.set(user.id, user);
     return user;
   }
+
+  async list(): Promise<UserRecord[]> {
+    return [...this.items.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  }
 }
