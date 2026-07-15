@@ -94,7 +94,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
 export function Studio() {
   const {
     projectId,
-    providers, publishers, availability, pro, assets, status, error,
+    providers, videoProviders, publishers, availability, pro, assets, status, error,
     refreshAvailability,
     session, signOut,
     generateImage, generateVideo, generateMontage, generateVoiceover, generateShortVideo,
@@ -120,6 +120,14 @@ export function Studio() {
       setImageProvider(providers.includes('cloudflare') ? 'cloudflare' : providers.includes('fal') ? 'fal' : providers[0]!);
     }
   }, [providers, imageProvider]);
+  const [videoProvider, setVideoProvider] = useState('cloudflare');
+  // Keep the selected video provider valid as availability loads. Keyless-first:
+  // Cloudflare (free), then fal, then whatever's configured (Replicate / self-hosted SkyReels).
+  useEffect(() => {
+    if (videoProviders.length > 0 && !videoProviders.includes(videoProvider)) {
+      setVideoProvider(videoProviders.includes('cloudflare') ? 'cloudflare' : videoProviders.includes('fal') ? 'fal' : videoProviders[0]!);
+    }
+  }, [videoProviders, videoProvider]);
   const [voiceName, setVoiceName] = useState('');
   const [short, setShort] = useState<ShortControls>({ subtitles: true, count: 1, music: true, voiceName: '' });
   const [boostQuality, setBoostQuality] = useState(false);
@@ -245,7 +253,7 @@ export function Studio() {
       const { width, height } = ratioToDimensions(ratio);
       void generateImage({ prompt, model, aspectRatio: ratio, width, height, provider: imageProvider }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined }).then(attach);
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined, provider: videoProvider }).then(attach);
     } else if (mode === 'voice') {
       void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
     } else if (mode === 'short') {
@@ -321,6 +329,9 @@ export function Studio() {
                 imageProviders={providers}
                 imageProvider={imageProvider}
                 setImageProvider={setImageProvider}
+                videoProviders={videoProviders}
+                videoProvider={videoProvider}
+                setVideoProvider={setVideoProvider}
                 voiceName={voiceName}
                 setVoiceName={setVoiceName}
                 short={short}

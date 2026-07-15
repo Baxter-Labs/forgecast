@@ -54,7 +54,7 @@ function normalizeAsset(a: RawAsset): StudioAsset {
 }
 
 interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number; provider?: string }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string; provider?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
@@ -68,6 +68,7 @@ const POLL_MAX_TRIES = 200;
 export function useForgecast() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [providers, setProviders] = useState<string[]>([]);
+  const [videoProviders, setVideoProviders] = useState<string[]>([]);
   const [publishers, setPublishers] = useState<string[]>([]);
   const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, short: false, voice: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
@@ -82,6 +83,7 @@ export function useForgecast() {
     if (!health?.providers) return;
     const p = health.providers;
     setProviders(p.image ?? []);
+    setVideoProviders(p.video ?? []);
     setAvailability({
       image: (p.image ?? []).length > 0,
       video: (p.video ?? []).length > 0,
@@ -116,6 +118,7 @@ export function useForgecast() {
       const presenter: string[] = health?.providers?.presenter ?? [];
       const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
+      setVideoProviders(video);
       setPublishers(pubs);
       setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, short: short.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
@@ -181,11 +184,12 @@ export function useForgecast() {
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId }: GenerateVideoArgs): Promise<string | null> => {
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId, provider }: GenerateVideoArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
       const body: Record<string, unknown> = { prompt, aspectRatio, model };
+      if (provider) body.provider = provider;
       if (imageAssetId) body.imageAssetId = imageAssetId;
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -687,7 +691,7 @@ export function useForgecast() {
   }, []);
 
   return {
-    projectId, providers, publishers, availability, pro, refreshPro, refreshAvailability,
+    projectId, providers, videoProviders, publishers, availability, pro, refreshPro, refreshAvailability,
     session, signOut,
     assets, status, error,
     generateImage, generateVideo, generateMontage, generateShortVideo,

@@ -31,6 +31,10 @@ interface ForgePanelProps {
   imageProviders: string[];
   imageProvider: string;
   setImageProvider: (p: string) => void;
+  /** Available video provider names (e.g. ['cloudflare','fal','replicate','skyreels']). */
+  videoProviders: string[];
+  videoProvider: string;
+  setVideoProvider: (p: string) => void;
   voiceName: string;
   setVoiceName: (v: string) => void;
   short: ShortControls;
@@ -223,9 +227,10 @@ function ImageSourcePicker({
 }
 
 const IMAGE_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
+const VIDEO_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', replicate: 'Replicate', skyreels: 'Free · SkyReels (self-hosted)' };
 
 export function ForgePanel({
-  mode, setMode, prompt, setPrompt, model, setModel, imageProviders, imageProvider, setImageProvider, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
+  mode, setMode, prompt, setPrompt, model, setModel, imageProviders, imageProvider, setImageProvider, videoProviders, videoProvider, setVideoProvider, voiceName, setVoiceName, short, setShort, boostQuality, setBoostQuality,
   videoImageAssetId, setVideoImageAssetId,
   ratio, setRatio, onForge, forging, availability,
   assets,
@@ -518,7 +523,42 @@ export function ForgePanel({
             />
           </div>
 
-          <BoostToggle active={boostQuality} onToggle={() => setBoostQuality(!boostQuality)} />
+          {videoProviders.length > 1 && (
+            <div>
+              <FieldHeading>Provider</FieldHeading>
+              <div className="flex flex-wrap gap-2">
+                {videoProviders.map((p) => {
+                  const selected = p === videoProvider;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setVideoProvider(p)}
+                      aria-pressed={selected}
+                      className="font-mono text-xs px-3 py-1.5 rounded border transition-all"
+                      style={selected
+                        ? { borderColor: 'var(--ember-2)', color: 'var(--ember-1)', boxShadow: '0 0 12px var(--ember-glow)', background: 'rgba(255,122,26,0.06)' }
+                        : { borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
+                    >
+                      {VIDEO_PROVIDER_LABELS[p] ?? p}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">
+                {videoProvider === 'cloudflare'
+                  ? <>free with <span className="text-[var(--ember-1)] opacity-70">Cloudflare Workers AI</span> · no key needed</>
+                  : videoProvider === 'skyreels'
+                    ? <>free with your <span className="text-[var(--ember-1)] opacity-70">self-hosted SkyReels-V2</span> GPU · no per-clip fee</>
+                    : <>using <span className="text-[var(--ember-1)] opacity-70">{VIDEO_PROVIDER_LABELS[videoProvider] ?? videoProvider}</span> (your key)</>}
+              </p>
+            </div>
+          )}
+
+          {/* Boost (Seedance ↔ Veo) only applies to fal; other providers use their own model. */}
+          {videoProvider === 'fal' && (
+            <BoostToggle active={boostQuality} onToggle={() => setBoostQuality(!boostQuality)} />
+          )}
 
           {isI2V && (
             <>
