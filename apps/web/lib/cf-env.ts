@@ -1,5 +1,5 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import type { D1Like } from '@forgecast/store';
+import type { D1Like, R2BucketLike } from '@forgecast/store';
 import type { WorkersAiRunner } from '@forgecast/providers';
 
 /**
@@ -27,6 +27,20 @@ export function getAiBinding(): WorkersAiRunner | null {
   try {
     const env = getCloudflareContext().env as unknown as { AI?: WorkersAiRunner };
     return env.AI ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns the R2 bucket binding (`MEDIA_BUCKET`) from the Cloudflare runtime, or
+ * null off-Workers. Mirrors getD1Binding/getAiBinding. Powers the keyless media
+ * store (no S3 access keys) for the baxter-cloud profile.
+ */
+export function getMediaBucket(): R2BucketLike | null {
+  try {
+    const env = getCloudflareContext().env as unknown as { MEDIA_BUCKET?: R2BucketLike };
+    return env.MEDIA_BUCKET ?? null;
   } catch {
     return null;
   }

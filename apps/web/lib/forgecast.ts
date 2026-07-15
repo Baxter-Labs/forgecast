@@ -10,14 +10,16 @@ import {
   d1Store,
   FilesystemStorage,
   R2Storage,
+  R2BucketStorage,
   r2OptionsFromEnv,
   type D1Like,
+  type R2BucketLike,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
 import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
-import { getD1Binding, getAiBinding } from './cf-env';
+import { getD1Binding, getAiBinding, getMediaBucket } from './cf-env';
 import { resolveOwnerKeys } from './keys';
 
 export interface Services {
@@ -80,6 +82,9 @@ export interface BuildServicesOptions {
   /** Cloudflare Workers AI binding (env.AI) — powers the keyless default image/video
    *  provider. Present on the Cloudflare deploy; absent (undefined) off-Workers. */
   ai?: WorkersAiRunner;
+  /** Cloudflare R2 bucket binding (env.MEDIA_BUCKET) — the keyless media store for the
+   *  baxter-cloud profile (no S3 access keys). Present on the deploy; undefined off-Workers. */
+  mediaBucket?: R2BucketLike;
   /** Reuse an existing instance's repos + storage (per-user provider overlays).
    *  Providers/handlers are rebuilt with the key overrides; state is shared. */
   shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'storage'>;
@@ -95,13 +100,15 @@ let cached: Services | undefined;
  *   vars; falls back to local storage with a warning if R2 is not configured.
  * - `local` (default): filesystem when FORGECAST_DATA_DIR is set, else in-memory.
  */
-function resolveStorage(profile: string, dataDir: string | undefined): StorageDriver {
+function resolveStorage(profile: string, dataDir: string | undefined, mediaBucket?: R2BucketLike): StorageDriver {
   if (profile === 'baxter-cloud') {
+    // Prefer the native R2 binding (no S3 access keys) when the Worker exposes it.
+    if (mediaBucket) return new R2BucketStorage({ bucket: mediaBucket, publicBaseUrl: process.env.R2_PUBLIC_BASE_URL });
     const r2 = r2OptionsFromEnv();
     if (r2) return new R2Storage({ ...r2, publicBaseUrl: r2.publicBaseUrl ?? process.env.FORGECAST_BASE_URL });
     console.warn(
-      "[forgecast] Profile 'baxter-cloud' selected but R2 is not configured. Set R2_ACCOUNT_ID, R2_BUCKET, " +
-        'R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. Falling back to local storage.',
+      "[forgecast] Profile 'baxter-cloud' selected but R2 is not configured. Bind an R2 bucket as MEDIA_BUCKET " +
+        '(native, no keys) or set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY. Falling back to local storage.',
     );
   }
   return dataDir
@@ -167,7 +174,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = store.jobs;
     users = store.users;
     keys = store.keys;
-    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   } else if (dbPath) {
     const store = openStore(dbPath);
     projects = store.projects;
@@ -175,14 +182,14 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = store.jobs;
     users = store.users;
     keys = store.keys;
-    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   } else {
     projects = new InMemoryProjectRepo();
     assets = new InMemoryAssetRepo();
     jobs = new InMemoryJobRepo();
     users = new InMemoryUserRepo();
     keys = new InMemoryKeyRepo();
-    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir);
+    storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   }
 
   const imageHandler = new ImageJobHandler({
@@ -340,12 +347,13 @@ export function getServices(): Services {
             'persist across Worker isolates. Bind a D1 database named DB in wrangler.jsonc.',
         );
       }
-      cached = buildServices({ profile, d1: d1 ?? undefined, ai: getAiBinding() ?? undefined });
+      cached = buildServices({ profile, d1: d1 ?? undefined, ai: getAiBinding() ?? undefined, mediaBucket: getMediaBucket() ?? undefined });
     } else {
       cached = buildServices({
         db: process.env.FORGECAST_DB ?? './.forgecast/forgecast.db',
         dataDir: process.env.FORGECAST_DATA_DIR ?? './.forgecast/objects',
         ai: getAiBinding() ?? undefined,
+        mediaBucket: getMediaBucket() ?? undefined,
       });
     }
   }
@@ -384,6 +392,7 @@ export async function getServicesForUser(ownerId: string, base: Services = getSe
       },
       fetchFn: base.fetchFn,
       ai: getAiBinding() ?? undefined,
+      mediaBucket: getMediaBucket() ?? undefined,
     };
     // Only set the fields the owner actually stored — buildServices treats a
     // *present* option as authoritative, so an undefined here would kill the

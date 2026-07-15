@@ -34,7 +34,10 @@
       "database_name": "forgecast-db",
       "database_id": "ac1bb4bc-4d4c-4a5a-b8b6-fb5fdbf4233b"
     }
-  ]
+  ],
+  // Keyless media store: native R2 bucket binding (no S3 access keys needed).
+  // Create the bucket first: `wrangler r2 bucket create forgecast-media`.
+  "r2_buckets": [{ "binding": "MEDIA_BUCKET", "bucket_name": "forgecast-media" }]
   // R2 credentials are secrets — set them with `wrangler secret put`:
   //   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
   //   (optional) R2_PUBLIC_BASE_URL, R2_ENDPOINT
