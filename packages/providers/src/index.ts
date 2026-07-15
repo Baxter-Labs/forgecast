@@ -4,7 +4,6 @@ export * from './image/stablediffusion';
 export * from './image/openai';
 export * from './image/cloudflare';
 export * from './video/moneyprinter';
-export * from './video/pixverse';
 export * from './video/fal';
 export * from './video/replicate';
 export * from './video/cloudflare';
