@@ -32,5 +32,5 @@ export async function middleware(req: NextRequest) {
 
 // Only the app pages. /signin, /api/*, and static assets are intentionally excluded.
 export const config = {
-  matcher: ['/', '/editor/:path*', '/edit/:path*', '/admin', '/admin/:path*'],
+  matcher: ['/', '/editor/:path*', '/edit/:path*', '/admin', '/admin/:path*', '/connect'],
 };
