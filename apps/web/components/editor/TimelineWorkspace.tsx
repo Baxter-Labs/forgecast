@@ -8,7 +8,7 @@ import { useTimelineEditor } from '@/lib/use-timeline-editor';
 import { AppNav } from '@/components/AppNav';
 import { EditorAgent } from './EditorAgent';
 import {
-  TIMELINE_TRANSITIONS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
+  TIMELINE_TRANSITIONS, TIMELINE_CAMERA_PRESETS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
   type TimelineUIClip,
 } from '@/lib/timeline-ui';
 
@@ -281,6 +281,17 @@ export function TimelineWorkspace() {
                     {TIMELINE_TRANSITIONS.map((t) => <option key={t} value={t} style={{ background: '#221b16', color: '#f5eee6' }}>{t}</option>)}
                   </select>
                 </label>
+                <label className="flex items-center justify-between gap-2 font-mono text-[10px] text-[var(--forge-faint)]">
+                  Camera
+                  <select
+                    value={selected.cameraPreset}
+                    onChange={(e) => updateClip(selected.id, { cameraPreset: e.target.value as TimelineUIClip['cameraPreset'] })}
+                    aria-label="Camera motion preset"
+                    className={`${FIELD} px-1.5 py-1 cursor-pointer`}
+                  >
+                    {TIMELINE_CAMERA_PRESETS.map((c) => <option key={c} value={c} style={{ background: '#221b16', color: '#f5eee6' }}>{c}</option>)}
+                  </select>
+                </label>
                 <div className="flex items-center gap-2 pt-1">
                   <button type="button" onClick={() => stepClip(selected.id, -1)} aria-label="Move clip earlier" className="w-8 h-8 rounded border flex items-center justify-center" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)' }}>
                     <ChevronLeft size={14} aria-hidden="true" />
@@ -317,6 +328,24 @@ export function TimelineWorkspace() {
             {audio.length === 0 && (
               <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">no audio assets — forge one in the Studio&apos;s Voice tab</p>
             )}
+          </div>
+
+          <div>
+            <p className={`${PANEL_LABEL} mb-3 flex items-center gap-1.5`}><Music2 size={11} aria-hidden="true" /> Voice-over</p>
+            <select
+              value={timeline.voiceoverAssetId ?? ''}
+              onChange={(e) => { const v = e.target.value || null; setTimeline((prev) => ({ ...prev, voiceoverAssetId: v })); }}
+              aria-label="Narration voice-over"
+              className={`${FIELD} w-full px-2 py-2 cursor-pointer`}
+            >
+              <option value="" style={{ background: '#221b16', color: '#6b5e54' }}>— none —</option>
+              {audio.map((a) => (
+                <option key={a.id} value={a.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                  {(a.params.text ?? a.params.prompt ?? a.id).slice(0, 40)}
+                </option>
+              ))}
+            </select>
+            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">plays over the whole cut — music ducks underneath it</p>
           </div>
 
           <EditorAgent projectId={editor.projectId} onDone={(r) => void editor.applyAgentResult(r)} />

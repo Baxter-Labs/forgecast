@@ -5,6 +5,8 @@ import {
   createProject, listProjects, generateImage, generateVideo, generateVoiceover,
   generateMontage, generateNarratedVideo, generateAdCopy, publishAsset,
   searchFootage, listAssets, getAsset, getJob,
+  readTimeline, saveTimeline, renderTimeline, generateShortVideo,
+  enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
 } from './api';
 
 /**
@@ -103,12 +105,20 @@ const TOOLS: McpTool[] = [
   {
     name: 'forgecast_health',
     description:
-      'Report what Forgecast can do right now for the connected user: available generation providers per modality (image/video) and the social channels available for publishing. Call this FIRST to discover capabilities. Returns { ok, providers: { image[], video[] }, publishers[] }.',
+      'Report what Forgecast can do right now for the connected user: available generation providers per modality (image/video/voice/montage/short/narrate/footage) and the social channels available for publishing. Call this FIRST to discover capabilities. Returns { ok, providers, publishers[] }.',
     inputSchema: obj({}),
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async ({ services }) => ({
       ok: true,
-      providers: { image: services.imageRegistry.available(), video: services.videoProviders },
+      providers: {
+        image: services.imageRegistry.available(),
+        video: services.videoProviders,
+        voice: services.voiceAvailable ? [services.voiceProvider.name] : [],
+        montage: services.montageAvailable ? [services.montageWorker.isAvailable() ? 'remotion' : 'ffmpeg'] : [],
+        short: services.videoWorker.isAvailable() ? [services.videoWorker.name] : [],
+        narrate: services.narrateAvailable ? ['ffmpeg'] : [],
+        footage: services.footageAvailable,
+      },
       publishers: services.publishers.available(),
     }),
   },
@@ -256,6 +266,150 @@ const TOOLS: McpTool[] = [
     },
   },
 ];
+
+// ── Editing + asset-ops + short-video parity (mirrors the local stdio MCP surface) ──
+
+/** JSON Schema for a timeline document (matches @forgecast/core normalizeTimeline). */
+const timelineSchema = obj({
+  aspectRatio: { type: 'string', enum: ['9:16', '16:9', '1:1', '4:5', '4:3', '3:4'], description: 'Output shape (default 9:16).' },
+  fps: { type: 'number', description: 'Frames per second (1–60).' },
+  musicAssetId: { type: 'string', description: 'Optional background-music audio asset id.' },
+  voiceoverAssetId: { type: 'string', description: 'Optional narration audio asset id (generate with forgecast_generate_voiceover); music ducks under it.' },
+  clips: {
+    type: 'array',
+    description: 'Ordered clips; array order is play order.',
+    items: obj({
+      id: { type: 'string', description: 'Stable clip id (assigned when omitted).' },
+      assetId: { type: 'string', description: 'An image/video asset id you own (forgecast_list_assets).' },
+      durationSec: { type: 'number', description: 'Seconds on screen (0.5–60).' },
+      trimStartSec: { type: 'number', description: 'Video assets: seconds to skip from the source start.' },
+      caption: { type: 'string', description: 'Optional overlay text.' },
+      transition: { type: 'string', enum: ['fade', 'slide', 'none'], description: 'Transition INTO this clip.' },
+      cameraPreset: { type: 'string', enum: ['none', 'zoom-in', 'zoom-out', 'crash-zoom', 'pan-left', 'pan-right', 'dutch', 'handheld'], description: 'Virtual-camera motion; stills default to a gentle zoom-in.' },
+    }, ['assetId', 'durationSec']),
+  },
+}, ['clips']);
+
+/** Ownership-check every asset a (raw, untrusted) timeline references. */
+async function ownTimelineAssets(services: Services, userId: string, timeline: unknown): Promise<void> {
+  const t = (timeline ?? {}) as { clips?: unknown; musicAssetId?: unknown; voiceoverAssetId?: unknown };
+  const ids: unknown[] = Array.isArray(t.clips) ? t.clips.map((c) => (c as { assetId?: unknown })?.assetId) : [];
+  ids.push(t.musicAssetId, t.voiceoverAssetId);
+  for (const id of ids) {
+    if (typeof id === 'string' && id.length > 0) await ownedAsset(services, userId, id);
+  }
+}
+
+TOOLS.push(
+  {
+    name: 'forgecast_get_timeline',
+    description:
+      'Read a project’s video-editor timeline — the ordered clip list (asset + duration + caption + transition + cameraPreset) plus music/voice-over tracks that renders into a finished video. Returns an empty timeline when none is saved. Args: projectId.',
+    inputSchema: obj({ projectId: P.projectId }, ['projectId']),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await readTimeline(services, pid));
+    },
+  },
+  {
+    name: 'forgecast_set_timeline',
+    description:
+      'Build or edit a project’s timeline — THE video editor over MCP. Pass the full timeline document; invalid clips are dropped, ids assigned, values clamped. Every referenced asset must be yours. Then call forgecast_render_timeline. Args: projectId, timeline.',
+    inputSchema: obj({ projectId: P.projectId, timeline: timelineSchema }, ['projectId', 'timeline']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      await ownTimelineAssets(services, userId, args.timeline);
+      return unwrap(await saveTimeline(services, pid, { timeline: args.timeline }));
+    },
+  },
+  {
+    name: 'forgecast_render_timeline',
+    description:
+      'Render a project’s timeline into a finished mp4 via the montage renderer. ASYNC — poll forgecast_get_job. Renders the saved timeline, or an inline `timeline` when passed. Args: projectId, timeline?. Requires montage configured (503 with guidance otherwise).',
+    inputSchema: obj({ projectId: P.projectId, timeline: timelineSchema }, ['projectId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      if (args.timeline !== undefined) {
+        await ownTimelineAssets(services, userId, args.timeline);
+        return unwrap(await renderTimeline(services, pid, { timeline: args.timeline }));
+      }
+      // The saved timeline is asset-ownership-checked by the api layer at save AND render.
+      return unwrap(await renderTimeline(services, pid, {}));
+    },
+  },
+  {
+    name: 'forgecast_generate_short_video',
+    description:
+      'Generate a complete captioned short-form video (script → footage → voice-over → subtitles → music) from a subject, MoneyPrinter-style. ASYNC — poll forgecast_get_job. Args: projectId, subject, aspect? (9:16|16:9|1:1), script? (verbatim script instead of a generated one). Requires the short-video worker (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      subject: { type: 'string', description: 'What the short is about.' },
+      aspect: { type: 'string', enum: ['9:16', '16:9', '1:1'], description: 'Frame ratio (default 9:16).' },
+      script: { type: 'string', description: 'Optional verbatim narration script.' },
+    }, ['projectId', 'subject']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generateShortVideo(services, pid, { subject: str(args.subject), options: { aspect: str(args.aspect), script: str(args.script) } }));
+    },
+  },
+  {
+    name: 'forgecast_enhance_image',
+    description:
+      'Enhance / upscale an image asset you own. Synchronous — returns { job, asset } with the new asset. Args: assetId (must be an image).',
+    inputSchema: obj({ assetId: { type: 'string', description: 'An image asset id you own.' } }, ['assetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const asset = await ownedAsset(services, userId, args.assetId);
+      return unwrap(await enhanceAsset(services, asset.projectId, { assetId: asset.id }));
+    },
+  },
+  {
+    name: 'forgecast_edit_image',
+    description:
+      'Edit an image asset you own with a natural-language instruction (image-to-image). Synchronous — returns { job, asset }. Args: assetId (must be an image), prompt (the edit instruction).',
+    inputSchema: obj({ assetId: { type: 'string', description: 'An image asset id you own.' }, prompt: { type: 'string', description: 'The edit instruction, e.g. "make the sky sunset orange".' } }, ['assetId', 'prompt']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const asset = await ownedAsset(services, userId, args.assetId);
+      return unwrap(await editAsset(services, asset.projectId, { assetId: asset.id, prompt: str(args.prompt) }));
+    },
+  },
+  {
+    name: 'forgecast_cutout_image',
+    description:
+      'Remove the background from an image asset you own (product-on-transparent cutout). Synchronous — returns { job, asset }. Args: assetId (must be an image).',
+    inputSchema: obj({ assetId: { type: 'string', description: 'An image asset id you own.' } }, ['assetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const asset = await ownedAsset(services, userId, args.assetId);
+      return unwrap(await removeBackgroundAsset(services, asset.projectId, { assetId: asset.id }));
+    },
+  },
+  {
+    name: 'forgecast_import_footage',
+    description:
+      'Import a video from a public https URL into a project as an asset (pair with forgecast_search_footage, then montage/edit it). Args: projectId, url (https only), query? and source? (attribution metadata). Returns { asset }.',
+    inputSchema: obj({
+      projectId: P.projectId,
+      url: { type: 'string', description: 'Public https video URL (e.g. a forgecast_search_footage download link).' },
+      query: { type: 'string', description: 'The search query this footage answered (metadata).' },
+      source: { type: 'string', description: 'Footage source name (metadata, e.g. "pexels").' },
+    }, ['projectId', 'url']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      const url = str(args.url);
+      // Hosted multi-tenant endpoint: the server fetches this URL itself, so require
+      // https (the api layer also allows http for local/stdio use — not safe here).
+      if (!url || !/^https:\/\//i.test(url)) throw new Error('url must be a public https:// video URL');
+      return unwrap(await importFootage(services, pid, { url, query: str(args.query), source: str(args.source) }));
+    },
+  },
+);
 
 const toolByName = new Map(TOOLS.map((t) => [t.name, t]));
 

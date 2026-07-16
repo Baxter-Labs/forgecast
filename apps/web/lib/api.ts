@@ -4,6 +4,7 @@ import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
 import { runBackground } from './cf-env';
+import { LOCAL_OWNER } from './auth-guard';
 
 /** Minimal shape `generateAdCopy` needs from an LLM client (injectable for tests). */
 type AdCopyLlm = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
@@ -766,7 +767,9 @@ async function buildSpecFromAssets(services: Services, assetIds: string[], aspec
     if (!asset) continue;
     const url = await resolveAssetUrl(services, id);
     if (!url) continue;
-    scenes.push({ url, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
+    const kind = asset.type === 'video' ? 'video' as const : 'image' as const;
+    // Gentle push-in on stills by default (the free "virtual camera").
+    scenes.push({ url, kind, durationSec, cameraPreset: kind === 'image' ? 'zoom-in' as const : 'none' as const });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
 }
@@ -793,12 +796,32 @@ export async function readTimeline(services: Services, projectId: string): Promi
   return { status: 200, body: { timeline: (await getTimeline(services, projectId)) ?? emptyTimeline() } };
 }
 
+/**
+ * Cross-tenant guard: every EXISTING asset a timeline references (clips, music,
+ * voice-over) must belong to the same owner as the timeline's project. Missing
+ * ids keep their historical skip-at-render behavior; a foreign id is rejected
+ * as not-found so nothing leaks about other tenants' assets.
+ */
+async function foreignTimelineAsset(services: Services, projectOwner: string | undefined, timeline: EditorTimeline): Promise<string | null> {
+  const ids = [...timeline.clips.map((c) => c.assetId), timeline.musicAssetId, timeline.voiceoverAssetId]
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+  for (const id of ids) {
+    const asset = await services.assets.get(id);
+    if (!asset) continue;
+    const owner = (await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER;
+    if (owner !== (projectOwner ?? LOCAL_OWNER)) return id;
+  }
+  return null;
+}
+
 /** Save (normalize + persist) a timeline for a project. */
 export async function saveTimeline(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   const fields = (input ?? {}) as { timeline?: unknown };
   const timeline = normalizeTimeline(fields.timeline ?? input, services.ids.randomId);
+  const foreign = await foreignTimelineAsset(services, project.ownerId, timeline);
+  if (foreign) return { status: 400, body: { error: `asset not found: ${foreign}` } };
   await services.storage.put(timelineKey(projectId), new TextEncoder().encode(JSON.stringify(timeline)), 'application/json');
   return { status: 200, body: { timeline } };
 }
@@ -814,6 +837,9 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
     const scene: MontageScene = { url, kind: asset.type === 'video' ? 'video' : 'image', durationSec: clip.durationSec };
     if (clip.caption) scene.caption = clip.caption;
     if (clip.transition) scene.transition = clip.transition;
+    // Default virtual-camera move: a gentle push-in keeps stills alive. Defaulted
+    // here (not in the worker) so every spec is explicit and old specs render unchanged.
+    scene.cameraPreset = clip.cameraPreset ?? (scene.kind === 'image' ? 'zoom-in' : 'none');
     scenes.push(scene);
   }
   if (scenes.length === 0) return null;
@@ -823,7 +849,34 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
     const musicUrl = await resolveAssetUrl(services, timeline.musicAssetId);
     if (musicUrl) spec.musicUrl = musicUrl;
   }
+  if (timeline.voiceoverAssetId) {
+    const voiceoverUrl = await resolveAssetUrl(services, timeline.voiceoverAssetId);
+    if (voiceoverUrl) spec.voiceoverUrl = voiceoverUrl;
+  }
   return spec;
+}
+
+/**
+ * Synthesizes a narration script into an audio asset (via the active voice
+ * provider, synchronously — same in-request pattern as image generation) and
+ * returns its resolvable URL for a MontageSpec. Errors are returned as ApiResults.
+ */
+async function synthesizeVoiceoverUrl(services: Services, projectId: string, text: string): Promise<{ url: string } | ApiResult> {
+  if (!services.voiceAvailable) {
+    return { status: 503, body: { error: 'voiceoverText given but voice-over is not available — on Cloudflare it is keyless (AI binding); elsewhere set VOXCPM_URL or FAL_KEY_VOICE, or pass voiceoverAssetId instead' } };
+  }
+  const blocked = guardText(text);
+  if (blocked) return blocked;
+  const vjob = await services.jobs.create(
+    newJob({ projectId, kind: 'voiceover', provider: services.voiceProvider.name, params: { text } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  const finished = await services.runner.run(vjob.id);
+  if (finished.status !== 'done' || !finished.resultAssetId) {
+    return { status: 502, body: { error: `voice-over synthesis failed${finished.error ? `: ${finished.error}` : ''}` } };
+  }
+  const url = await resolveAssetUrl(services, finished.resultAssetId);
+  if (!url) return { status: 502, body: { error: 'synthesized voice-over has no stored audio' } };
+  return { url };
 }
 
 /** Kick off a montage job. The remote Remotion worker is submit-then-poll (the client
@@ -866,6 +919,8 @@ export async function renderTimeline(services: Services, projectId: string, inpu
     ? normalizeTimeline(fields.timeline, services.ids.randomId)
     : ((await getTimeline(services, projectId)) ?? emptyTimeline());
   if (timeline.clips.length === 0) return { status: 400, body: { error: 'timeline has no clips to render' } };
+  const foreignRender = await foreignTimelineAsset(services, project.ownerId, timeline);
+  if (foreignRender) return { status: 400, body: { error: `asset not found: ${foreignRender}` } };
 
   const spec = await buildTimelineSpec(services, timeline);
   if (!spec) return { status: 400, body: { error: 'timeline clips could not be resolved to assets' } };
@@ -882,7 +937,7 @@ export async function generateMontage(services: Services, projectId: string, inp
   if (!services.montageAvailable) {
     return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
   }
-  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown };
+  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown; voiceoverAssetId?: unknown; voiceoverText?: unknown };
   const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
   const rawDurationSec = typeof fields.durationSec === 'number' ? fields.durationSec : 4;
   const durationSec = Math.min(10, Math.max(1, rawDurationSec));
@@ -896,6 +951,17 @@ export async function generateMontage(services: Services, projectId: string, inp
     return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };
   }
 
+  // Optional narration: an existing audio asset, or a script synthesized on the spot.
+  if (typeof fields.voiceoverAssetId === 'string' && fields.voiceoverAssetId.length > 0) {
+    const url = await resolveAssetUrl(services, fields.voiceoverAssetId);
+    if (!url) return { status: 400, body: { error: 'voiceoverAssetId could not be resolved to stored audio' } };
+    spec = { ...spec, voiceoverUrl: url };
+  } else if (typeof fields.voiceoverText === 'string' && fields.voiceoverText.trim().length > 0) {
+    const synthesized = await synthesizeVoiceoverUrl(services, projectId, fields.voiceoverText);
+    if (!('url' in synthesized)) return synthesized;
+    spec = { ...spec, voiceoverUrl: synthesized.url };
+  }
+
   const job = await services.jobs.create(
     newJob({ projectId, kind: 'montage', provider: 'remotion', params: { spec } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
   );
@@ -906,7 +972,7 @@ export async function generateVoiceover(services: Services, projectId: string, i
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   if (!services.voiceAvailable) {
-    return { status: 503, body: { error: 'voice-over not configured (set FAL_KEY_VOICE or FAL_KEY)' } };
+    return { status: 503, body: { error: 'voice-over not configured — on Cloudflare it is keyless (AI binding); elsewhere set CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AI_API_TOKEN, run VoxCPM (VOXCPM_URL), or set FAL_KEY_VOICE / FAL_KEY' } };
   }
   const fields = (input ?? {}) as { text?: unknown; voice?: unknown; model?: unknown };
   if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {

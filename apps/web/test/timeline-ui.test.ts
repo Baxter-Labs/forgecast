@@ -2,17 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { toUI, toDoc, newClipFrom, moveItem, moveItemTo, totalDurationSec, emptyControls } from '../lib/timeline-ui';
 
 const clips = [
-  { id: 'a', assetId: 'x', durationSec: 3, caption: '', transition: 'fade' as const },
-  { id: 'b', assetId: 'y', durationSec: 5, caption: 'hi', transition: 'none' as const },
-  { id: 'c', assetId: 'z', durationSec: 2, caption: '', transition: 'slide' as const },
+  { id: 'a', assetId: 'x', durationSec: 3, caption: '', transition: 'fade' as const, cameraPreset: 'auto' as const },
+  { id: 'b', assetId: 'y', durationSec: 5, caption: 'hi', transition: 'none' as const, cameraPreset: 'auto' as const },
+  { id: 'c', assetId: 'z', durationSec: 2, caption: '', transition: 'slide' as const, cameraPreset: 'dutch' as const },
 ];
 
 describe('timeline-ui helpers', () => {
   it('toUI backfills controlled-input defaults; toDoc drops empty captions and null music', () => {
     const ui = toUI({ aspectRatio: '16:9', clips: [{ id: 'a', assetId: 'x', durationSec: 4 }] });
-    expect(ui).toEqual({ aspect: '16:9', musicAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '', transition: 'fade' }] });
+    expect(ui).toEqual({ aspect: '16:9', musicAssetId: null, voiceoverAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '', transition: 'fade', cameraPreset: 'auto' }] });
 
-    const doc = toDoc({ aspect: '9:16', musicAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '   ', transition: 'fade' }] });
+    const doc = toDoc({ aspect: '9:16', musicAssetId: null, voiceoverAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '   ', transition: 'fade', cameraPreset: 'auto' as const }] });
     expect(doc.clips[0]).toEqual({ id: 'a', assetId: 'x', durationSec: 4, transition: 'fade' });
     expect('musicAssetId' in doc).toBe(false);
   });
@@ -46,6 +46,6 @@ describe('timeline-ui helpers', () => {
 
   it('totalDurationSec sums to one decimal; emptyControls defaults 9:16', () => {
     expect(totalDurationSec(clips)).toBe(10);
-    expect(emptyControls()).toEqual({ clips: [], aspect: '9:16', musicAssetId: null });
+    expect(emptyControls()).toEqual({ clips: [], aspect: '9:16', musicAssetId: null, voiceoverAssetId: null });
   });
 });

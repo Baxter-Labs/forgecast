@@ -128,3 +128,103 @@ describe('API tokens', () => {
     expect(bearerToken(null)).toBeNull();
   });
 });
+
+describe('editing + asset-op MCP parity', () => {
+  const call = (c: { services: ReturnType<typeof buildServices>; userId: string }, id: number, name: string, args: Record<string, unknown> = {}) =>
+    handleMcpMessage(c, { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+
+  async function projectFor(services: ReturnType<typeof buildServices>, userId: string, id: number): Promise<string> {
+    const created = await call({ services, userId }, id, 'forgecast_create_project', { name: `${userId} proj` });
+    return (JSON.parse(textOf(created)) as { project: { id: string } }).project.id;
+  }
+
+  it('exposes the editing/short/image-op/import tools (22 total)', async () => {
+    const b = bodyOf(await handleMcpMessage(ctx(), { jsonrpc: '2.0', id: 40, method: 'tools/list' }));
+    const names = (b.result?.tools ?? []).map((t) => t.name);
+    for (const n of [
+      'forgecast_get_timeline', 'forgecast_set_timeline', 'forgecast_render_timeline',
+      'forgecast_generate_short_video', 'forgecast_enhance_image', 'forgecast_edit_image',
+      'forgecast_cutout_image', 'forgecast_import_footage',
+    ]) expect(names).toContain(n);
+    expect((b.result?.tools ?? []).length).toBe(22);
+  });
+
+  it('health reports every modality for capability discovery', async () => {
+    const body = JSON.parse(textOf(await call(ctx(), 41, 'forgecast_health'))) as { providers: Record<string, unknown> };
+    for (const k of ['image', 'video', 'voice', 'montage', 'short', 'narrate', 'footage']) {
+      expect(Array.isArray(body.providers[k])).toBe(true);
+    }
+  });
+
+  it('set_timeline round-trips through get_timeline (with camera + voiceover fields)', async () => {
+    const services = buildServices({});
+    const pid = await projectFor(services, 'A', 42);
+    await services.assets.create(newAsset({ projectId: pid, type: 'image', provider: 'x', storageKey: 'k', params: {} }, { id: 'img1', now: 'T' }));
+    const set = await call({ services, userId: 'A' }, 43, 'forgecast_set_timeline', {
+      projectId: pid,
+      timeline: { aspectRatio: '9:16', clips: [{ assetId: 'img1', durationSec: 3, caption: 'hi', cameraPreset: 'pan-left' }] },
+    });
+    expect(bodyOf(set).result?.isError).toBeFalsy();
+    const got = JSON.parse(textOf(await call({ services, userId: 'A' }, 44, 'forgecast_get_timeline', { projectId: pid }))) as { timeline: { clips: Array<{ cameraPreset?: string }> } };
+    expect(got.timeline.clips[0]?.cameraPreset).toBe('pan-left');
+  });
+
+  it("set_timeline rejects another user's asset id anywhere in the document", async () => {
+    const services = buildServices({});
+    const aPid = await projectFor(services, 'A', 45);
+    await services.assets.create(newAsset({ projectId: aPid, type: 'image', provider: 'x', storageKey: 'k', params: {} }, { id: 'a-img', now: 'T' }));
+    await services.assets.create(newAsset({ projectId: aPid, type: 'audio', provider: 'x', storageKey: 'k2', params: {} }, { id: 'a-voice', now: 'T' }));
+    const bPid = await projectFor(services, 'B', 46);
+    await services.assets.create(newAsset({ projectId: bPid, type: 'image', provider: 'x', storageKey: 'k3', params: {} }, { id: 'b-img', now: 'T' }));
+
+    // B smuggles A's asset as a clip…
+    const viaClip = await call({ services, userId: 'B' }, 47, 'forgecast_set_timeline', {
+      projectId: bPid, timeline: { clips: [{ assetId: 'a-img', durationSec: 3 }] },
+    });
+    expect(bodyOf(viaClip).result?.isError).toBe(true);
+    expect(textOf(viaClip)).toContain('asset not found');
+
+    // …or as the voice-over track.
+    const viaVoice = await call({ services, userId: 'B' }, 48, 'forgecast_set_timeline', {
+      projectId: bPid, timeline: { voiceoverAssetId: 'a-voice', clips: [{ assetId: 'b-img', durationSec: 3 }] },
+    });
+    expect(bodyOf(viaVoice).result?.isError).toBe(true);
+    expect(textOf(viaVoice)).toContain('asset not found');
+  });
+
+  it('render_timeline surfaces an actionable 503 when montage is unavailable (edge, no worker)', async () => {
+    const services = buildServices({ profile: 'baxter-cloud' });
+    const pid = await projectFor(services, 'A', 49);
+    await services.assets.create(newAsset({ projectId: pid, type: 'image', provider: 'x', storageKey: 'k', params: {} }, { id: 'img2', now: 'T' }));
+    const r = await call({ services, userId: 'A' }, 50, 'forgecast_render_timeline', {
+      projectId: pid, timeline: { clips: [{ assetId: 'img2', durationSec: 3 }] },
+    });
+    expect(bodyOf(r).result?.isError).toBe(true);
+    expect(textOf(r)).toContain('montage not configured');
+  });
+
+  it('import_footage requires https on the hosted endpoint', async () => {
+    const services = buildServices({});
+    const pid = await projectFor(services, 'A', 51);
+    const r = await call({ services, userId: 'A' }, 52, 'forgecast_import_footage', { projectId: pid, url: 'http://internal.host/x.mp4' });
+    expect(bodyOf(r).result?.isError).toBe(true);
+    expect(textOf(r)).toContain('https');
+  });
+
+  it('enhance_image rejects a video asset with the api layer message', async () => {
+    const services = buildServices({});
+    const pid = await projectFor(services, 'A', 53);
+    await services.assets.create(newAsset({ projectId: pid, type: 'video', provider: 'x', storageKey: 'v', params: {} }, { id: 'vid1', now: 'T' }));
+    const r = await call({ services, userId: 'A' }, 54, 'forgecast_enhance_image', { assetId: 'vid1' });
+    expect(bodyOf(r).result?.isError).toBe(true);
+    expect(textOf(r)).toContain('only image assets');
+  });
+
+  it('generate_short_video surfaces the worker-not-configured guidance', async () => {
+    const services = buildServices({});
+    const pid = await projectFor(services, 'A', 55);
+    const r = await call({ services, userId: 'A' }, 56, 'forgecast_generate_short_video', { projectId: pid, subject: 'why open models win' });
+    expect(bodyOf(r).result?.isError).toBe(true);
+    expect(textOf(r)).toContain('FORGECAST_VIDEO_WORKER_URL');
+  });
+});

@@ -1,4 +1,4 @@
-import type { EditorTimeline, EditorClip } from '@forgecast/core';
+import { CAMERA_PRESETS, type CameraPreset, type EditorTimeline, type EditorClip } from '@forgecast/core';
 import type { StudioAsset } from './use-forgecast';
 
 /** A clip as the UI edits it (caption/transition always present for controlled inputs). */
@@ -8,6 +8,8 @@ export interface TimelineUIClip {
   durationSec: number;
   caption: string;
   transition: 'fade' | 'slide' | 'none';
+  /** 'auto' keeps the server default (stills get a gentle push-in, videos none). */
+  cameraPreset: CameraPreset | 'auto';
 }
 
 /** The timeline as UI state — converted to/from the core EditorTimeline document. */
@@ -15,12 +17,17 @@ export interface TimelineControls {
   clips: TimelineUIClip[];
   aspect: string;
   musicAssetId: string | null;
+  /** Narration (voice-over) audio asset; music is ducked under it in the render. */
+  voiceoverAssetId: string | null;
 }
 
 export const TIMELINE_TRANSITIONS: TimelineUIClip['transition'][] = ['fade', 'slide', 'none'];
 
+/** Dropdown options for the virtual camera ('auto' = the server's smart default). */
+export const TIMELINE_CAMERA_PRESETS: TimelineUIClip['cameraPreset'][] = ['auto', ...CAMERA_PRESETS];
+
 export function emptyControls(aspect = '9:16'): TimelineControls {
-  return { clips: [], aspect, musicAssetId: null };
+  return { clips: [], aspect, musicAssetId: null, voiceoverAssetId: null };
 }
 
 export function clipUid(): string {
@@ -32,12 +39,14 @@ export function toUI(doc: EditorTimeline): TimelineControls {
   return {
     aspect: doc.aspectRatio || '9:16',
     musicAssetId: doc.musicAssetId ?? null,
+    voiceoverAssetId: doc.voiceoverAssetId ?? null,
     clips: doc.clips.map((c) => ({
       id: c.id,
       assetId: c.assetId,
       durationSec: c.durationSec,
       caption: c.caption ?? '',
       transition: c.transition ?? 'fade',
+      cameraPreset: c.cameraPreset ?? 'auto',
     })),
   };
 }
@@ -50,16 +59,18 @@ export function toDoc(controls: TimelineControls): EditorTimeline {
       const clip: EditorClip = { id: c.id, assetId: c.assetId, durationSec: c.durationSec, transition: c.transition };
       const caption = c.caption.trim();
       if (caption) clip.caption = caption;
+      if (c.cameraPreset !== 'auto') clip.cameraPreset = c.cameraPreset;
       return clip;
     }),
   };
   if (controls.musicAssetId) doc.musicAssetId = controls.musicAssetId;
+  if (controls.voiceoverAssetId) doc.voiceoverAssetId = controls.voiceoverAssetId;
   return doc;
 }
 
 /** A new clip for an asset (videos default longer than stills). */
 export function newClipFrom(asset: Pick<StudioAsset, 'id' | 'type'>): TimelineUIClip {
-  return { id: clipUid(), assetId: asset.id, durationSec: asset.type === 'video' ? 5 : 3, caption: '', transition: 'fade' };
+  return { id: clipUid(), assetId: asset.id, durationSec: asset.type === 'video' ? 5 : 3, caption: '', transition: 'fade', cameraPreset: 'auto' };
 }
 
 /** Reorder a clip one step; returns the same array reference when it's a no-op. */

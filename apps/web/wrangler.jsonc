@@ -20,8 +20,9 @@
     "FORGECAST_BASE_URL": "https://forgecast-web.eshwarpk.workers.dev"
   },
   // Keyless DEFAULT generator: Workers AI (env.AI) — FLUX.1 schnell for images and
-  // Vidu/Runway/etc. for video. No API key; billed to this account (free 10k
-  // neurons/day for @cf/ models). One AI binding per Worker.
+  // MeloTTS for voice-over. No API key; billed to this account (free 10k neurons/day
+  // for @cf/ models). NOTE: video is NOT keyless here — every Workers AI video model
+  // is partner-billed (paid); free video comes from HF Spaces (HF_TOKEN) instead.
   "ai": { "binding": "AI" },
   // Edge-durable metadata (projects/assets/jobs/users/keys) so state survives across
   // isolates. Schema self-initializes on first use. Provisioned in the deploy account

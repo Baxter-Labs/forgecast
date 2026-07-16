@@ -18,6 +18,22 @@ export interface VoiceoverJobHandlerDeps {
 
 const defaultWait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Decodes a base64 `data:` URI to bytes. Synchronous TTS providers (Cloudflare
+ * MeloTTS) hand audio back as a data URI, and Workers `fetch()` rejects the
+ * `data:` scheme — so we decode inline instead of downloading.
+ */
+function bytesFromDataUri(uri: string): Uint8Array {
+  const comma = uri.indexOf(',');
+  if (comma === -1 || !uri.slice(0, comma).endsWith(';base64')) {
+    throw new Error('unsupported data: URI audio (expected base64 encoding)');
+  }
+  const bin = atob(uri.slice(comma + 1));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export class VoiceoverJobHandler implements JobHandler {
   readonly kind = 'voiceover';
 
@@ -50,10 +66,15 @@ export class VoiceoverJobHandler implements JobHandler {
     }
     if (!audioUrl) throw new Error(`voice task ${taskId} did not complete in time`);
 
-    const fetchFn = this.deps.fetchFn ?? fetch;
-    const res = await fetchFn(audioUrl);
-    if (!res.ok) throw new Error(`failed to download generated audio (${res.status})`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bytes: Uint8Array;
+    if (audioUrl.startsWith('data:')) {
+      bytes = bytesFromDataUri(audioUrl);
+    } else {
+      const fetchFn = this.deps.fetchFn ?? fetch;
+      const res = await fetchFn(audioUrl);
+      if (!res.ok) throw new Error(`failed to download generated audio (${res.status})`);
+      bytes = new Uint8Array(await res.arrayBuffer());
+    }
 
     const id = this.deps.idGen();
     const key = `projects/${job.projectId}/audio/${id}.mp3`;

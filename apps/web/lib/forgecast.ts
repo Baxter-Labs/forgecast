@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, HfSpacesVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, CloudflareTtsProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, HfSpacesVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -291,9 +291,24 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const voxcpm = new VoxCpmVoiceProvider({ fetchFn: opts.fetchFn });
   // User voice key → user image key → env (the provider's own fallback chain).
   const ttsKey = opts.voiceKey ?? falKey;
-  const voiceProvider: VoiceProvider = voxcpm.isAvailable()
-    ? voxcpm
-    : new FalTtsProvider({ fetchFn: opts.fetchFn, ...(ttsKey !== undefined ? { apiKey: ttsKey } : {}) });
+  const falTts = new FalTtsProvider({ fetchFn: opts.fetchFn, ...(ttsKey !== undefined ? { apiKey: ttsKey } : {}) });
+  // Keyless DEFAULT (voice sibling of the FLUX image path): Cloudflare Workers AI
+  // MeloTTS via the AI binding — free daily neuron allowance, no key.
+  const cloudflareTts = new CloudflareTtsProvider({ runner: opts.ai, fetchFn: opts.fetchFn });
+  // Pick: an operator pin wins (FORGECAST_VOICE_PROVIDER, mirrors the video pin);
+  // else self-hosted VoxCPM, else a configured fal key (no silent quality change for
+  // keyed users), else the keyless Cloudflare provider (also the unavailable
+  // placeholder for health when nothing is configured).
+  const voiceByName: Record<string, VoiceProvider> = { voxcpm, 'fal-tts': falTts, cloudflare: cloudflareTts };
+  const pinnedVoice = process.env.FORGECAST_VOICE_PROVIDER;
+  const voiceProvider: VoiceProvider =
+    pinnedVoice && voiceByName[pinnedVoice]?.isAvailable()
+      ? voiceByName[pinnedVoice]
+      : voxcpm.isAvailable()
+        ? voxcpm
+        : falTts.isAvailable()
+          ? falTts
+          : cloudflareTts;
   if (voiceProvider.isAvailable()) {
     handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }

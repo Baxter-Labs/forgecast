@@ -8,10 +8,14 @@ across Worker isolates.
 
 This runbook targets the **public, multi-user, bring-your-own-keys** deployment: each
 visitor signs in with Google, gets a private workspace, and sets their own provider keys
-in the Studio's **Keys** panel — nobody can see or spend anyone else's keys. Image and
-video generation work **keyless by default** via Cloudflare Workers AI (the `ai` binding,
-free daily neuron tier), so the site is usable the moment it's deployed; BYO keys add
-premium models on top. Heavy GPU work (MoneyPrinter shorts, Remotion montage, local
+in the Studio's **Keys** panel — nobody can see or spend anyone else's keys. **Image and
+voice-over generation work keyless by default** via Cloudflare Workers AI (the `ai`
+binding, free daily neuron tier — FLUX schnell for images, MeloTTS for TTS at ~9 free
+audio-hours/day), so the site is usable the moment it's deployed. **Video is NOT keyless
+on Workers AI** (every CF video model is partner-billed): free video comes from the
+stills-reel montage pipeline (unlimited) and from open models on Hugging Face ZeroGPU
+Spaces — each user adds a **free** HF token in the Keys panel (~5 GPU-min/day). BYO
+fal/Replicate keys add premium models on top. Heavy GPU work (MoneyPrinter shorts, Remotion montage, local
 SD/VoxCPM) does not run on Workers and stays on a container/GPU back-end (see
 `docs/ARCHITECTURE.md`).
 
@@ -68,13 +72,15 @@ npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
 # optional:
 npx wrangler secret put R2_PUBLIC_BASE_URL      # public bucket / CDN domain for serving media
-npx wrangler secret put FAL_KEY                 # OPTIONAL premium image/video; generation is already keyless via Workers AI
+npx wrangler secret put FAL_KEY                 # OPTIONAL premium image/video; images+voice are already keyless via Workers AI
+npx wrangler secret put HF_TOKEN                # OPTIONAL instance-wide free-video default (users normally add their own free token)
 npx wrangler secret put OMNISOCIALS_API_KEY     # enable the "Cast" publish panel
 npx wrangler secret put WISPRFLOW_API_KEY       # enable voice input in the agent
 ```
 
-> **Generation is keyless by default** via Cloudflare Workers AI (the `ai` binding) — no
-> key needed to forge images or video. Premium **provider keys are the users' job**: fal /
+> **Image + voice generation are keyless by default** via Cloudflare Workers AI (the `ai`
+> binding) — no key needed. Free video needs a **free** HF token per user (Keys panel).
+> Premium **provider keys are the users' job**: fal /
 > OpenAI / Anthropic / Pexels / Wispr are set per-user in the Keys panel (encrypted at rest
 > with `AUTH_SECRET`) and take precedence over any instance secret. An instance `FAL_KEY`
 > just adds a shared premium option. A `.env` / `.dev.vars` value does **not** reach
