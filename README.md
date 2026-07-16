@@ -22,9 +22,24 @@ It's not another hosted AI tool you rent. It's a clean, MIT-licensed platform yo
 
 Built by [Baxter Labs](https://baxter-labs.com). Reuses proven open-source engines — **VoxCPM-2** (voice), **Remotion** + **ffmpeg** (montage), **MoneyPrinterTurbo** (short-form video), **Open-Generative-AI** (catalog) — wrapped as one cohesive, owned product, free of copyleft entanglements.
 
-> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. Image and video generation are **keyless by default** on the Cloudflare deploy (Workers AI); bring your own keys for premium models on top. **499 tests, strict TypeScript.**
+> **Status:** real and complete. The full pipeline — image, video (text→video & image→video), voice-over, narrated video, AI presenter, montage, platform-aware ad copy, a tool-calling agent, cross-platform publishing, and an ads measure→optimize loop (creative-fatigue diagnosis + account audit) — is built, tested, and live. Image generation **and voice-over are keyless by default** on the Cloudflare deploy (Workers AI: FLUX + MeloTTS). Video is a **free ladder**: cinematic stills-reels with camera motion (free, unlimited) → open-model diffusion via Hugging Face ZeroGPU Spaces (**free HF token**) → self-hosted GPU (SkyReels/Wan) → BYO fal/Replicate keys. **554 tests, strict TypeScript.**
 
 ---
+
+## What's actually free (the honest matrix)
+
+| Capability | Hosted deploy (forgecast-web) | Self-hosted |
+|---|---|---|
+| **Images** | ✅ keyless (Workers AI FLUX schnell, free daily allowance) | ✅ free (local Stable Diffusion `SD_WEBUI_URL`, or CF REST creds) |
+| **Voice-over** | ✅ keyless (Workers AI **MeloTTS**, ~9 free hours/day) | ✅ free (VoxCPM-2 on a 12 GB GPU, or CF REST creds) |
+| **Video — stills-reel** (camera-motion presets + captions + voiceover) | ✅ free, unlimited (Remotion montage) | ✅ free, unlimited (`workers/montage` locally) |
+| **Video — open-model diffusion** | ✅ free with a **free HF token** (~5 GPU-min/day per user; LTX-Video / Wan on ZeroGPU) | ✅ free + unlimited on your GPU (SkyReels-V2 from ~15 GB; or [Wan2GP](https://github.com/deepbeepmeep/Wan2GP) from 6 GB) |
+| **Video — premium cloud** | 💳 BYO key (fal / Replicate) or Cloudflare partner billing (`CF_AI_VIDEO_MODEL`) | same |
+| **Captioned shorts** (MoneyPrinter) | needs the shorts worker reachable | ✅ 100% free (Ollama + Edge-TTS + free Pexels key) |
+| **Editing** (timeline + render) | ✅ free (UI, in-app agent, REST, **hosted MCP**) | ✅ free (+ bundled ffmpeg path) |
+| **Agent brain** | BYO LLM key — or connect **your own Claude/ChatGPT over MCP** (free with the AI you already pay for) | ✅ free (Ollama) |
+
+There is **no free first-party Cloudflare video model** — every Workers AI video model (Vidu/Runway/Seedance/Veo/WAN) is partner-billed. Forgecast is honest about that: keyless deploys report `video: []` until you add a free HF token (Settings → keys) or another provider.
 
 ## What you can do with it
 
@@ -34,7 +49,7 @@ Hand Forgecast a **prompt**, a **product URL**, or a **topic** — it makes the 
 - 🌐 **A product URL → a launch campaign** — "From Website" reads the page and generates matching on-brand images; the agent can brainstorm *and* produce the whole set.
 - 📱 **Captioned vertical shorts from a topic** — topic → script → stock footage → narration → **burned-in captions** → music → a finished 9:16 clip. Runs **100% free** (Ollama + Edge-TTS + a free Pexels key).
 - 🎬 **Montages from real footage** — search copyright-free stock video by topic, import it, and stitch a montage (Remotion / in-process ffmpeg).
-- 🗣️ **Voice & a presenter** — self-hosted **VoxCPM-2** voice-over (free), narrate any clip, or generate a talking-head AI presenter.
+- 🗣️ **Voice & a presenter** — **keyless voice-over on the deploy** (Workers AI MeloTTS, free) or self-hosted **VoxCPM-2**; narrate any clip or generate a talking-head AI presenter.
 - ✍️ **Write the caption, then cross-post** — platform-aware, char-limited A/B ad copy, then publish to Instagram / LinkedIn / YouTube (or any webhook) from one place.
 - 📈 **Measure → optimize your ads** — audit ad performance, diagnose **creative fatigue**, and regenerate tired creatives on-brand — closing create → publish → measure → optimize.
 - 🤖 **Drive all of it from an AI agent** — every action is also an **MCP tool**, so Claude / Cursor / your own agent can run the whole pipeline end to end.
@@ -288,8 +303,8 @@ No model is called anywhere else. Swap or self-host by pointing an adapter elsew
 | **Agent brain** (PLAN / AUTO-RUN) | [`packages/agent/`](packages/agent/) — `toolAgent.ts` (tool-calling loop + tools: `read_website`, generate image/b-roll/presenter, `list_assets`, timeline get/set/render) · `plan.ts` (planning prompts + montage directive) | LLM via [`apps/web/lib/agent/llm.ts`](apps/web/lib/agent/llm.ts): **OpenAI** (default, `OPENAI_API_KEY`) · **Claude** (`FORGECAST_AGENT_LLM=anthropic`) · **Ollama, free/local** (`FORGECAST_AGENT_LLM=ollama`) |
 | Agent → platform bridge | [`apps/web/lib/agent/forgecast-actions.ts`](apps/web/lib/agent/forgecast-actions.ts) (tools call the same spine) · [`trends.ts`](apps/web/lib/agent/trends.ts) (optional Agent-Reach trends) | — |
 | **Image** | [`packages/providers/src/image/`](packages/providers/src/image/) | **Cloudflare Workers AI** (`ai` binding, FLUX schnell — **keyless default**, free tier) · fal (`FAL_KEY`, Nano Banana) · **OpenAI** (`OPENAI_API_KEY`, gpt-image-1) · self-hosted **Stable Diffusion** (`SD_WEBUI_URL`) — provider chosen in the Studio |
-| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | **Cloudflare Workers AI** (`ai` binding, Vidu/Runway/Seedance — **keyless default**) · fal (`FAL_KEY_VIDEO`): Seedance, Veo 3.1 boost, WAN/Kling/… · **Replicate** (`REPLICATE_API_TOKEN`) · self-hosted **SkyReels-V2** (`SKYREELS_URL`, BYO GPU) |
-| **Voice / TTS** | [`packages/providers/src/voice/`](packages/providers/src/voice/) | self-hosted **VoxCPM-2** (`VOXCPM_URL`, free) → fal TTS fallback |
+| **Video** (t2v + i2v) | [`packages/providers/src/video/`](packages/providers/src/video/) | **Hugging Face ZeroGPU Spaces** (`HF_TOKEN` — a **FREE** token; LTX-Video/Wan open models) · fal (`FAL_KEY_VIDEO`): Seedance, Veo 3.1 boost, WAN/Kling/… · **Replicate** (`REPLICATE_API_TOKEN`) · self-hosted **SkyReels-V2** (`SKYREELS_URL`, BYO GPU) · Cloudflare Workers AI (`CF_AI_VIDEO_MODEL` — **partner-billed**, every CF video model costs money; explicit opt-in only) |
+| **Voice / TTS** | [`packages/providers/src/voice/`](packages/providers/src/voice/) | **Cloudflare Workers AI MeloTTS** (`ai` binding — **keyless default**, ~9 free hours/day) · self-hosted **VoxCPM-2** (`VOXCPM_URL`, free) · fal TTS (`FAL_KEY_VOICE`) |
 | **Presenter** (talking head) | [`packages/providers/src/presenter/`](packages/providers/src/presenter/) | OmniHuman via fal |
 | **Speech-to-text** (mic input) | [`packages/providers/src/transcribe/`](packages/providers/src/transcribe/) | Wispr Flow (`WISPRFLOW_API_KEY`) → browser speech fallback |
 | Model menus | [`packages/catalog/`](packages/catalog/) | which model ids the UI offers, typed, with per-model params |
