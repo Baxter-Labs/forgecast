@@ -11,6 +11,8 @@
  * reused from palmier, which is GPLv3 / Swift).
  */
 
+import { CAMERA_PRESETS, type CameraPreset } from './montage';
+
 export type EditorTransition = 'fade' | 'slide' | 'none';
 
 export interface EditorClip {
@@ -26,6 +28,8 @@ export interface EditorClip {
   caption?: string;
   /** Transition INTO this clip. */
   transition?: EditorTransition;
+  /** Camera motion across the clip (zoom/pan/dutch/handheld — the virtual camera). */
+  cameraPreset?: CameraPreset;
 }
 
 export interface EditorTimeline {
@@ -41,6 +45,7 @@ export interface EditorTimeline {
 
 const ASPECTS = new Set(['9:16', '16:9', '1:1', '4:5', '4:3', '3:4']);
 const TRANSITIONS = new Set<EditorTransition>(['fade', 'slide', 'none']);
+const PRESETS = new Set<CameraPreset>(CAMERA_PRESETS);
 
 function clamp(n: number, min: number, max: number): number {
   return n < min ? min : n > max ? max : n;
@@ -79,6 +84,7 @@ export function normalizeTimeline(input: unknown, genId: () => string): EditorTi
     if (typeof cc.trimStartSec === 'number' && cc.trimStartSec > 0) clip.trimStartSec = clamp(cc.trimStartSec, 0, 3600);
     if (typeof cc.caption === 'string' && cc.caption.trim().length > 0) clip.caption = cc.caption;
     if (typeof cc.transition === 'string' && TRANSITIONS.has(cc.transition as EditorTransition)) clip.transition = cc.transition as EditorTransition;
+    if (typeof cc.cameraPreset === 'string' && PRESETS.has(cc.cameraPreset as CameraPreset)) clip.cameraPreset = cc.cameraPreset as CameraPreset;
     clips.push(clip);
   }
 

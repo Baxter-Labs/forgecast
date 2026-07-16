@@ -57,6 +57,15 @@ describe('normalizeTimeline', () => {
     expect(normalizeTimeline({ musicAssetId: 'm1', clips: [] }, genId).musicAssetId).toBe('m1');
   });
 
+  it('whitelists cameraPreset and drops unknown values', () => {
+    const t = normalizeTimeline({ clips: [
+      { assetId: 'a', cameraPreset: 'crash-zoom' },
+      { assetId: 'b', cameraPreset: 'orbit-360' }, // not implementable in 2D — dropped
+    ] }, genId);
+    expect(t.clips[0]!.cameraPreset).toBe('crash-zoom');
+    expect(t.clips[1]!.cameraPreset).toBeUndefined();
+  });
+
   it('carries an optional voice-over asset and drops non-string junk', () => {
     expect(normalizeTimeline({ voiceoverAssetId: 'v1', clips: [] }, genId).voiceoverAssetId).toBe('v1');
     expect(normalizeTimeline({ voiceoverAssetId: 7, clips: [] }, genId).voiceoverAssetId).toBeUndefined();
