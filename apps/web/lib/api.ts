@@ -906,7 +906,7 @@ export async function generateVoiceover(services: Services, projectId: string, i
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   if (!services.voiceAvailable) {
-    return { status: 503, body: { error: 'voice-over not configured (set FAL_KEY_VOICE or FAL_KEY)' } };
+    return { status: 503, body: { error: 'voice-over not configured — on Cloudflare it is keyless (AI binding); elsewhere set CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AI_API_TOKEN, run VoxCPM (VOXCPM_URL), or set FAL_KEY_VOICE / FAL_KEY' } };
   }
   const fields = (input ?? {}) as { text?: unknown; voice?: unknown; model?: unknown };
   if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {
