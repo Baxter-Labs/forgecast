@@ -860,6 +860,7 @@ const timelineSchema = z.object({
   aspectRatio: z.string().optional(),
   fps: z.number().int().min(1).max(60).optional(),
   musicAssetId: z.string().optional(),
+  voiceoverAssetId: z.string().optional(),
   clips: z.array(z.object({
     id: z.string().optional(),
     assetId: z.string(),
@@ -867,6 +868,7 @@ const timelineSchema = z.object({
     trimStartSec: z.number().optional(),
     caption: z.string().optional(),
     transition: z.enum(['fade', 'slide', 'none']).optional(),
+    cameraPreset: z.enum(['none', 'zoom-in', 'zoom-out', 'crash-zoom', 'pan-left', 'pan-right', 'dutch', 'handheld']).optional(),
   })),
 });
 
@@ -894,8 +896,8 @@ server.registerTool(
     title: 'Set the project video-editor timeline',
     description:
       'Build or edit a project\'s **timeline** — arrange its assets into a video. Pass the full timeline: ' +
-      '`aspectRatio` (9:16 default), optional `fps`/`musicAssetId`, and `clips` (each: `assetId`, `durationSec`, ' +
-      'optional `caption`, `transition` (fade|slide|none), `trimStartSec`). Invalid clips are dropped and ids are ' +
+      '`aspectRatio` (9:16 default), optional `fps`/`musicAssetId`/`voiceoverAssetId` (narration — music ducks under it), and `clips` (each: `assetId`, `durationSec`, ' +
+      'optional `caption`, `transition` (fade|slide|none), `cameraPreset` (zoom/pan/dutch/handheld virtual camera; stills default to a gentle zoom-in), `trimStartSec`). Invalid clips are dropped and ids are ' +
       'assigned. This is the agent-drivable video editor — set the timeline, then `forgecast_render_timeline`.',
     inputSchema: z.object({ project_id: z.string(), timeline: timelineSchema }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

@@ -134,4 +134,58 @@ describe('LocalMontageJobHandler', () => {
     expect(args).toContain('-shortest');
     expect(args).toContain('-c:a');
   });
+
+  it('with voiceoverUrl only: maps the narration track directly', async () => {
+    const record = { calls: [] as string[][] };
+    const fetchFn = tinyFetch();
+    const handler = new LocalMontageJobHandler({
+      storage: new InMemoryStorage(),
+      assets: new InMemoryAssetRepo(),
+      idGen: () => 'm4',
+      clock: () => 'T',
+      ffmpegPath: '/bin/ffmpeg',
+      fetchFn,
+      run: fakeRun(record),
+    });
+    const spec = imageSpec('9:16', { voiceoverUrl: 'https://cdn/vo.mp3' });
+    const job = newJob({ projectId: 'p1', kind: 'montage', provider: 'ffmpeg-montage', params: { spec } }, { id: 'j1', now: 'T' });
+    await handler.run(job, async () => {});
+
+    const args = record.calls[0]!;
+    const joined = args.join(' ');
+    expect(fetchFn).toHaveBeenCalledWith('https://cdn/vo.mp3');
+    // three `-i` inputs total: 2 scenes + 1 voiceover (index 2)
+    expect(args.filter((a) => a === '-i').length).toBe(3);
+    expect(joined).toContain('-map 2:a');
+    expect(args).toContain('-shortest');
+    expect(joined).not.toContain('amix');
+  });
+
+  it('with music AND voiceover: ducks the music and amixes the narration on top', async () => {
+    const record = { calls: [] as string[][] };
+    const fetchFn = tinyFetch();
+    const handler = new LocalMontageJobHandler({
+      storage: new InMemoryStorage(),
+      assets: new InMemoryAssetRepo(),
+      idGen: () => 'm5',
+      clock: () => 'T',
+      ffmpegPath: '/bin/ffmpeg',
+      fetchFn,
+      run: fakeRun(record),
+    });
+    const spec = imageSpec('9:16', { musicUrl: 'https://cdn/music.mp3', voiceoverUrl: 'https://cdn/vo.mp3' });
+    const job = newJob({ projectId: 'p1', kind: 'montage', provider: 'ffmpeg-montage', params: { spec } }, { id: 'j1', now: 'T' });
+    await handler.run(job, async () => {});
+
+    const args = record.calls[0]!;
+    const joined = args.join(' ');
+    // four `-i` inputs: 2 scenes + music (2) + voiceover (3)
+    expect(args.filter((a) => a === '-i').length).toBe(4);
+    // ducked music mixed with narration, mapped as the single audio track
+    expect(joined).toContain('[2:a]volume=0.25[m]');
+    expect(joined).toContain('[m][3:a]amix=inputs=2:duration=first[outa]');
+    expect(joined).toContain('-map [outa]');
+    expect(args).toContain('-shortest');
+    expect(args).toContain('-c:a');
+  });
 });

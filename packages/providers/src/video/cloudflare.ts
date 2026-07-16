@@ -49,6 +49,7 @@ export class CloudflareVideoProvider implements VideoProvider {
   private readonly runner: WorkersAiRunner | undefined;
   private readonly accountId: string | undefined;
   private readonly apiToken: string | undefined;
+  private readonly explicitModel: string | undefined;
   private readonly model: string;
   private readonly fetchFn: typeof fetch;
 
@@ -56,12 +57,18 @@ export class CloudflareVideoProvider implements VideoProvider {
     this.runner = opts.runner;
     this.accountId = opts.accountId ?? process.env.CLOUDFLARE_ACCOUNT_ID;
     this.apiToken = opts.apiToken ?? process.env.CLOUDFLARE_AI_API_TOKEN;
-    this.model = opts.model ?? process.env.CF_AI_VIDEO_MODEL ?? 'vidu/q3-turbo';
+    // Unlike image (FLUX is first-party/free), EVERY Workers AI video model is
+    // partner-billed — the old vidu/q3-turbo default errored `2021` on accounts
+    // without partner billing while health advertised video as available. So a
+    // model must now be configured EXPLICITLY (= the operator opted into billing)
+    // before this provider reports itself available.
+    this.explicitModel = opts.model ?? process.env.CF_AI_VIDEO_MODEL;
+    this.model = this.explicitModel ?? 'vidu/q3-turbo';
     this.fetchFn = opts.fetchFn ?? fetch;
   }
 
   isAvailable(): boolean {
-    return Boolean(this.runner) || Boolean(this.accountId && this.apiToken);
+    return Boolean(this.explicitModel) && (Boolean(this.runner) || Boolean(this.accountId && this.apiToken));
   }
 
   private inputsFrom(input: VideoGenInput): Record<string, unknown> {
@@ -74,13 +81,18 @@ export class CloudflareVideoProvider implements VideoProvider {
   }
 
   async create(input: VideoGenInput): Promise<{ taskId: string }> {
-    if (!this.isAvailable()) throw new Error('Cloudflare Workers AI not configured');
+    if (!this.isAvailable()) throw new Error('Cloudflare Workers AI video not configured — every Workers AI video model is partner-billed (not free); set CF_AI_VIDEO_MODEL only with partner billing enabled, or use the free hf-spaces provider / a BYO fal/Replicate key');
     const model = input.model ?? this.model;
     const inputs = this.inputsFrom(input);
 
-    const raw = this.runner
-      ? ((await this.runner.run(model, inputs, { queueRequest: true })) as RawVideo)
-      : await this.runViaRest(model, inputs);
+    let raw: RawVideo;
+    try {
+      raw = this.runner
+        ? ((await this.runner.run(model, inputs, { queueRequest: true })) as RawVideo)
+        : await this.runViaRest(model, inputs);
+    } catch (e) {
+      throw this.explainPartnerAuth(e, model);
+    }
 
     const reqId = requestIdOf(raw);
     if (reqId) return { taskId: `${ASYNC}${model}::${reqId}` };
@@ -113,6 +125,18 @@ export class CloudflareVideoProvider implements VideoProvider {
     const url = videoUrlOf(raw);
     if (url) return { taskId, state: 'complete', videoUrl: url };
     return { taskId, state: status === 'failed' || status === 'error' ? 'failed' : 'processing' };
+  }
+
+  /** Maps Cloudflare's opaque `2021: Invalid User Credentials` (partner model, no billing) to an actionable error. */
+  private explainPartnerAuth(e: unknown, model: string): Error {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/\b2021\b|invalid user credentials/i.test(msg)) {
+      return new Error(
+        `'${model}' is a partner-billed Workers AI model and this account has no partner billing for it (Cloudflare error 2021). ` +
+          'Enable it in the Cloudflare dashboard, or use the free hf-spaces provider (free HF token) / a BYO fal/Replicate key / a stills-reel montage.',
+      );
+    }
+    return e instanceof Error ? e : new Error(msg);
   }
 
   private async runViaRest(model: string, inputs: Record<string, unknown>): Promise<RawVideo> {

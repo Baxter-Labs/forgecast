@@ -87,6 +87,19 @@ describe('per-user services overlay', () => {
     expect(base.imageRegistry.available()).toEqual([]);          // base untouched
   });
 
+  it('a stored FREE Hugging Face token unlocks the free hf-spaces video provider for that user', async () => {
+    const base = buildServices({});
+    expect(base.videoProvider.isAvailable()).toBe(false);
+
+    await setUserKey(base, 'u1', { id: 'hf', value: 'hf_free_token' });
+    invalidateUserServices('u1');
+    const mine = await getServicesForUser('u1', base);
+
+    expect(mine.videoProvider.name).toBe('hf-spaces');
+    expect(mine.videoProvider.isAvailable()).toBe(true);
+    expect(base.videoProvider.isAvailable()).toBe(false); // base untouched
+  });
+
   it('returns the base singleton for owners with no stored keys, and caches per owner', async () => {
     const base = buildServices({});
     invalidateUserServices('u1');

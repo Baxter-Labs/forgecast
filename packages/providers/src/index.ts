@@ -8,6 +8,7 @@ export * from './video/fal';
 export * from './video/replicate';
 export * from './video/cloudflare';
 export * from './video/skyreels';
+export * from './video/hfspaces';
 export * from './video/registry';
 export * from './publish/registry';
 export * from './publish/webhook';

@@ -12,7 +12,7 @@ import type { ApiResult } from './api';
  * server — the API returns masked previews only.
  */
 
-export type KeyId = 'fal' | 'fal_video' | 'fal_voice' | 'openai' | 'anthropic' | 'replicate' | 'pexels' | 'wisprflow';
+export type KeyId = 'fal' | 'fal_video' | 'fal_voice' | 'openai' | 'anthropic' | 'replicate' | 'hf' | 'pexels' | 'wisprflow';
 
 export interface KeyDef {
   id: KeyId;
@@ -27,6 +27,7 @@ export const KEY_CATALOG: readonly KeyDef[] = [
   { id: 'fal_video', label: 'fal.ai — video', env: 'FAL_KEY_VIDEO', group: 'Generation', hint: 'text→video and image→video (Seedance, Veo 3.1, Kling) + the AI presenter' },
   { id: 'fal_voice', label: 'fal.ai — voice', env: 'FAL_KEY_VOICE', group: 'Generation', hint: 'cloud TTS fallback — optional when self-hosted VoxCPM-2 is running (falls back to the image key)' },
   { id: 'replicate', label: 'Replicate — video', env: 'REPLICATE_API_TOKEN', group: 'Generation', hint: 'non-fal video generation (used when no fal video key is set) · replicate.com/account/api-tokens' },
+  { id: 'hf', label: 'Hugging Face — free video', env: 'HF_TOKEN', group: 'Generation', hint: 'a FREE token unlocks free open-model video (ZeroGPU Spaces, ~5 GPU-min/day) · huggingface.co/settings/tokens' },
   { id: 'openai', label: 'OpenAI', env: 'OPENAI_API_KEY', group: 'Agent brain', hint: 'the PLAN / AUTO-RUN + editor agent (default brain) — and non-fal image generation (gpt-image-1)' },
   { id: 'anthropic', label: 'Anthropic (Claude)', env: 'ANTHROPIC_API_KEY', group: 'Agent brain', hint: 'agent brain when FORGECAST_AGENT_LLM=anthropic' },
   { id: 'pexels', label: 'Pexels', env: 'PEXELS_API_KEY', group: 'Extras', hint: 'real stock-footage search (free key at pexels.com/api)' },
