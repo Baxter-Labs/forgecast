@@ -4,6 +4,7 @@ import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
 import { runBackground } from './cf-env';
+import { LOCAL_OWNER } from './auth-guard';
 
 /** Minimal shape `generateAdCopy` needs from an LLM client (injectable for tests). */
 type AdCopyLlm = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
@@ -795,12 +796,32 @@ export async function readTimeline(services: Services, projectId: string): Promi
   return { status: 200, body: { timeline: (await getTimeline(services, projectId)) ?? emptyTimeline() } };
 }
 
+/**
+ * Cross-tenant guard: every EXISTING asset a timeline references (clips, music,
+ * voice-over) must belong to the same owner as the timeline's project. Missing
+ * ids keep their historical skip-at-render behavior; a foreign id is rejected
+ * as not-found so nothing leaks about other tenants' assets.
+ */
+async function foreignTimelineAsset(services: Services, projectOwner: string | undefined, timeline: EditorTimeline): Promise<string | null> {
+  const ids = [...timeline.clips.map((c) => c.assetId), timeline.musicAssetId, timeline.voiceoverAssetId]
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+  for (const id of ids) {
+    const asset = await services.assets.get(id);
+    if (!asset) continue;
+    const owner = (await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER;
+    if (owner !== (projectOwner ?? LOCAL_OWNER)) return id;
+  }
+  return null;
+}
+
 /** Save (normalize + persist) a timeline for a project. */
 export async function saveTimeline(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
   const fields = (input ?? {}) as { timeline?: unknown };
   const timeline = normalizeTimeline(fields.timeline ?? input, services.ids.randomId);
+  const foreign = await foreignTimelineAsset(services, project.ownerId, timeline);
+  if (foreign) return { status: 400, body: { error: `asset not found: ${foreign}` } };
   await services.storage.put(timelineKey(projectId), new TextEncoder().encode(JSON.stringify(timeline)), 'application/json');
   return { status: 200, body: { timeline } };
 }
@@ -898,6 +919,8 @@ export async function renderTimeline(services: Services, projectId: string, inpu
     ? normalizeTimeline(fields.timeline, services.ids.randomId)
     : ((await getTimeline(services, projectId)) ?? emptyTimeline());
   if (timeline.clips.length === 0) return { status: 400, body: { error: 'timeline has no clips to render' } };
+  const foreignRender = await foreignTimelineAsset(services, project.ownerId, timeline);
+  if (foreignRender) return { status: 400, body: { error: `asset not found: ${foreignRender}` } };
 
   const spec = await buildTimelineSpec(services, timeline);
   if (!spec) return { status: 400, body: { error: 'timeline clips could not be resolved to assets' } };
