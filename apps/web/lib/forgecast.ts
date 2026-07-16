@@ -42,6 +42,8 @@ export interface Services {
   montageAvailable: boolean;
   voiceProvider: VoiceProvider;
   voiceAvailable: boolean;
+  /** Whether voice+video narrate (ffmpeg mux) can run — node-only, false on the Workers/edge deploy. */
+  narrateAvailable: boolean;
   transcriber: Transcriber;
   transcribeAvailable: boolean;
   presenterProvider: PresenterProvider;
@@ -253,6 +255,9 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
           ? replicateVideoProvider
           : cloudflareVideoProvider;
   const videoProviders = videoRegistry.available();
+  // Node-only job handlers (ffmpeg via child_process/fs) can't run on Cloudflare Workers.
+  // On the edge profile, montage needs the remote Remotion worker and narrate is unavailable.
+  const isEdge = (opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local') === 'baxter-cloud';
   const handlers: JobHandler[] = [imageHandler, enhanceHandler, editImageHandler, cutoutHandler];
   if (videoWorker.isAvailable()) {
     handlers.push(
@@ -269,10 +274,12 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   if (montageWorker.isAvailable()) {
     handlers.push(new MontageJobHandler({ worker: montageWorker, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
     montageAvailable = true;
-  } else if (ffmpegStatic) {
+  } else if (ffmpegStatic && !isEdge) {
     handlers.push(new LocalMontageJobHandler({ storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
     montageAvailable = true;
   }
+  // else on the edge with no MONTAGE_WORKER_URL: montage stays unavailable (honest) rather
+  // than registering the node handler that would crash at spawn.
   const voxcpm = new VoxCpmVoiceProvider({ fetchFn: opts.fetchFn });
   // User voice key → user image key → env (the provider's own fallback chain).
   const ttsKey = opts.voiceKey ?? falKey;
@@ -282,7 +289,10 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   if (voiceProvider.isAvailable()) {
     handlers.push(new VoiceoverJobHandler({ provider: voiceProvider, storage, assets, idGen: randomId, clock: nowIso, fetchFn: opts.fetchFn }));
   }
-  if (voiceProvider.isAvailable() && ffmpegStatic) {
+  // Narrate (voice + video ffmpeg mux) has NO remote worker path, so it is node-only:
+  // available only off the edge, with a voice provider + the bundled ffmpeg present.
+  const narrateAvailable = voiceProvider.isAvailable() && Boolean(ffmpegStatic) && !isEdge;
+  if (voiceProvider.isAvailable() && ffmpegStatic && !isEdge) {
     handlers.push(new NarrateJobHandler({ voiceProvider, storage, assets, idGen: randomId, clock: nowIso, ffmpegPath: ffmpegStatic, fetchFn: opts.fetchFn }));
   }
   const voiceAvailable = voiceProvider.isAvailable();
@@ -321,7 +331,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, narrateAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**

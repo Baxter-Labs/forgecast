@@ -18,6 +18,8 @@ export interface Availability {
   montage: boolean;
   short: boolean;
   voice: boolean;
+  /** Voice+video narrate (ffmpeg mux) — node-only, false on the Workers/edge deploy. */
+  narrate: boolean;
   transcribe: boolean;
   presenter: boolean;
 }
@@ -70,7 +72,7 @@ export function useForgecast() {
   const [providers, setProviders] = useState<string[]>([]);
   const [videoProviders, setVideoProviders] = useState<string[]>([]);
   const [publishers, setPublishers] = useState<string[]>([]);
-  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, short: false, voice: false, transcribe: false, presenter: false });
+  const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, short: false, voice: false, narrate: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
@@ -90,6 +92,7 @@ export function useForgecast() {
       montage: (p.montage ?? []).length > 0,
       short: (p.short ?? []).length > 0,
       voice: (p.voice ?? []).length > 0,
+      narrate: (p.narrate ?? []).length > 0,
       transcribe: (p.transcribe ?? []).length > 0,
       presenter: (p.presenter ?? []).length > 0,
     });
@@ -114,13 +117,14 @@ export function useForgecast() {
       const montage: string[] = health?.providers?.montage ?? [];
       const short: string[] = health?.providers?.short ?? [];
       const voice: string[] = health?.providers?.voice ?? [];
+      const narrate: string[] = health?.providers?.narrate ?? [];
       const transcribe: string[] = health?.providers?.transcribe ?? [];
       const presenter: string[] = health?.providers?.presenter ?? [];
       const pubs: string[] = health?.publishers ?? [];
       setProviders(image);
       setVideoProviders(video);
       setPublishers(pubs);
-      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, short: short.length > 0, voice: voice.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
+      setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, short: short.length > 0, voice: voice.length > 0, narrate: narrate.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
       await refreshPro();
 

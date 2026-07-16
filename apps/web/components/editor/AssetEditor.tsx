@@ -186,7 +186,7 @@ export function AssetEditor({ assetId }: Props) {
 
           {isVideo && (
             <>
-              <button onClick={() => setNarrateOpen((v) => !v)} disabled={!!busy || !availability.voice} className={RAIL} style={railStyle()} aria-label="Add a voice-over" aria-expanded={narrateOpen} title={!availability.voice ? 'Voice provider not configured (run the VoxCPM-2 worker or set a fal voice key)' : 'Add an AI voice-over'}>
+              <button onClick={() => setNarrateOpen((v) => !v)} disabled={!!busy || !availability.narrate} className={RAIL} style={railStyle()} aria-label="Add a voice-over" aria-expanded={narrateOpen} title={!availability.narrate ? 'Narration needs a voice provider + local ffmpeg (not available on the cloud deploy)' : 'Add an AI voice-over'}>
                 <Mic size={15} className="text-[var(--ember-1)]" /> Narrate (voice-over)
               </button>
               {narrateOpen && (

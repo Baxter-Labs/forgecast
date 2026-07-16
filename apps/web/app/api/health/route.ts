@@ -12,9 +12,10 @@ export async function GET(req: Request) {
     providers: {
       image: svc.imageRegistry.available(),
       video: svc.videoProviders,
-      montage: svc.montageAvailable ? ['ffmpeg'] : [],
+      montage: svc.montageAvailable ? [svc.montageWorker.isAvailable() ? 'remotion' : 'ffmpeg'] : [],
       short: svc.videoWorker.isAvailable() ? [svc.videoWorker.name] : [],
       voice: svc.voiceAvailable ? [svc.voiceProvider.name] : [],
+      narrate: svc.narrateAvailable ? ['ffmpeg'] : [],
       transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
       presenter: svc.presenterAvailable ? [svc.presenterProvider.name] : [],
       footage: svc.footageAvailable,

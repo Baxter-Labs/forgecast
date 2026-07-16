@@ -927,8 +927,8 @@ export async function generateVoiceover(services: Services, projectId: string, i
 export async function generateNarratedVideo(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
-  if (!services.voiceAvailable) {
-    return { status: 503, body: { error: 'narrate not configured (set FAL_KEY_VOICE or FAL_KEY)' } };
+  if (!services.narrateAvailable) {
+    return { status: 503, body: { error: 'narrate not available here — it needs a voice provider + local ffmpeg, which the Cloudflare Workers deploy cannot run (use voice-over + montage, or run Forgecast on a Node host)' } };
   }
   const fields = (input ?? {}) as { text?: unknown; voice?: unknown; videoAssetId?: unknown; videoUrl?: unknown };
   if (typeof fields.text !== 'string' || fields.text.trim().length === 0) {
