@@ -8,8 +8,8 @@ import {
   interpolate,
   useCurrentFrame,
 } from 'remotion';
-import { planTimeline } from './timeline';
-import type { MontageSpec } from './timeline';
+import { planTimeline, cameraTransform } from './timeline';
+import type { MontageSpec, CameraPreset } from './timeline';
 
 // ---------------------------------------------------------------------------
 // Transition helpers
@@ -49,28 +49,39 @@ function useTransitionStyle({ transition, durationInFrames }: TransitionProps): 
 // Scene renderer
 // ---------------------------------------------------------------------------
 
+/** The camera preset as a per-frame CSS transform (identity for 'none'). */
+function useCameraStyle(preset: CameraPreset, durationInFrames: number): React.CSSProperties {
+  const frame = useCurrentFrame();
+  if (preset === 'none') return {};
+  const t = cameraTransform(preset, frame, durationInFrames);
+  return { transform: `scale(${t.scale}) translate(${t.x}%, ${t.y}%) rotate(${t.rotate}deg)` };
+}
+
 interface SceneProps {
   url: string;
   kind: 'image' | 'video';
   caption?: string;
   transition: 'fade' | 'slide' | 'none';
+  cameraPreset: CameraPreset;
   durationInFrames: number;
 }
 
-function Scene({ url, kind, caption, transition, durationInFrames }: SceneProps): React.ReactElement {
+function Scene({ url, kind, caption, transition, cameraPreset, durationInFrames }: SceneProps): React.ReactElement {
   const style = useTransitionStyle({ transition, durationInFrames });
+  const cameraStyle = useCameraStyle(cameraPreset, durationInFrames);
+  const mediaStyle: React.CSSProperties = { width: '100%', height: '100%', objectFit: 'cover', ...cameraStyle };
 
   return (
-    <AbsoluteFill style={style}>
+    <AbsoluteFill style={{ ...style, overflow: 'hidden' }}>
       {kind === 'image' ? (
         <Img
           src={url}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={mediaStyle}
         />
       ) : (
         <OffthreadVideo
           src={url}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={mediaStyle}
         />
       )}
 
@@ -109,8 +120,10 @@ export function Montage({ spec }: MontageProps): React.ReactElement {
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      {/* TODO: TTS voiceover — if spec.voiceoverText is provided and no musicUrl, synthesise speech here */}
-      {spec.musicUrl !== undefined && <Audio src={spec.musicUrl} />}
+      {/* Narration track (synthesized upstream — see the web app's voiceover pipeline).
+          When present, background music is ducked underneath it. */}
+      {spec.voiceoverUrl !== undefined && <Audio src={spec.voiceoverUrl} />}
+      {spec.musicUrl !== undefined && <Audio src={spec.musicUrl} volume={spec.voiceoverUrl !== undefined ? 0.25 : 1} />}
 
       {timeline.scenes.map((s) => (
         <Sequence key={s.index} from={s.fromFrame} durationInFrames={s.durationInFrames}>
@@ -119,6 +132,7 @@ export function Montage({ spec }: MontageProps): React.ReactElement {
             kind={s.kind}
             caption={s.caption}
             transition={s.transition}
+            cameraPreset={s.cameraPreset}
             durationInFrames={s.durationInFrames}
           />
         </Sequence>

@@ -71,4 +71,40 @@ describe('timeline editor', () => {
     const pid = (pc.body as { project: { id: string } }).project.id;
     expect((await renderTimeline(svc, pid, { timeline: { clips: [] } })).status).toBe(400);
   });
+
+  it('defaults image scenes to a gentle zoom-in and honors an explicit preset', async () => {
+    const svc = makeServices();
+    const { ids } = await seed(svc);
+    const spec = await buildTimelineSpec(svc, { aspectRatio: '9:16', clips: [
+      { id: 'c1', assetId: ids[0]!, durationSec: 3 },
+      { id: 'c2', assetId: ids[1]!, durationSec: 3, cameraPreset: 'pan-left' },
+    ] });
+    expect(spec!.scenes[0]!.cameraPreset).toBe('zoom-in'); // image default
+    expect(spec!.scenes[1]!.cameraPreset).toBe('pan-left'); // explicit wins
+  });
+
+  it('voiceoverAssetId round-trips through save and resolves to spec.voiceoverUrl', async () => {
+    const svc = makeServices();
+    const { projectId, ids } = await seed(svc);
+    // Seed a narration audio asset.
+    const audioId = svc.ids.randomId();
+    const audioKey = `projects/${projectId}/audio/${audioId}.mp3`;
+    await svc.storage.put(audioKey, new Uint8Array([4, 5, 6]), 'audio/mpeg');
+    await svc.assets.create(
+      newAsset({ projectId, type: 'audio', provider: 'cloudflare', storageKey: audioKey, params: { text: 'hi' } }, { id: audioId, now: svc.ids.nowIso() }),
+    );
+
+    const saved = await saveTimeline(svc, projectId, { timeline: {
+      aspectRatio: '9:16',
+      voiceoverAssetId: audioId,
+      clips: [{ assetId: ids[0], durationSec: 3 }],
+    } });
+    expect((saved.body as { timeline: { voiceoverAssetId?: string } }).timeline.voiceoverAssetId).toBe(audioId);
+
+    const tl = await getTimeline(svc, projectId);
+    const spec = await buildTimelineSpec(svc, tl!);
+    expect(spec).not.toBeNull();
+    expect(spec!.voiceoverUrl).toBeTruthy();
+    expect(spec!.voiceoverUrl!).toContain('data:audio/mpeg;base64,');
+  });
 });

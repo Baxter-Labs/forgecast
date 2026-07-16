@@ -35,6 +35,30 @@ describe('api: generate montage', () => {
     expect(body.job.status).toBe('running');
   });
 
+  it('voiceoverText: synthesizes narration (keyless voice) and stamps spec.voiceoverUrl', async () => {
+    process.env.MONTAGE_WORKER_URL = 'http://montage';
+    const fetchFn = vi.fn(async (url: Parameters<typeof fetch>[0]) => {
+      const u = String(url);
+      if (u === 'http://montage/render') return new Response(JSON.stringify({ taskId: 't1' }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    // The AI binding provides keyless MeloTTS voice (base64 "ABC").
+    const svc = buildServices({ falKey: undefined, fetchFn, ai: { run: async () => ({ audio: 'QUJD' }) } });
+    const r = await generateMontage(svc, await project(svc), { spec, voiceoverText: 'welcome to the forge' });
+    expect(r.status).toBe(202);
+    const job = (r.body as { job: { params: { spec?: { voiceoverUrl?: string } } } }).job;
+    expect(job.params.spec?.voiceoverUrl).toBeTruthy();
+    expect(job.params.spec!.voiceoverUrl!).toContain('data:audio/mpeg;base64,');
+  });
+
+  it('voiceoverText with NO voice provider: actionable 503, no montage job', async () => {
+    process.env.MONTAGE_WORKER_URL = 'http://montage';
+    const svc = buildServices({ falKey: undefined, fetchFn: vi.fn(async () => new Response('{}', { status: 200 })) });
+    const r = await generateMontage(svc, await project(svc), { spec, voiceoverText: 'hello' });
+    expect(r.status).toBe(503);
+    expect(((r.body as { error?: string }).error ?? '')).toMatch(/voice-over/i);
+  });
+
   it('completes via client polling: submit → getJob advances → stores the video asset', async () => {
     process.env.MONTAGE_WORKER_URL = 'http://montage';
     const fetchFn = vi.fn(async (url: Parameters<typeof fetch>[0]) => {
