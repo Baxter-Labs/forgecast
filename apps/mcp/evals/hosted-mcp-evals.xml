@@ -52,4 +52,32 @@
     <question>Call get-job with jobId "no-such-job". Does the tool return an error result? Answer yes or no.</question>
     <answer>yes</answer>
   </qa_pair>
+  <qa_pair>
+    <question>How many tools does the hosted server list in total?</question>
+    <answer>22</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the tool list, is forgecast_get_timeline marked with readOnlyHint true? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Create a project, then call forgecast_get_timeline for it. How many clips does the returned timeline contain?</question>
+    <answer>0</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Per the forgecast_set_timeline schema, which clip field selects the virtual-camera motion (e.g. zoom-in, pan-left)?</question>
+    <answer>cameraPreset</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Per the forgecast_set_timeline schema, which timeline field attaches a narration audio asset that music ducks under?</question>
+    <answer>voiceoverAssetId</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Call forgecast_import_footage with url "http://example.com/clip.mp4" on a project you created. Does the tool refuse the non-https URL with an error? Answer yes or no.</question>
+    <answer>yes</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The forgecast_health providers object reports capability arrays for image, video, publishers and four more modalities plus footage. Which modality key covers text-to-speech?</question>
+    <answer>voice</answer>
+  </qa_pair>
 </evaluation>
