@@ -10,9 +10,9 @@ const clips = [
 describe('timeline-ui helpers', () => {
   it('toUI backfills controlled-input defaults; toDoc drops empty captions and null music', () => {
     const ui = toUI({ aspectRatio: '16:9', clips: [{ id: 'a', assetId: 'x', durationSec: 4 }] });
-    expect(ui).toEqual({ aspect: '16:9', musicAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '', transition: 'fade' }] });
+    expect(ui).toEqual({ aspect: '16:9', musicAssetId: null, voiceoverAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '', transition: 'fade' }] });
 
-    const doc = toDoc({ aspect: '9:16', musicAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '   ', transition: 'fade' }] });
+    const doc = toDoc({ aspect: '9:16', musicAssetId: null, voiceoverAssetId: null, clips: [{ id: 'a', assetId: 'x', durationSec: 4, caption: '   ', transition: 'fade' }] });
     expect(doc.clips[0]).toEqual({ id: 'a', assetId: 'x', durationSec: 4, transition: 'fade' });
     expect('musicAssetId' in doc).toBe(false);
   });
@@ -46,6 +46,6 @@ describe('timeline-ui helpers', () => {
 
   it('totalDurationSec sums to one decimal; emptyControls defaults 9:16', () => {
     expect(totalDurationSec(clips)).toBe(10);
-    expect(emptyControls()).toEqual({ clips: [], aspect: '9:16', musicAssetId: null });
+    expect(emptyControls()).toEqual({ clips: [], aspect: '9:16', musicAssetId: null, voiceoverAssetId: null });
   });
 });

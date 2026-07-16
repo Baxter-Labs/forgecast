@@ -35,6 +35,8 @@ export interface EditorTimeline {
   clips: EditorClip[];
   /** Optional background-music asset for the whole timeline. */
   musicAssetId?: string;
+  /** Optional narration (voice-over) audio asset. Plays over the whole timeline; music is ducked under it. */
+  voiceoverAssetId?: string;
 }
 
 const ASPECTS = new Set(['9:16', '16:9', '1:1', '4:5', '4:3', '3:4']);
@@ -86,5 +88,6 @@ export function normalizeTimeline(input: unknown, genId: () => string): EditorTi
     timeline.fps = fps;
   }
   if (typeof o.musicAssetId === 'string' && o.musicAssetId.length > 0) timeline.musicAssetId = o.musicAssetId;
+  if (typeof o.voiceoverAssetId === 'string' && o.voiceoverAssetId.length > 0) timeline.voiceoverAssetId = o.voiceoverAssetId;
   return timeline;
 }

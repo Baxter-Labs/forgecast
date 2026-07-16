@@ -109,8 +109,10 @@ export function Montage({ spec }: MontageProps): React.ReactElement {
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      {/* TODO: TTS voiceover — if spec.voiceoverText is provided and no musicUrl, synthesise speech here */}
-      {spec.musicUrl !== undefined && <Audio src={spec.musicUrl} />}
+      {/* Narration track (synthesized upstream — see the web app's voiceover pipeline).
+          When present, background music is ducked underneath it. */}
+      {spec.voiceoverUrl !== undefined && <Audio src={spec.voiceoverUrl} />}
+      {spec.musicUrl !== undefined && <Audio src={spec.musicUrl} volume={spec.voiceoverUrl !== undefined ? 0.25 : 1} />}
 
       {timeline.scenes.map((s) => (
         <Sequence key={s.index} from={s.fromFrame} durationInFrames={s.durationInFrames}>

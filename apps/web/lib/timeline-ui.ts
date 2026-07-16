@@ -15,12 +15,14 @@ export interface TimelineControls {
   clips: TimelineUIClip[];
   aspect: string;
   musicAssetId: string | null;
+  /** Narration (voice-over) audio asset; music is ducked under it in the render. */
+  voiceoverAssetId: string | null;
 }
 
 export const TIMELINE_TRANSITIONS: TimelineUIClip['transition'][] = ['fade', 'slide', 'none'];
 
 export function emptyControls(aspect = '9:16'): TimelineControls {
-  return { clips: [], aspect, musicAssetId: null };
+  return { clips: [], aspect, musicAssetId: null, voiceoverAssetId: null };
 }
 
 export function clipUid(): string {
@@ -32,6 +34,7 @@ export function toUI(doc: EditorTimeline): TimelineControls {
   return {
     aspect: doc.aspectRatio || '9:16',
     musicAssetId: doc.musicAssetId ?? null,
+    voiceoverAssetId: doc.voiceoverAssetId ?? null,
     clips: doc.clips.map((c) => ({
       id: c.id,
       assetId: c.assetId,
@@ -54,6 +57,7 @@ export function toDoc(controls: TimelineControls): EditorTimeline {
     }),
   };
   if (controls.musicAssetId) doc.musicAssetId = controls.musicAssetId;
+  if (controls.voiceoverAssetId) doc.voiceoverAssetId = controls.voiceoverAssetId;
   return doc;
 }
 

@@ -823,7 +823,34 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
     const musicUrl = await resolveAssetUrl(services, timeline.musicAssetId);
     if (musicUrl) spec.musicUrl = musicUrl;
   }
+  if (timeline.voiceoverAssetId) {
+    const voiceoverUrl = await resolveAssetUrl(services, timeline.voiceoverAssetId);
+    if (voiceoverUrl) spec.voiceoverUrl = voiceoverUrl;
+  }
   return spec;
+}
+
+/**
+ * Synthesizes a narration script into an audio asset (via the active voice
+ * provider, synchronously — same in-request pattern as image generation) and
+ * returns its resolvable URL for a MontageSpec. Errors are returned as ApiResults.
+ */
+async function synthesizeVoiceoverUrl(services: Services, projectId: string, text: string): Promise<{ url: string } | ApiResult> {
+  if (!services.voiceAvailable) {
+    return { status: 503, body: { error: 'voiceoverText given but voice-over is not available — on Cloudflare it is keyless (AI binding); elsewhere set VOXCPM_URL or FAL_KEY_VOICE, or pass voiceoverAssetId instead' } };
+  }
+  const blocked = guardText(text);
+  if (blocked) return blocked;
+  const vjob = await services.jobs.create(
+    newJob({ projectId, kind: 'voiceover', provider: services.voiceProvider.name, params: { text } }, { id: services.ids.randomId(), now: services.ids.nowIso() }),
+  );
+  const finished = await services.runner.run(vjob.id);
+  if (finished.status !== 'done' || !finished.resultAssetId) {
+    return { status: 502, body: { error: `voice-over synthesis failed${finished.error ? `: ${finished.error}` : ''}` } };
+  }
+  const url = await resolveAssetUrl(services, finished.resultAssetId);
+  if (!url) return { status: 502, body: { error: 'synthesized voice-over has no stored audio' } };
+  return { url };
 }
 
 /** Kick off a montage job. The remote Remotion worker is submit-then-poll (the client
@@ -882,7 +909,7 @@ export async function generateMontage(services: Services, projectId: string, inp
   if (!services.montageAvailable) {
     return { status: 503, body: { error: 'montage not configured (set MONTAGE_WORKER_URL, or ensure the bundled ffmpeg is available)' } };
   }
-  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown };
+  const fields = (input ?? {}) as { spec?: MontageSpec; assetIds?: unknown; aspectRatio?: unknown; durationSec?: unknown; voiceoverAssetId?: unknown; voiceoverText?: unknown };
   const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
   const rawDurationSec = typeof fields.durationSec === 'number' ? fields.durationSec : 4;
   const durationSec = Math.min(10, Math.max(1, rawDurationSec));
@@ -894,6 +921,17 @@ export async function generateMontage(services: Services, projectId: string, inp
   }
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length === 0) {
     return { status: 400, body: { error: 'a "spec" with scenes, or "assetIds", is required' } };
+  }
+
+  // Optional narration: an existing audio asset, or a script synthesized on the spot.
+  if (typeof fields.voiceoverAssetId === 'string' && fields.voiceoverAssetId.length > 0) {
+    const url = await resolveAssetUrl(services, fields.voiceoverAssetId);
+    if (!url) return { status: 400, body: { error: 'voiceoverAssetId could not be resolved to stored audio' } };
+    spec = { ...spec, voiceoverUrl: url };
+  } else if (typeof fields.voiceoverText === 'string' && fields.voiceoverText.trim().length > 0) {
+    const synthesized = await synthesizeVoiceoverUrl(services, projectId, fields.voiceoverText);
+    if (!('url' in synthesized)) return synthesized;
+    spec = { ...spec, voiceoverUrl: synthesized.url };
   }
 
   const job = await services.jobs.create(

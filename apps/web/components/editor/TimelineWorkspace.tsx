@@ -319,6 +319,24 @@ export function TimelineWorkspace() {
             )}
           </div>
 
+          <div>
+            <p className={`${PANEL_LABEL} mb-3 flex items-center gap-1.5`}><Music2 size={11} aria-hidden="true" /> Voice-over</p>
+            <select
+              value={timeline.voiceoverAssetId ?? ''}
+              onChange={(e) => { const v = e.target.value || null; setTimeline((prev) => ({ ...prev, voiceoverAssetId: v })); }}
+              aria-label="Narration voice-over"
+              className={`${FIELD} w-full px-2 py-2 cursor-pointer`}
+            >
+              <option value="" style={{ background: '#221b16', color: '#6b5e54' }}>— none —</option>
+              {audio.map((a) => (
+                <option key={a.id} value={a.id} style={{ background: '#221b16', color: '#f5eee6' }}>
+                  {(a.params.text ?? a.params.prompt ?? a.id).slice(0, 40)}
+                </option>
+              ))}
+            </select>
+            <p className="font-mono text-[10px] text-[var(--forge-faint)] mt-2">plays over the whole cut — music ducks underneath it</p>
+          </div>
+
           <EditorAgent projectId={editor.projectId} onDone={(r) => void editor.applyAgentResult(r)} />
 
           <p className="font-mono text-[10px] text-[var(--forge-faint)] leading-relaxed">

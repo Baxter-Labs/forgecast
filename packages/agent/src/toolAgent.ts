@@ -131,6 +131,7 @@ const TOOLS: LlmTool[] = [
               },
             },
             musicAssetId: { type: 'string', description: 'Optional audio asset id for background music.' },
+            voiceoverAssetId: { type: 'string', description: 'Optional audio asset id for a narration voice-over (generate one with the voice pipeline first); music ducks under it.' },
           },
           required: ['clips'],
         },

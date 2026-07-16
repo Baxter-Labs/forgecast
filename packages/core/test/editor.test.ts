@@ -56,6 +56,12 @@ describe('normalizeTimeline', () => {
   it('carries an optional music asset', () => {
     expect(normalizeTimeline({ musicAssetId: 'm1', clips: [] }, genId).musicAssetId).toBe('m1');
   });
+
+  it('carries an optional voice-over asset and drops non-string junk', () => {
+    expect(normalizeTimeline({ voiceoverAssetId: 'v1', clips: [] }, genId).voiceoverAssetId).toBe('v1');
+    expect(normalizeTimeline({ voiceoverAssetId: 7, clips: [] }, genId).voiceoverAssetId).toBeUndefined();
+    expect(normalizeTimeline({ voiceoverAssetId: '', clips: [] }, genId).voiceoverAssetId).toBeUndefined();
+  });
 });
 
 describe('timelineDuration', () => {

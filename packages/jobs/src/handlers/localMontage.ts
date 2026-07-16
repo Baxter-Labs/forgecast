@@ -104,7 +104,8 @@ export class LocalMontageJobHandler implements JobHandler {
       }
       await report(0.4);
 
-      // 2. Optional background music as the LAST input.
+      // 2. Optional audio tracks as the LAST inputs: background music, then a
+      // narration voice-over. With both, music is ducked under the narration.
       let audioPath: string | undefined;
       if (spec.musicUrl) {
         const res = await fetchFn(spec.musicUrl);
@@ -112,6 +113,14 @@ export class LocalMontageJobHandler implements JobHandler {
         const bytes = new Uint8Array(await res.arrayBuffer());
         audioPath = join(work, 'audio');
         writeFileSync(audioPath, bytes);
+      }
+      let voiceoverPath: string | undefined;
+      if (spec.voiceoverUrl) {
+        const res = await fetchFn(spec.voiceoverUrl);
+        if (!res.ok) throw new Error(`failed to fetch voiceover (${res.status})`);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        voiceoverPath = join(work, 'voiceover');
+        writeFileSync(voiceoverPath, bytes);
       }
 
       // 3. Build the ffmpeg args for a normalized concat. Every scene input is
@@ -128,9 +137,13 @@ export class LocalMontageJobHandler implements JobHandler {
         }
       }
 
-      const audioIndex = scenes.length;
+      const musicIndex = scenes.length;
       if (audioPath) {
         args.push('-i', audioPath);
+      }
+      const voiceoverIndex = scenes.length + (audioPath ? 1 : 0);
+      if (voiceoverPath) {
+        args.push('-i', voiceoverPath);
       }
 
       const filters: string[] = [];
@@ -141,17 +154,26 @@ export class LocalMontageJobHandler implements JobHandler {
         );
       }
       const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
-      const filterComplex = `${filters.join(';')};${concatInputs}concat=n=${scenes.length}:v=1:a=0[outv]`;
+      let filterComplex = `${filters.join(';')};${concatInputs}concat=n=${scenes.length}:v=1:a=0[outv]`;
+      // Both audio tracks: duck the music to 25% and mix the narration on top
+      // (mirrors the Remotion worker's <Audio volume={0.25}> behavior).
+      if (audioPath && voiceoverPath) {
+        filterComplex += `;[${musicIndex}:a]volume=0.25[m];[m][${voiceoverIndex}:a]amix=inputs=2:duration=first[outa]`;
+      }
       // TODO(v1): captions (drawtext) and per-scene transitions (xfade) are out of scope.
       args.push('-filter_complex', filterComplex);
 
       args.push('-map', '[outv]');
-      if (audioPath) {
-        args.push('-map', `${audioIndex}:a`, '-shortest');
+      if (audioPath && voiceoverPath) {
+        args.push('-map', '[outa]', '-shortest');
+      } else if (audioPath) {
+        args.push('-map', `${musicIndex}:a`, '-shortest');
+      } else if (voiceoverPath) {
+        args.push('-map', `${voiceoverIndex}:a`, '-shortest');
       }
 
       args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', String(fps), '-movflags', '+faststart');
-      if (audioPath) {
+      if (audioPath || voiceoverPath) {
         args.push('-c:a', 'aac');
       }
       args.push(outPath);

@@ -13,7 +13,10 @@ export interface MontageSpec {
   scenes: MontageScene[];
   aspectRatio: string; // '16:9' | '9:16' | '1:1'
   fps?: number;
+  /** @deprecated Never rendered by the worker. Synthesize upstream and pass `voiceoverUrl` instead. */
   voiceoverText?: string;
+  /** Public URL of a narration audio track. Rendered alongside `musicUrl` (music is ducked). */
+  voiceoverUrl?: string;
   musicUrl?: string;
 }
 
