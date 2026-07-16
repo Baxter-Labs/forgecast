@@ -126,6 +126,7 @@ const TOOLS: LlmTool[] = [
                   durationSec: { type: 'number', description: 'Seconds on screen (0.5–60).' },
                   caption: { type: 'string', description: 'Optional short overlay text.' },
                   transition: { type: 'string', description: '"fade" (safe default), "slide" or "none".' },
+                  cameraPreset: { type: 'string', description: 'Camera motion: "zoom-in", "zoom-out", "crash-zoom", "pan-left", "pan-right", "dutch", "handheld" or "none". Unset = stills get a gentle zoom-in.' },
                 },
                 required: ['assetId', 'durationSec'],
               },

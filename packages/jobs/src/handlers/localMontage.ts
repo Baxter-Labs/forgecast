@@ -160,7 +160,8 @@ export class LocalMontageJobHandler implements JobHandler {
       if (audioPath && voiceoverPath) {
         filterComplex += `;[${musicIndex}:a]volume=0.25[m];[m][${voiceoverIndex}:a]amix=inputs=2:duration=first[outa]`;
       }
-      // TODO(v1): captions (drawtext) and per-scene transitions (xfade) are out of scope.
+      // TODO(v1): captions (drawtext), per-scene transitions (xfade) and cameraPreset
+      // (zoompan) are out of scope here — the Remotion worker renders all three.
       args.push('-filter_complex', filterComplex);
 
       args.push('-map', '[outv]');

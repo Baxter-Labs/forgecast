@@ -766,7 +766,9 @@ async function buildSpecFromAssets(services: Services, assetIds: string[], aspec
     if (!asset) continue;
     const url = await resolveAssetUrl(services, id);
     if (!url) continue;
-    scenes.push({ url, kind: asset.type === 'video' ? 'video' as const : 'image' as const, durationSec });
+    const kind = asset.type === 'video' ? 'video' as const : 'image' as const;
+    // Gentle push-in on stills by default (the free "virtual camera").
+    scenes.push({ url, kind, durationSec, cameraPreset: kind === 'image' ? 'zoom-in' as const : 'none' as const });
   }
   return scenes.length > 0 ? { scenes, aspectRatio } : null;
 }
@@ -814,6 +816,9 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
     const scene: MontageScene = { url, kind: asset.type === 'video' ? 'video' : 'image', durationSec: clip.durationSec };
     if (clip.caption) scene.caption = clip.caption;
     if (clip.transition) scene.transition = clip.transition;
+    // Default virtual-camera move: a gentle push-in keeps stills alive. Defaulted
+    // here (not in the worker) so every spec is explicit and old specs render unchanged.
+    scene.cameraPreset = clip.cameraPreset ?? (scene.kind === 'image' ? 'zoom-in' : 'none');
     scenes.push(scene);
   }
   if (scenes.length === 0) return null;

@@ -10,12 +10,24 @@
 // Types (structurally identical to @forgecast/core montage.ts)
 // ---------------------------------------------------------------------------
 
+export type CameraPreset =
+  | 'none'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'crash-zoom'
+  | 'pan-left'
+  | 'pan-right'
+  | 'dutch'
+  | 'handheld';
+
 export interface MontageScene {
   url: string;
   kind: 'image' | 'video';
   durationSec: number;
   caption?: string;
   transition?: 'fade' | 'slide' | 'none';
+  /** Camera motion applied across the scene's duration (default: none). */
+  cameraPreset?: CameraPreset;
 }
 
 export interface MontageSpec {
@@ -41,6 +53,7 @@ export interface SceneFrames {
   url: string;
   caption?: string;
   transition: 'fade' | 'slide' | 'none';
+  cameraPreset: CameraPreset;
 }
 
 export interface Timeline {
@@ -129,6 +142,7 @@ export function planTimeline(spec: MontageSpec): Timeline {
       url: scene.url,
       caption: scene.caption,
       transition: scene.transition ?? 'fade',
+      cameraPreset: scene.cameraPreset ?? 'none',
     });
 
     cursor += durationInFrames;
@@ -137,4 +151,66 @@ export function planTimeline(spec: MontageSpec): Timeline {
   const totalDurationInFrames = Math.max(1, cursor);
 
   return { width, height, fps, totalDurationInFrames, scenes };
+}
+
+// ---------------------------------------------------------------------------
+// Virtual camera — pure per-frame transform math for the camera presets.
+// Kept out of React so it is unit-testable and deterministic (frame-driven,
+// no randomness — Remotion renders must be reproducible).
+// ---------------------------------------------------------------------------
+
+export interface CameraTransform {
+  /** Scale factor applied to the media (>= 1; moving presets overscan so pans never reveal edges). */
+  scale: number;
+  /** Horizontal translation in % of the frame width. */
+  x: number;
+  /** Vertical translation in % of the frame height. */
+  y: number;
+  /** Rotation in degrees. */
+  rotate: number;
+}
+
+const IDENTITY: CameraTransform = { scale: 1, x: 0, y: 0, rotate: 0 };
+
+/** Overscan base so pans/rotations never expose the frame edge. */
+const BASE = 1.12;
+
+const easeOutCubic = (t: number): number => 1 - (1 - t) ** 3;
+
+/**
+ * The camera position for `preset` at `frame` of a scene lasting
+ * `durationInFrames`. Progress is clamped to [0, 1]; 'none' is the identity.
+ */
+export function cameraTransform(preset: CameraPreset, frame: number, durationInFrames: number): CameraTransform {
+  const p = durationInFrames <= 1 ? 1 : Math.min(1, Math.max(0, frame / (durationInFrames - 1)));
+
+  switch (preset) {
+    case 'zoom-in':
+      return { ...IDENTITY, scale: BASE + 0.12 * p };
+    case 'zoom-out':
+      return { ...IDENTITY, scale: BASE + 0.12 * (1 - p) };
+    case 'crash-zoom': {
+      // Hard, fast push-in over the first 40% of the scene, then hold.
+      const sub = easeOutCubic(Math.min(1, p / 0.4));
+      return { ...IDENTITY, scale: BASE + 0.33 * sub };
+    }
+    case 'pan-left':
+      return { ...IDENTITY, scale: BASE, x: 4 - 8 * p };
+    case 'pan-right':
+      return { ...IDENTITY, scale: BASE, x: -4 + 8 * p };
+    case 'dutch':
+      // A slow roll onto the diagonal with a gentle push-in.
+      return { scale: BASE + 0.06 * p, x: 0, y: 0, rotate: 3 * p };
+    case 'handheld': {
+      // Deterministic drift — layered sines at unrelated frequencies read as
+      // an operator's sway without any randomness.
+      const x = 0.6 * Math.sin(frame / 7) + 0.25 * Math.sin(frame / 3.1);
+      const y = 0.5 * Math.cos(frame / 9) + 0.2 * Math.sin(frame / 4.3);
+      const rotate = 0.4 * Math.sin(frame / 11);
+      return { scale: BASE, x, y, rotate };
+    }
+    case 'none':
+    default:
+      return IDENTITY;
+  }
 }

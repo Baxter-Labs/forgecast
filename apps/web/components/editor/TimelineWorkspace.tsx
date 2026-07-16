@@ -8,7 +8,7 @@ import { useTimelineEditor } from '@/lib/use-timeline-editor';
 import { AppNav } from '@/components/AppNav';
 import { EditorAgent } from './EditorAgent';
 import {
-  TIMELINE_TRANSITIONS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
+  TIMELINE_TRANSITIONS, TIMELINE_CAMERA_PRESETS, newClipFrom, moveItem, moveItemTo, totalDurationSec,
   type TimelineUIClip,
 } from '@/lib/timeline-ui';
 
@@ -279,6 +279,17 @@ export function TimelineWorkspace() {
                     className={`${FIELD} px-1.5 py-1 cursor-pointer`}
                   >
                     {TIMELINE_TRANSITIONS.map((t) => <option key={t} value={t} style={{ background: '#221b16', color: '#f5eee6' }}>{t}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center justify-between gap-2 font-mono text-[10px] text-[var(--forge-faint)]">
+                  Camera
+                  <select
+                    value={selected.cameraPreset}
+                    onChange={(e) => updateClip(selected.id, { cameraPreset: e.target.value as TimelineUIClip['cameraPreset'] })}
+                    aria-label="Camera motion preset"
+                    className={`${FIELD} px-1.5 py-1 cursor-pointer`}
+                  >
+                    {TIMELINE_CAMERA_PRESETS.map((c) => <option key={c} value={c} style={{ background: '#221b16', color: '#f5eee6' }}>{c}</option>)}
                   </select>
                 </label>
                 <div className="flex items-center gap-2 pt-1">
