@@ -26,4 +26,13 @@ describe('edge (baxter-cloud) profile disables node-only montage/narrate handler
     expect(buildServices({ profile: 'baxter-cloud', voiceKey: 'k' }).narrateAvailable).toBe(false);
     expect(local.voiceAvailable).toBe(true);
   });
+
+  it('keyless edge deploy: the AI binding alone makes voice available (MeloTTS), narrate stays off', () => {
+    const runner = { run: async () => ({ audio: 'QUJD' }) };
+    const edge = buildServices({ profile: 'baxter-cloud', ai: runner, falKey: undefined, voiceKey: undefined });
+    expect(edge.voiceAvailable).toBe(true);
+    expect(edge.voiceProvider.name).toBe('cloudflare');
+    // The ffmpeg-mux gate is independent of the new keyless voice path.
+    expect(edge.narrateAvailable).toBe(false);
+  });
 });

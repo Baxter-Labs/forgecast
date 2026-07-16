@@ -16,6 +16,7 @@ export * from './publish/instagram';
 export * from './publish/linkedin';
 export * from './publish/youtube';
 export * from './montage/remotion';
+export * from './voice/cloudflareTts';
 export * from './voice/falTts';
 export * from './voice/voxcpm';
 export * from './transcribe/wisprflow';

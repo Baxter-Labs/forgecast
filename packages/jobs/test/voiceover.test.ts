@@ -46,6 +46,49 @@ describe('VoiceoverJobHandler', () => {
     expect(fetchFn).toHaveBeenCalledWith('https://cdn/tts1.mp3');
   });
 
+  it('decodes a data: URI audioUrl inline without fetching (sync Cloudflare TTS path)', async () => {
+    const storage = new InMemoryStorage();
+    const assets = new InMemoryAssetRepo();
+    const fetchFn = mp3Fetch();
+    const dataUri = `data:audio/mpeg;base64,${Buffer.from([7, 8, 9]).toString('base64')}`;
+    const provider: VoiceProvider = {
+      name: 'cloudflare', isAvailable: () => true,
+      async create() { return { taskId: dataUri }; },
+      async getTask(taskId): Promise<VoiceGenTask> { return { taskId, state: 'complete', audioUrl: taskId }; },
+    };
+    const handler = new VoiceoverJobHandler({
+      provider, storage, assets,
+      idGen: () => 'a2',
+      clock: () => 'T',
+      fetchFn, wait: noWait,
+    });
+    const job = newJob({ projectId: 'p1', kind: 'voiceover', provider: 'cloudflare', params: { text: 'hi' } }, { id: 'j1', now: 'T' });
+    const outcome = await handler.run(job, async () => {});
+    expect(outcome.assetId).toBe('a2');
+    expect(fetchFn).not.toHaveBeenCalled();
+    const stored = storage.read('projects/p1/audio/a2.mp3');
+    expect(Array.from(stored?.data ?? [])).toEqual([7, 8, 9]);
+  });
+
+  it('rejects a non-base64 data: URI with a clear error', async () => {
+    const provider: VoiceProvider = {
+      name: 'cloudflare', isAvailable: () => true,
+      async create() { return { taskId: 'data:audio/mpeg,notbase64' }; },
+      async getTask(taskId): Promise<VoiceGenTask> { return { taskId, state: 'complete', audioUrl: taskId }; },
+    };
+    const handler = new VoiceoverJobHandler({
+      provider,
+      storage: new InMemoryStorage(),
+      assets: new InMemoryAssetRepo(),
+      idGen: () => 'a1',
+      clock: () => 'T',
+      fetchFn: mp3Fetch(),
+      wait: noWait,
+    });
+    const job = newJob({ projectId: 'p1', kind: 'voiceover', provider: 'cloudflare', params: { text: 'x' } }, { id: 'j1', now: 'T' });
+    await expect(handler.run(job, async () => {})).rejects.toThrowError(/base64/i);
+  });
+
   it('throws without a text param', async () => {
     const handler = new VoiceoverJobHandler({
       provider: providerCompletingAfter(1),
