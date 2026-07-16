@@ -132,7 +132,7 @@ async function advanceVideoJob(services: Services, job: Job): Promise<Job> {
     return job; // transient — the next poll retries
   }
   if (task.state === 'failed') {
-    return services.jobs.update(job.id, { status: 'error', error: 'video provider reported failure', updatedAt: services.ids.nowIso() });
+    return services.jobs.update(job.id, { status: 'error', error: task.error ?? 'video provider reported failure', updatedAt: services.ids.nowIso() });
   }
   if (task.state !== 'complete' || !task.videoUrl) return job;
 
@@ -681,7 +681,7 @@ export async function generateVideo(services: Services, projectId: string, input
   // back to the right adapter (see advanceVideoJob).
   const availableVideo = services.videoProviders;
   if (availableVideo.length === 0) {
-    return { status: 503, body: { error: 'no video provider configured' } };
+    return { status: 503, body: { error: 'no video provider configured — add a FREE Hugging Face token for free open-model video (huggingface.co/settings/tokens, Settings → Keys), bring a fal/Replicate key, run SkyReels on your own GPU (SKYREELS_URL), or render a stills-reel montage (free, unlimited)' } };
   }
   const defaultVideo = services.videoProvider.name;
   const requestedVideo = typeof fields.provider === 'string' && fields.provider.length > 0 ? fields.provider : defaultVideo;

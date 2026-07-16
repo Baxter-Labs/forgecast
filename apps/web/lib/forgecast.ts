@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, HfSpacesVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -81,6 +81,8 @@ export interface BuildServicesOptions {
   openaiKey?: string;
   /** Replicate token for the non-fal video provider. Falls back to REPLICATE_API_TOKEN env. */
   replicateKey?: string;
+  /** Hugging Face token for the FREE ZeroGPU-Spaces video provider. Falls back to HF_TOKEN env. */
+  hfToken?: string;
   /** Cloudflare Workers AI binding (env.AI) — powers the keyless default image/video
    *  provider. Present on the Cloudflare deploy; absent (undefined) off-Workers. */
   ai?: WorkersAiRunner;
@@ -237,10 +239,14 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   // Optional self-hosted SkyReels-V2 (bring-your-own-GPU). Available only when
   // SKYREELS_URL points at a running worker (see workers/skyreels).
   const skyReelsVideoProvider = new SkyReelsVideoProvider({ fetchFn: opts.fetchFn });
+  // FREE open-model video via Hugging Face ZeroGPU Spaces (LTX / Wan). Available
+  // with a (free) HF token — per-user quota — or HF_SPACES_ALLOW_ANON for self-hosts.
+  const hfSpacesVideoProvider = new HfSpacesVideoProvider({ fetchFn: opts.fetchFn, ...(opts.hfToken !== undefined ? { token: opts.hfToken } : {}) });
   videoRegistry.register(cloudflareVideoProvider);
   videoRegistry.register(falVideoProvider);
   videoRegistry.register(replicateVideoProvider);
   videoRegistry.register(skyReelsVideoProvider);
+  videoRegistry.register(hfSpacesVideoProvider);
   // Default pick when a request names no provider. An operator can pin any available
   // provider via FORGECAST_VIDEO_PROVIDER (e.g. a self-hosted 'skyreels'); otherwise a
   // configured BYO key wins (fal, then Replicate) so a user's own key is used "on top";
@@ -253,7 +259,9 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
         ? falVideoProvider
         : replicateVideoProvider.isAvailable()
           ? replicateVideoProvider
-          : cloudflareVideoProvider;
+          : hfSpacesVideoProvider.isAvailable()
+            ? hfSpacesVideoProvider
+            : cloudflareVideoProvider;
   const videoProviders = videoRegistry.available();
   // Node-only job handlers (ffmpeg via child_process/fs) can't run on Cloudflare Workers.
   // On the edge profile, montage needs the remote Remotion worker and narrate is unavailable.
@@ -414,6 +422,7 @@ export async function getServicesForUser(ownerId: string, base: Services = getSe
     if (own.wisprflow !== undefined) opts.wisprKey = own.wisprflow;
     if (own.openai !== undefined) opts.openaiKey = own.openai;
     if (own.replicate !== undefined) opts.replicateKey = own.replicate;
+    if (own.hf !== undefined) opts.hfToken = own.hf;
     services = buildServices(opts);
   }
   userServicesCache.set(ownerId, { at: Date.now(), services });
