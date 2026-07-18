@@ -1,3 +1,4 @@
+import { ANGLE_PRESETS, LIGHT_PRESETS } from '@forgecast/core';
 import type { Services } from './forgecast';
 import type { ApiResult } from './api';
 import { LOCAL_OWNER } from './auth-guard';
@@ -7,6 +8,7 @@ import {
   searchFootage, listAssets, getAsset, getJob,
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
+  reangleAsset, relightAsset,
   createCharacter, listCharacters, deleteCharacter, generatePresenter,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
@@ -391,6 +393,36 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const asset = await ownedAsset(services, userId, args.assetId);
       return unwrap(await removeBackgroundAsset(services, asset.projectId, { assetId: asset.id }));
+    },
+  },
+  {
+    name: 'forgecast_reangle_image',
+    description:
+      `Re-shoot an image asset you own from a different CAMERA ANGLE — the subject, scene and lighting stay identical (Higgsfield-Relight-class re-angling). Pass a preset (${ANGLE_PRESETS.map((p) => p.id).join('|')}) and/or a custom instruction. Synchronous — returns { job, asset } with the new asset. Args: assetId (must be an image), preset?, instruction?.`,
+    inputSchema: obj({
+      assetId: { type: 'string', description: 'An image asset id you own.' },
+      preset: { type: 'string', enum: ANGLE_PRESETS.map((p) => p.id), description: 'A one-click camera-angle preset.' },
+      instruction: { type: 'string', description: 'Optional custom camera instruction (alone, or refining the preset).' },
+    }, ['assetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const asset = await ownedAsset(services, userId, args.assetId);
+      return unwrap(await reangleAsset(services, asset.projectId, { assetId: asset.id, preset: str(args.preset), instruction: str(args.instruction) }));
+    },
+  },
+  {
+    name: 'forgecast_relight_image',
+    description:
+      `RELIGHT an image asset you own — only the lighting changes; subject, composition and camera stay identical. Pass a preset (${LIGHT_PRESETS.map((p) => p.id).join('|')}) and/or a custom instruction. Synchronous — returns { job, asset } with the new asset. Args: assetId (must be an image), preset?, instruction?.`,
+    inputSchema: obj({
+      assetId: { type: 'string', description: 'An image asset id you own.' },
+      preset: { type: 'string', enum: LIGHT_PRESETS.map((p) => p.id), description: 'A one-click lighting preset.' },
+      instruction: { type: 'string', description: 'Optional custom lighting instruction (alone, or refining the preset).' },
+    }, ['assetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const asset = await ownedAsset(services, userId, args.assetId);
+      return unwrap(await relightAsset(services, asset.projectId, { assetId: asset.id, preset: str(args.preset), instruction: str(args.instruction) }));
     },
   },
   {

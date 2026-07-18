@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Download, Sparkles, Pencil, Scissors, Film, Layers, Mic,
-  ExternalLink, Check, X, AlertCircle,
+  ExternalLink, Check, X, AlertCircle, Camera, Sun,
 } from 'lucide-react';
+import { ANGLE_PRESETS, LIGHT_PRESETS, type ReimaginePreset } from '@forgecast/core';
 import { useAssetEditor } from '@/lib/use-asset-editor';
 import { BeforeAfter } from './BeforeAfter';
 
@@ -24,6 +25,10 @@ export function AssetEditor({ assetId }: Props) {
   const [editPrompt, setEditPrompt] = useState('');
   const [narrateOpen, setNarrateOpen] = useState(false);
   const [narrateText, setNarrateText] = useState('');
+  const [anglePreset, setAnglePreset] = useState<string | null>(null);
+  const [angleCustom, setAngleCustom] = useState('');
+  const [lightPreset, setLightPreset] = useState<string | null>(null);
+  const [lightCustom, setLightCustom] = useState('');
   const [result, setResult] = useState<{ id: string; kind: 'image' | 'video' } | null>(null);
 
   const isImage = asset?.type === 'image';
@@ -174,6 +179,42 @@ export function AssetEditor({ assetId }: Props) {
                 <Scissors size={15} className="text-[var(--ember-1)]" /> Remove background
               </button>
 
+              <PresetSection
+                title="Angle"
+                icon={<Camera size={13} className="text-[var(--ember-1)]" aria-hidden />}
+                presets={ANGLE_PRESETS}
+                activeId={anglePreset}
+                disabled={!!busy || !availability.image}
+                unavailableHint={!availability.image ? 'Image editing not configured (set FAL_KEY)' : undefined}
+                onPreset={async (p) => { setAnglePreset(p.id); await run(() => ed.reangle({ preset: p.id }), 'image'); }}
+                custom={angleCustom}
+                setCustom={setAngleCustom}
+                onCustom={async () => {
+                  const t = angleCustom.trim(); if (!t) return;
+                  setAnglePreset(null); setAngleCustom('');
+                  await run(() => ed.reangle({ instruction: t }), 'image');
+                }}
+                placeholder="custom angle — e.g. 'over-the-shoulder from the left'"
+              />
+
+              <PresetSection
+                title="Light"
+                icon={<Sun size={13} className="text-[var(--ember-1)]" aria-hidden />}
+                presets={LIGHT_PRESETS}
+                activeId={lightPreset}
+                disabled={!!busy || !availability.image}
+                unavailableHint={!availability.image ? 'Image editing not configured (set FAL_KEY)' : undefined}
+                onPreset={async (p) => { setLightPreset(p.id); await run(() => ed.relight({ preset: p.id }), 'image'); }}
+                custom={lightCustom}
+                setCustom={setLightCustom}
+                onCustom={async () => {
+                  const t = lightCustom.trim(); if (!t) return;
+                  setLightPreset(null); setLightCustom('');
+                  await run(() => ed.relight({ instruction: t }), 'image');
+                }}
+                placeholder="custom lighting — e.g. 'moonlight through blinds'"
+              />
+
               <button onClick={() => run(ed.animate, 'video')} disabled={!!busy || !availability.video} className={RAIL} style={railStyle()} aria-label="Animate to video" title={!availability.video ? 'Video provider not configured (set FAL_KEY_VIDEO)' : 'Animate this image into a video'}>
                 <Film size={15} className="text-[var(--ember-1)]" /> Animate → video
               </button>
@@ -244,6 +285,86 @@ function Media({ id, type }: { id: string; type: 'image' | 'video' | 'audio' }) 
   }
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt="asset preview" className="w-full max-h-[70vh] object-contain block" />;
+}
+
+/**
+ * A rail section of one-click preset chips (camera re-angle / scene relight)
+ * plus a small custom-instruction input. Chips fire the op immediately; the
+ * active chip carries aria-pressed in the house segmented-chip style.
+ */
+function PresetSection({
+  title, icon, presets, activeId, disabled, unavailableHint, onPreset, custom, setCustom, onCustom, placeholder,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  presets: readonly ReimaginePreset[];
+  activeId: string | null;
+  disabled: boolean;
+  unavailableHint?: string;
+  onPreset: (p: ReimaginePreset) => void;
+  custom: string;
+  setCustom: (v: string) => void;
+  onCustom: () => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="panel p-3 flex flex-col gap-2" style={{ borderColor: 'var(--forge-border)' }}>
+      <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] m-0" title={unavailableHint}>
+        {icon} {title}
+      </p>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${title} presets`}>
+        {presets.map((p) => {
+          const selected = p.id === activeId;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPreset(p)}
+              disabled={disabled}
+              aria-pressed={selected}
+              title={unavailableHint ?? p.instruction}
+              className="font-mono text-[10px] px-2.5 py-1.5 rounded border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={selected ? {
+                borderColor: 'var(--ember-2)',
+                color: 'var(--ember-1)',
+                boxShadow: '0 0 12px var(--ember-glow)',
+                background: 'rgba(255,122,26,0.06)',
+              } : {
+                borderColor: 'var(--forge-border)',
+                color: 'var(--forge-faint)',
+                background: 'transparent',
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="text"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (!disabled) onCustom(); } }}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          disabled={disabled}
+          title={unavailableHint}
+          className="flex-1 font-mono text-[10px] px-2.5 py-2 rounded-lg border bg-transparent outline-none min-w-0 disabled:opacity-40"
+          style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
+        />
+        <button
+          onClick={onCustom}
+          disabled={disabled || !custom.trim()}
+          aria-label={`Apply custom ${title.toLowerCase()} instruction`}
+          className="p-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)' }}
+        >
+          <Check size={13} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function InlinePrompt({

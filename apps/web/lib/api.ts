@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS } from '@forgecast/core';
-import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset } from '@forgecast/core';
 import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
@@ -1367,6 +1367,112 @@ export async function editAsset(
   const finished = await services.runner.run(job.id);
   const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
   return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+// ── Re-angle & Re-light (Higgsfield-Relight-class ops on still images) ────────
+// Both compose a precise edit instruction from a house preset and/or a custom
+// instruction, then reuse the existing `edit` job pipeline — only the model
+// routing differs per op.
+
+/** Camera re-angling: a LoRA endpoint purpose-trained for multi-angle re-shots. */
+const REANGLE_MODEL = 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles';
+/** Scene relighting: IC-Light v2 (prompt + image_url → relit image). */
+const RELIGHT_MODEL = 'fal-ai/iclight-v2';
+
+async function reimagineAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; preset?: unknown; instruction?: unknown },
+  cfg: {
+    op: 'reangle' | 'relight';
+    presets: readonly ReimaginePreset[];
+    typeError: string;
+    /** Model for the edit job; undefined → the edit handler's default editor. */
+    model: (fromPreset: boolean) => string | undefined;
+  },
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!input.assetId) return { status: 400, body: { error: 'assetId is required' } };
+
+  const asset = await services.assets.get(input.assetId);
+  // A foreign asset (another project's) is indistinguishable from a missing one.
+  if (!asset || asset.projectId !== projectId) return { status: 404, body: { error: 'asset not found' } };
+  if (asset.type !== 'image') return { status: 400, body: { error: cfg.typeError } };
+
+  if (!services.imageRegistry.available().includes('fal')) {
+    return { status: 503, body: { error: 'image provider not configured (set FAL_KEY)' } };
+  }
+
+  const preset = typeof input.preset === 'string' && input.preset.length > 0 ? input.preset : undefined;
+  const custom = typeof input.instruction === 'string' ? input.instruction : undefined;
+  if (custom) {
+    const blocked = guardText(custom);
+    if (blocked) return blocked;
+  }
+  const composed = composeReimagineInstruction(cfg.presets, { preset, instruction: custom });
+  if (!composed.ok) return { status: 400, body: { error: composed.error } };
+
+  const imageUrl = await resolveAssetUrl(services, input.assetId);
+  if (!imageUrl) return { status: 404, body: { error: 'asset has no stored bytes' } };
+
+  const model = cfg.model(composed.fromPreset);
+  const job = await services.jobs.create(
+    newJob(
+      {
+        projectId,
+        kind: 'edit',
+        provider: 'fal',
+        params: {
+          imageUrl,
+          prompt: composed.instruction,
+          sourceAssetId: input.assetId,
+          op: cfg.op,
+          ...(preset ? { preset } : {}),
+          ...(model ? { model } : {}),
+        },
+      },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  const finished = await services.runner.run(job.id);
+  const newAssetResult = finished.resultAssetId ? await services.assets.get(finished.resultAssetId) : null;
+  return { status: 200, body: { job: finished, asset: newAssetResult } };
+}
+
+/**
+ * Re-shoot an image from a different camera angle (subject, scene and lighting
+ * held constant). A preset routes to the multi-angle LoRA editor; a custom-only
+ * instruction runs on the default instruction editor.
+ */
+export async function reangleAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; preset?: unknown; instruction?: unknown },
+): Promise<ApiResult> {
+  return reimagineAsset(services, projectId, input, {
+    op: 'reangle',
+    presets: ANGLE_PRESETS,
+    typeError: 'only image assets can be re-angled',
+    model: (fromPreset) => (fromPreset ? REANGLE_MODEL : undefined),
+  });
+}
+
+/**
+ * Relight an image's scene (subject, composition and camera held constant).
+ * Always routes to the dedicated relighting model.
+ */
+export async function relightAsset(
+  services: Services,
+  projectId: string,
+  input: { assetId?: string; preset?: unknown; instruction?: unknown },
+): Promise<ApiResult> {
+  return reimagineAsset(services, projectId, input, {
+    op: 'relight',
+    presets: LIGHT_PRESETS,
+    typeError: 'only image assets can be relit',
+    model: () => RELIGHT_MODEL,
+  });
 }
 
 // Produces N alternate takes of an image by re-running the edit model with
