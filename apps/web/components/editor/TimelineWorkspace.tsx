@@ -293,10 +293,10 @@ export function TimelineWorkspace() {
                   </select>
                 </label>
                 <div className="flex items-center gap-2 pt-1">
-                  <button type="button" onClick={() => stepClip(selected.id, -1)} aria-label="Move clip earlier" className="w-8 h-8 rounded border flex items-center justify-center" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)' }}>
+                  <button type="button" onClick={() => stepClip(selected.id, -1)} aria-label="Move clip earlier" className="tap-target rounded border" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)' }}>
                     <ChevronLeft size={14} aria-hidden="true" />
                   </button>
-                  <button type="button" onClick={() => stepClip(selected.id, 1)} aria-label="Move clip later" className="w-8 h-8 rounded border flex items-center justify-center" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)' }}>
+                  <button type="button" onClick={() => stepClip(selected.id, 1)} aria-label="Move clip later" className="tap-target rounded border" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-muted)' }}>
                     <ChevronRight size={14} aria-hidden="true" />
                   </button>
                   <span className="flex-1" />

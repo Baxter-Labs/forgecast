@@ -88,7 +88,8 @@ export function PublishPanel({ asset, publishers, onPublish, onGenerateAdCopy, o
         </h3>
         <button
           onClick={onClose}
-          className="p-1.5 rounded text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-[var(--forge-surface-2)] transition-colors"
+          aria-label="Close publish panel"
+          className="tap-target rounded text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-[var(--forge-surface-2)] transition-colors"
         >
           <X size={14} />
         </button>
@@ -109,6 +110,7 @@ export function PublishPanel({ asset, publishers, onPublish, onGenerateAdCopy, o
               src={`/api/assets/${asset.id}/raw`}
               alt={prompt}
               className="w-full h-full object-cover"
+              loading="lazy"
             />
           )}
         </div>

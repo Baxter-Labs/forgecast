@@ -400,10 +400,11 @@ export function ForgePanel({
             <button
               type="button"
               onClick={() => setNewCampaignMode(false)}
+              aria-label="Cancel new campaign"
               className="font-mono text-xs px-3 py-2 rounded-lg border"
               style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           </div>
         ) : (
@@ -428,11 +429,12 @@ export function ForgePanel({
             <button
               type="button"
               title="New campaign"
+              aria-label="New campaign"
               onClick={() => setNewCampaignMode(true)}
-              className="w-9 h-9 flex-shrink-0 rounded-lg border font-mono text-lg flex items-center justify-center transition-all"
+              className="tap-target flex-shrink-0 rounded-lg border font-mono text-lg transition-all"
               style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)', background: 'transparent' }}
             >
-              +
+              <span aria-hidden="true">+</span>
             </button>
           </div>
         )}

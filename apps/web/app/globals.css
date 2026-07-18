@@ -7,7 +7,14 @@
   --forge-border: #322821;
   --forge-text: #f5eee6;
   --forge-muted: #a2968a;
-  --forge-faint: #8c7f72;
+  /* Raised from #8c7f72 so faint body text clears WCAG AA 4.5:1 even on the
+     lightest surface (--forge-surface-2): 4.36:1 → 5.05:1. Still visibly the
+     faintest of the three text tokens (muted = 5.88:1 on the same bg). */
+  --forge-faint: #978a7d;
+  /* Stacking scale — keep modal/lightbox/nav layering intentional (see below). */
+  --z-nav: 40;
+  --z-modal: 100;
+  --z-lightbox: 200;
   --ember-1: #ffc24b;
   --ember-2: #ff7a1a;
   --ember-3: #e5331b;
@@ -103,6 +110,22 @@ body::before {
   outline: 2px solid var(--ember-2);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Stacking utilities — apply the intentional scale so overlays never tie.
+   Lightbox (200) sits above modals (100), which sit above the fixed grain
+   overlay (body::before, z-index 50) and nav. */
+.z-modal { z-index: var(--z-modal); }
+.z-lightbox { z-index: var(--z-lightbox); }
+
+/* Minimum 44×44 tap target for icon-only controls (WCAG 2.5.5). Centers the
+   glyph so growing the hit area doesn't shift the icon. */
+.tap-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sr-only {
