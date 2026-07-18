@@ -58,6 +58,9 @@ export const D1_SCHEMA: string[] = [
      name TEXT NOT NULL,
      ref_keys TEXT NOT NULL,
      description TEXT,
+     lora_url TEXT,
+     lora_status TEXT,
+     lora_task TEXT,
      created_at TEXT NOT NULL
    )`,
   `CREATE TABLE IF NOT EXISTS user_keys (
@@ -83,7 +86,12 @@ export function ensureD1Schema(db: D1Like): Promise<void> {
     for (const statement of D1_SCHEMA) await db.prepare(statement).run();
     // Additive migrations for databases created before a column existed;
     // "duplicate column" failures are the expected no-op.
-    for (const alter of ['ALTER TABLE projects ADD COLUMN owner_id TEXT']) {
+    for (const alter of [
+      'ALTER TABLE projects ADD COLUMN owner_id TEXT',
+      'ALTER TABLE characters ADD COLUMN lora_url TEXT',
+      'ALTER TABLE characters ADD COLUMN lora_status TEXT',
+      'ALTER TABLE characters ADD COLUMN lora_task TEXT',
+    ]) {
       await db.prepare(alter).run().catch(() => undefined);
     }
   })();

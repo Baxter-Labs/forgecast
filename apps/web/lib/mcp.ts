@@ -11,7 +11,7 @@ import {
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   reangleAsset, relightAsset,
-  createCharacter, listCharacters, deleteCharacter, generatePresenter,
+  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
 } from './api';
@@ -466,8 +466,19 @@ TOOLS.push(
     inputSchema: obj({}),
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async ({ services, userId }) => {
-      const body = unwrap(await listCharacters(services, userId)) as { characters: Array<{ id: string; name: string; description?: string; refKeys: string[]; createdAt: string }> };
-      return { characters: body.characters.map((c) => ({ id: c.id, name: c.name, ...(c.description ? { description: c.description } : {}), refs: c.refKeys.length, createdAt: c.createdAt })), count: body.characters.length };
+      const body = unwrap(await listCharacters(services, userId)) as { characters: Array<{ id: string; name: string; description?: string; refKeys: string[]; loraStatus?: string; createdAt: string }> };
+      return { characters: body.characters.map((c) => ({ id: c.id, name: c.name, ...(c.description ? { description: c.description } : {}), refs: c.refKeys.length, ...(c.loraStatus ? { loraStatus: c.loraStatus } : {}), createdAt: c.createdAt })), count: body.characters.length };
+    },
+  },
+  {
+    name: 'forgecast_train_character',
+    description:
+      'Train a LoRA on a character\u2019s reference portraits (the trained-identity tier \u2014 identity holds under bigger scene/pose/lighting changes than reference conditioning). ASYNC (~5\u201315 min): loraStatus moves training \u2192 ready; poll with forgecast_list_characters \u2014 each read advances it. Once ready, generation tools automatically load the LoRA for this character. Args: characterId. Requires a fal key (503 with guidance otherwise).',
+    inputSchema: obj({ characterId: { type: 'string', description: 'Character to train (forgecast_list_characters).' } }, ['characterId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const body = unwrap(await trainCharacter(services, userId, str(args.characterId) ?? '')) as { character: { id: string; name: string; loraStatus?: string } };
+      return { character: { id: body.character.id, name: body.character.name, loraStatus: body.character.loraStatus } };
     },
   },
   {

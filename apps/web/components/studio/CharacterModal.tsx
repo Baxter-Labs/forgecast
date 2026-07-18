@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Users, Check, AlertCircle, Trash2 } from 'lucide-react';
+import { X, Users, Check, AlertCircle, Trash2, Sparkles } from 'lucide-react';
 import type { Character, StudioAsset } from '@/lib/use-forgecast';
 
 const MAX_REFS = 4;
@@ -12,6 +12,7 @@ interface Props {
   characters: Character[];
   assets: StudioAsset[];
   onCreate: (input: { name: string; description?: string; refAssetIds: string[] }) => Promise<{ character?: Character; error?: string }>;
+  onTrain: (id: string) => Promise<{ character?: Character; error?: string }>;
   onDelete: (id: string) => Promise<{ ok: boolean; error?: string }>;
   onRefresh: () => void;
 }
@@ -28,18 +29,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function CharacterModal({ open, onClose, characters, assets, onCreate, onDelete, onRefresh }: Props) {
+export function CharacterModal({ open, onClose, characters, assets, onCreate, onTrain, onDelete, onRefresh }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [refIds, setRefIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [trainingId, setTrainingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Re-sync the cast whenever the modal opens (mirrors BrandKitModal's open sync).
   useEffect(() => { if (open) { setError(null); setConfirmId(null); onRefresh(); } }, [open, onRefresh]);
+
+  // While a LoRA is training (~5–15 min), re-read the cast periodically — each
+  // server read advances the training by one provider poll.
+  const anyTraining = characters.some((c) => c.loraStatus === 'training');
+  useEffect(() => {
+    if (!open || !anyTraining) return;
+    const t = setInterval(onRefresh, 10_000);
+    return () => clearInterval(t);
+  }, [open, anyTraining, onRefresh]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +79,14 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
     setBusy(false);
     if (r.error) { setError(r.error); return; }
     setName(''); setDescription(''); setRefIds([]);
+  }
+
+  async function handleTrain(id: string) {
+    if (trainingId) return;
+    setTrainingId(id); setError(null);
+    const r = await onTrain(id);
+    setTrainingId(null);
+    if (r.error) setError(r.error);
   }
 
   async function handleDelete(id: string) {
@@ -135,6 +154,26 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
                       {c.description ? <> · {c.description}</> : null}
                     </p>
                   </div>
+                  {c.loraStatus === 'ready' ? (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded border shrink-0" style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)', background: 'rgba(255,122,26,0.08)' }}>
+                      trained ✓
+                    </span>
+                  ) : c.loraStatus === 'training' ? (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded border text-[var(--forge-faint)] shrink-0" style={{ borderColor: 'var(--forge-border)' }}>
+                      training…
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => void handleTrain(c.id)}
+                      disabled={trainingId === c.id}
+                      aria-label={`Train ${c.name}`}
+                      title="Train a LoRA on the reference portraits — identity holds under bigger scene changes (needs a fal key, ~5–15 min)"
+                      className="font-mono text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded border inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 shrink-0 text-[var(--forge-faint)] hover:text-[var(--ember-1)]"
+                      style={{ borderColor: 'var(--forge-border)', background: 'transparent' }}
+                    >
+                      <Sparkles size={11} /> {trainingId === c.id ? 'starting…' : c.loraStatus === 'error' ? 'retrain' : 'train'}
+                    </button>
+                  )}
                   {confirmId === c.id ? (
                     <span className="flex items-center gap-1.5 shrink-0">
                       <button
