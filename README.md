@@ -186,6 +186,9 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Video generation** — text→video **and** image→video, model-agnostic (WAN, Veo 3.1, PixVerse, Kling, Seedance, Hailuo).
 - ✅ **Voice-over** — self-hosted **VoxCPM-2** (open-source, Apache-2.0); cloud fal TTS only as a fallback.
 - ✅ **Narrated video** — voice-over muxed onto a clip via in-process ffmpeg. **AI presenter** — talking-head avatar (OmniHuman).
+- ✅ **Characters (a reusable cast)** — create a **persistent identity** from 1–4 photos and reuse it across image generation, image→video, and the talking presenter — the same face, consistent everywhere; owner-scoped, reusable across every project. Reference-based (no face-swapping onto third-party footage).
+- ✅ **Storyboard / Director** — a brief → an LLM shot list → an identity-consistent frame per shot (starring your cast) → animate the shots → assemble into the timeline as a finished film with voice-over. The one-click *idea → film* surface.
+- ✅ **Re-angle & Re-light** — one-click camera re-angling (Qwen-Image-Edit) and scene relighting (IC-Light v2) as preset chips in the asset editor, plus custom instructions.
 - ✅ **Montage** — in-process ffmpeg by default, or a Remotion render worker for longer pieces.
 - ✅ **Timeline video editor** — arrange a project's assets into a video (per-clip duration, captions, transitions, background music) in the Studio's **Editor** tab, or fully **agent-drivable over MCP** (get / set / render the timeline) — the same saved timeline either way, rendered through the Remotion/ffmpeg pipeline — and the **in-app agent cuts in it too** (`/editor`'s agent panel: describe the edit, watch the timeline rearrange). Works **keyless** (bundled ffmpeg + your uploaded assets). A clean-room take on [palmier-pro](https://github.com/palmier-io/palmier-pro)'s agent-native editor.
 - ✅ **Tool-calling agent** — reads your product website, brainstorms, decides b-roll vs presenter, generates, and publishes. It also **works the video editor**: ask it to cut existing assets and it arranges the timeline (clips, durations, captions, transitions) and renders — from the Studio chat or the agent panel inside `/editor`.
@@ -199,7 +202,7 @@ Dependencies point **inward** to `core`'s contracts — so a new provider, a Pos
 - ✅ **Durable storage** — SQLite + filesystem by default; Cloudflare D1 + R2 as an optional profile.
 - ✅ **Studio UI** — a distinctive "Molten Forge" front-end, responsive, accessible, with graceful error states.
 
-**499 tests, strict TypeScript, every commit a passing TDD cycle.**
+**~600 tests, strict TypeScript, every commit a passing TDD cycle.**
 
 ---
 
@@ -554,7 +557,14 @@ Forgecast is built to be **handed to non-technical users as a hosted website** �
 | **M2 · Distribution** | Cross-platform posting — Instagram, LinkedIn, YouTube, OmniSocials | ✅ done |
 | **M3 · Agent** | "Describe it → it makes it" — a tool-calling agent over the platform | ✅ done |
 | **M4 · Montage + Voice** | Longer-form montage (Remotion/ffmpeg) + voice-over (VoxCPM-2) + AI presenter | ✅ done |
-| **Next** | More self-hosted/local adapters (Stable Diffusion image, Piper TTS), scheduling, analytics | 🔜 |
+| **M5 · Free-first** | Keyless voice (MeloTTS), free open-model video (HF Spaces), camera-motion montage | ✅ done |
+| **M6 · Studio parity** | **Characters** (a reusable cast) · **Storyboard / Director** · **Re-angle & Re-light** — matching Higgsfield / LTX Studio / OpenArt, open-source and free-by-default | ✅ done |
+| **Next** | Cinema preset rack · global Library + Brainstorm boards · **Character LoRA training** (trained-identity "Soul-ID" tier) · lip-sync / motion-retarget / SFX backlog | 🔜 |
+
+**→ Continuing the build? Start with [`docs/ROADMAP.md`](docs/ROADMAP.md)** — the engineering
+handoff: what's next with exact file-level insertion points, the "8 seams" extension pattern,
+verified model ids per feature, verification gates, and known deferred items. Written to be
+picked up directly by a coding agent or a new engineer.
 
 ---
 
