@@ -32,4 +32,26 @@ export class D1AssetRepo implements AssetRepo {
     const { results } = await this.db.prepare('SELECT * FROM assets WHERE project_id = ? ORDER BY created_at ASC, id ASC').bind(projectId).all<AssetRow>();
     return results.map(toAsset);
   }
+  async listByOwner(ownerId: string): Promise<Asset[]> {
+    await ensureD1Schema(this.db);
+    const { results } = await this.db
+      .prepare(
+        `SELECT a.* FROM assets a JOIN projects p ON a.project_id = p.id
+         WHERE COALESCE(p.owner_id, 'local') = ? ORDER BY a.created_at DESC, a.id DESC`,
+      )
+      .bind(ownerId)
+      .all<AssetRow>();
+    return results.map(toAsset);
+  }
+  async update(id: string, patch: Partial<Omit<Asset, 'id'>>): Promise<Asset> {
+    await ensureD1Schema(this.db);
+    const existing = await this.get(id);
+    if (!existing) throw new Error(`asset not found: ${id}`);
+    const a: Asset = { ...existing, ...patch, id };
+    await this.db
+      .prepare('UPDATE assets SET project_id = ?, type = ?, provider = ?, params = ?, storage_key = ?, status = ?, created_at = ? WHERE id = ?')
+      .bind(a.projectId, a.type, a.provider, JSON.stringify(a.params), a.storageKey, a.status, a.createdAt, id)
+      .run();
+    return a;
+  }
 }
