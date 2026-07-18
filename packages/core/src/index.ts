@@ -23,6 +23,7 @@ export * from './contentguard';
 export * from './editor';
 export * from './storyboard';
 export * from './reimagine';
+export * from './cinema';
 export * from './character';
 export * from './auth';
 export * from './secrets';

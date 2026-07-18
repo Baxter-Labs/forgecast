@@ -56,7 +56,7 @@ function normalizeAsset(a: RawAsset): StudioAsset {
 }
 
 interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number; provider?: string; characterId?: string }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string; provider?: string; characterId?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string; provider?: string; characterId?: string; cinema?: { shot?: string; lens?: string; move?: string; look?: string } }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
@@ -226,7 +226,7 @@ export function useForgecast() {
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId, provider, characterId }: GenerateVideoArgs): Promise<string | null> => {
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId, provider, characterId, cinema }: GenerateVideoArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
@@ -234,6 +234,7 @@ export function useForgecast() {
       if (provider) body.provider = provider;
       if (imageAssetId) body.imageAssetId = imageAssetId;
       if (characterId) body.characterId = characterId;
+      if (cinema && Object.keys(cinema).length > 0) body.cinema = cinema;
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
