@@ -17,6 +17,8 @@ export interface ImageJobParams {
   model?: string;
   /** Provider-specific request params (e.g. `aspect_ratio` for Nano Banana). */
   extra?: Record<string, unknown>;
+  /** Reference portraits for identity-consistent generation (character refs). */
+  refImageUrls?: string[];
 }
 
 export interface ImageJobHandlerDeps {
@@ -49,6 +51,7 @@ export class ImageJobHandler implements JobHandler {
       height: params.height,
       model: params.model,
       extra: params.extra,
+      ...(Array.isArray(params.refImageUrls) && params.refImageUrls.length > 0 ? { refImageUrls: params.refImageUrls } : {}),
     });
     await report(0.6);
 

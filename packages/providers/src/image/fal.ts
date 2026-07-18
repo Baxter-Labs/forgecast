@@ -38,6 +38,15 @@ export class FalImageProvider implements ImageProvider {
   async generateImage(input: GenerateImageInput): Promise<ImageResult> {
     if (!this.isAvailable()) throw new ProviderUnavailableError(this.name);
 
+    // Reference portraits (character consistency): multi-reference models take
+    // `image_urls`; Kontext-class instruction editors take a single `image_url`.
+    // When refs are present with no explicit model, route to the multi-reference
+    // editor rather than the text-only default.
+    const model = input.model ?? (input.refImageUrls?.length ? 'fal-ai/nano-banana/edit' : this.model);
+    const refs = input.refImageUrls ?? [];
+    const refFields: Record<string, unknown> =
+      refs.length === 0 ? {} : /kontext/i.test(model) ? { image_url: refs[0] } : { image_urls: refs };
+
     // `image_size` is derived only when BOTH dimensions are given (use != null
     // so a literal 0 isn't silently dropped). `extra` is spread last so callers
     // can override any mapped field (prompt, image_size).
@@ -46,10 +55,9 @@ export class FalImageProvider implements ImageProvider {
       ...(input.width != null && input.height != null
         ? { image_size: { width: input.width, height: input.height } }
         : {}),
+      ...refFields,
       ...input.extra,
     };
-
-    const model = input.model ?? this.model;
     const res = await this.fetchFn(`https://fal.run/${model}`, {
       method: 'POST',
       headers: {

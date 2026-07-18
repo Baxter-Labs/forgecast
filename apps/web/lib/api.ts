@@ -1,5 +1,6 @@
 import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline } from '@forgecast/core';
-import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, Character } from '@forgecast/core';
+import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
 import { makeLlmClient } from './agent/llm';
@@ -57,11 +58,20 @@ export async function generateImage(services: Services, projectId: string, input
   const project = await services.projects.get(projectId);
   if (!project) return { status: 404, body: { error: 'project not found' } };
 
-  const fields = (input ?? {}) as { prompt?: unknown; provider?: unknown; model?: unknown; aspectRatio?: unknown; width?: unknown; height?: unknown };
+  const fields = (input ?? {}) as { prompt?: unknown; provider?: unknown; model?: unknown; aspectRatio?: unknown; width?: unknown; height?: unknown; characterId?: unknown };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
   }
   const blockedImage = guardText(fields.prompt); if (blockedImage) return blockedImage;
+
+  // Optional cast member: resolve the character (same owner as this project) into
+  // reference URLs + a persona line; identity holds across every generation.
+  let character: Character | null = null;
+  if (typeof fields.characterId === 'string' && fields.characterId.length > 0) {
+    const resolved = await ownedCharacter(services, project.ownerId, fields.characterId);
+    if ('status' in resolved) return resolved;
+    character = resolved.character;
+  }
 
   const availableImage = services.imageRegistry.available();
   // Default to the keyless Cloudflare Workers AI provider when available (the
@@ -76,9 +86,19 @@ export async function generateImage(services: Services, projectId: string, input
     else return { status: 503, body: { error: `image provider '${requested}' not configured` } };
   }
   // Ground the generation in the project's brand kit (no-op when none is set).
-  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+  const promptWithCast = character
+    ? `${fields.prompt} — featuring ${character.name}${character.description ? ` (${character.description})` : ''}, the exact person in the reference images; keep their face and identity perfectly consistent`
+    : fields.prompt;
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), promptWithCast);
 
   const params: Record<string, unknown> = { prompt: brandedPrompt };
+  if (character) {
+    if (providerName !== 'fal') {
+      return { status: 503, body: { error: 'characters need an edit-capable image provider — add a fal key (Settings → keys), then generate with this character' } };
+    }
+    params.refImageUrls = await characterRefUrls(services, character);
+    params.characterId = character.id;
+  }
   if (providerName === 'fal') {
     // Resolve the model (default: Nano Banana) and emit the size param its family
     // expects: an `aspect_ratio` enum for the Gemini/Nano-Banana family, else pixels.
@@ -102,6 +122,12 @@ export async function generateImage(services: Services, projectId: string, input
     if (typeof fields.model === 'string' && fields.model.length > 0) params.model = fields.model;
     if (typeof fields.width === 'number') params.width = fields.width;
     if (typeof fields.height === 'number') params.height = fields.height;
+  }
+
+  // Character refs need an edit-capable endpoint: when the user didn't pick a
+  // model explicitly, route the default onto the multi-reference editor.
+  if (character && providerName === 'fal' && !(typeof fields.model === 'string' && fields.model.length > 0)) {
+    params.model = 'fal-ai/nano-banana/edit';
   }
 
   const job = await services.jobs.create(
@@ -1383,4 +1409,92 @@ export async function publishAsset(services: Services, assetId: string, input: u
   } catch (e) {
     return { status: 502, body: { error: `publish failed: ${e instanceof Error ? e.message : String(e)}` } };
   }
+}
+
+// ── Characters — persistent cast, reusable across projects + modalities ──────
+
+/** Resolve a character the given owner can use, or an ApiResult error. */
+async function ownedCharacter(services: Services, projectOwner: string | undefined, characterId: string): Promise<{ character: Character } | ApiResult> {
+  const character = await services.characters.get(characterId);
+  if (!character || character.ownerId !== (projectOwner ?? LOCAL_OWNER)) {
+    return { status: 404, body: { error: `character not found: ${characterId}` } };
+  }
+  return { character };
+}
+
+/** Reference portraits as provider-fetchable URLs (public route when a base URL exists, else data URIs). */
+async function characterRefUrls(services: Services, character: Character): Promise<string[]> {
+  const base = process.env.FORGECAST_BASE_URL?.replace(/\/$/, '');
+  if (base) return character.refKeys.map((_, i) => `${base}/api/characters/${character.id}/refs/${i}`);
+  const urls: string[] = [];
+  for (const key of character.refKeys) {
+    const got = await services.storage.get(key);
+    if (got) urls.push(`data:${got.contentType};base64,${toBase64(got.data)}`);
+  }
+  return urls;
+}
+
+/** Raw bytes of one reference portrait (serves the public refs route). */
+export async function getCharacterRefBytes(services: Services, characterId: string, index: number): Promise<{ data: Uint8Array; contentType: string } | null> {
+  const character = await services.characters.get(characterId);
+  const key = character?.refKeys[index];
+  if (!key) return null;
+  return services.storage.get(key);
+}
+
+/**
+ * Create a character from 1–4 already-uploaded IMAGE assets (the references).
+ * Bytes are copied into character-owned storage so deleting the source assets
+ * later never breaks the cast.
+ */
+export async function createCharacter(services: Services, ownerId: string, input: unknown): Promise<ApiResult> {
+  const fields = (input ?? {}) as { name?: unknown; description?: unknown; refAssetIds?: unknown };
+  if (typeof fields.name !== 'string' || fields.name.trim().length === 0 || fields.name.length > 80) {
+    return { status: 400, body: { error: 'a character name (1–80 chars) is required' } };
+  }
+  const description = typeof fields.description === 'string' && fields.description.trim().length > 0 ? fields.description.slice(0, 500) : undefined;
+  const blocked = guardText(`${fields.name} ${description ?? ''}`); if (blocked) return blocked;
+
+  const refAssetIds = Array.isArray(fields.refAssetIds) ? fields.refAssetIds.filter((x): x is string => typeof x === 'string') : [];
+  if (refAssetIds.length < 1 || refAssetIds.length > MAX_CHARACTER_REFS) {
+    return { status: 400, body: { error: `1–${MAX_CHARACTER_REFS} reference image assets are required (upload portraits first, then pass their asset ids)` } };
+  }
+
+  const id = services.ids.randomId();
+  const refKeys: string[] = [];
+  for (const assetId of refAssetIds) {
+    const asset = await services.assets.get(assetId);
+    const owner = asset ? ((await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER) : undefined;
+    if (!asset || owner !== (ownerId ?? LOCAL_OWNER)) return { status: 404, body: { error: `asset not found: ${assetId}` } };
+    if (asset.type !== 'image') return { status: 400, body: { error: `reference must be an image asset: ${assetId}` } };
+    const bytes = await getAssetBytes(services, assetId);
+    if (!bytes) return { status: 400, body: { error: `asset has no stored bytes: ${assetId}` } };
+    const key = `characters/${id}/ref-${refKeys.length}`;
+    await services.storage.put(key, bytes.data, bytes.contentType);
+    refKeys.push(key);
+  }
+
+  const character = await services.characters.create({
+    id, ownerId: ownerId ?? LOCAL_OWNER, name: fields.name.trim(), refKeys,
+    ...(description ? { description } : {}), createdAt: services.ids.nowIso(),
+  });
+  return { status: 200, body: { character } };
+}
+
+export async function listCharacters(services: Services, ownerId: string): Promise<ApiResult> {
+  const characters = await services.characters.listByOwner(ownerId ?? LOCAL_OWNER);
+  return { status: 200, body: { characters, count: characters.length } };
+}
+
+export async function getCharacter(services: Services, ownerId: string, characterId: string): Promise<ApiResult> {
+  const resolved = await ownedCharacter(services, ownerId, characterId);
+  if ('status' in resolved) return resolved;
+  return { status: 200, body: { character: resolved.character } };
+}
+
+export async function deleteCharacter(services: Services, ownerId: string, characterId: string): Promise<ApiResult> {
+  const resolved = await ownedCharacter(services, ownerId, characterId);
+  if ('status' in resolved) return resolved;
+  await services.characters.delete(characterId);
+  return { status: 200, body: { ok: true } };
 }

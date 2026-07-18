@@ -4,6 +4,7 @@ import { D1AssetRepo } from './assetRepo';
 import { D1JobRepo } from './jobRepo';
 import { D1UserRepo } from './userRepo';
 import { D1KeyRepo } from './keyRepo';
+import { D1CharacterRepo } from './characterRepo';
 
 export interface D1Store {
   projects: D1ProjectRepo;
@@ -11,6 +12,7 @@ export interface D1Store {
   jobs: D1JobRepo;
   users: D1UserRepo;
   keys: D1KeyRepo;
+  characters: D1CharacterRepo;
 }
 
 /** Builds the metadata repos backed by a Cloudflare D1 binding (edge-durable). */
@@ -21,5 +23,6 @@ export function d1Store(db: D1Like): D1Store {
     jobs: new D1JobRepo(db),
     users: new D1UserRepo(db),
     keys: new D1KeyRepo(db),
+    characters: new D1CharacterRepo(db),
   };
 }

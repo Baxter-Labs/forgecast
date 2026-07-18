@@ -39,6 +39,14 @@ const SCHEMA: string[] = [
      avatar_url TEXT,
      created_at TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS characters (
+     id TEXT PRIMARY KEY,
+     owner_id TEXT NOT NULL,
+     name TEXT NOT NULL,
+     ref_keys TEXT NOT NULL,
+     description TEXT,
+     created_at TEXT NOT NULL
+   )`,
   `CREATE TABLE IF NOT EXISTS user_keys (
      owner_id TEXT NOT NULL,
      key_id TEXT NOT NULL,

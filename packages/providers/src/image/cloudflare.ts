@@ -63,6 +63,9 @@ export class CloudflareImageProvider implements ImageProvider {
 
   async generateImage(input: GenerateImageInput): Promise<ImageResult> {
     if (!this.isAvailable()) throw new ProviderUnavailableError(this.name);
+    if (input.refImageUrls?.length) {
+      throw new Error('character reference images need an edit-capable image provider — add a fal key (Settings → keys) to generate with characters');
+    }
 
     const model = input.model ?? this.model;
     // FLUX.1 [schnell] takes `prompt` (+ optional steps/seed). `extra` is spread
