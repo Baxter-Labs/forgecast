@@ -138,15 +138,15 @@ describe('editing + asset-op MCP parity', () => {
     return (JSON.parse(textOf(created)) as { project: { id: string } }).project.id;
   }
 
-  it('exposes the editing/short/image-op/import tools (25 total)', async () => {
+  it('exposes the editing/short/image-op/import tools (26 total)', async () => {
     const b = bodyOf(await handleMcpMessage(ctx(), { jsonrpc: '2.0', id: 40, method: 'tools/list' }));
     const names = (b.result?.tools ?? []).map((t) => t.name);
     for (const n of [
       'forgecast_get_timeline', 'forgecast_set_timeline', 'forgecast_render_timeline',
       'forgecast_generate_short_video', 'forgecast_enhance_image', 'forgecast_edit_image',
-      'forgecast_cutout_image', 'forgecast_import_footage',
+      'forgecast_cutout_image', 'forgecast_import_footage', 'forgecast_generate_presenter',
     ]) expect(names).toContain(n);
-    expect((b.result?.tools ?? []).length).toBe(25);
+    expect((b.result?.tools ?? []).length).toBe(26);
   });
 
   it('health reports every modality for capability discovery', async () => {

@@ -1,10 +1,11 @@
 'use client';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { imageModels, videoModels, defaultVideoModelId } from '@forgecast/catalog';
-import { Palette, Activity } from 'lucide-react';
+import { Palette, Activity, Users } from 'lucide-react';
 import { useForgecast } from '@/lib/use-forgecast';
 import { useBrandKit, brandKitIsEmpty } from '@/lib/use-brand-kit';
 import { BrandKitModal } from './BrandKitModal';
+import { CharacterModal } from './CharacterModal';
 import { KeysModal } from './KeysModal';
 import { PerformancePanel } from './PerformancePanel';
 import { Header } from './Header';
@@ -102,10 +103,12 @@ export function Studio() {
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
+    characters, loadCharacters, createCharacter, deleteCharacter,
   } = useForgecast();
 
   const brand = useBrandKit(projectId);
   const [brandKitOpen, setBrandKitOpen] = useState(false);
+  const [castOpen, setCastOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
   const [perfOpen, setPerfOpen] = useState(false);
 
@@ -133,6 +136,11 @@ export function Studio() {
   const [boostQuality, setBoostQuality] = useState(false);
   const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
+  const [characterId, setCharacterId] = useState<string | null>(null);
+  // Keep the picked cast member valid as the cast changes (e.g. after a delete).
+  useEffect(() => {
+    if (characterId && !characters.some((c) => c.id === characterId)) setCharacterId(null);
+  }, [characters, characterId]);
   const [ratio, setRatio] = useState('1:1');
   const [montagePrompts, setMontagePrompts] = useState<string[]>(['', '', '']);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
@@ -251,9 +259,9 @@ export function Studio() {
     };
     if (mode === 'image') {
       const { width, height } = ratioToDimensions(ratio);
-      void generateImage({ prompt, model, aspectRatio: ratio, width, height, provider: imageProvider }).then(attach);
+      void generateImage({ prompt, model, aspectRatio: ratio, width, height, provider: imageProvider, characterId: characterId ?? undefined }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined, provider: videoProvider }).then(attach);
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined, provider: videoProvider, characterId: characterId ?? undefined }).then(attach);
     } else if (mode === 'voice') {
       void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
     } else if (mode === 'short') {
@@ -295,6 +303,23 @@ export function Studio() {
                 <span key={c} className="w-3 h-3 rounded-sm border border-black/30" style={{ background: c }} />
               ))}
               <span className="font-mono text-[10px] text-[var(--forge-faint)]">{brandKitIsEmpty(brand.kit) ? 'set up' : 'edit'}</span>
+            </span>
+          </button>
+
+          {/* Cast — persistent characters for identity-consistent generations */}
+          <button
+            type="button"
+            onClick={() => setCastOpen(true)}
+            aria-label="Open Cast manager"
+            className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-colors cursor-pointer hover:border-[var(--ember-2)]"
+            style={{ borderColor: characters.length > 0 ? 'var(--ember-2)' : 'var(--forge-border)', background: 'var(--forge-surface-2)' }}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Users size={14} className="text-[var(--ember-1)] shrink-0" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--forge-text)] truncate">Cast</span>
+            </span>
+            <span className="font-mono text-[10px] text-[var(--forge-faint)] shrink-0">
+              {characters.length > 0 ? `${characters.length} character${characters.length !== 1 ? 's' : ''}` : 'add people'}
             </span>
           </button>
 
@@ -352,6 +377,10 @@ export function Studio() {
                 activeCampaignId={activeCampaignId}
                 setActiveCampaignId={setActiveCampaignId}
                 onCreateCampaign={createManualCampaign}
+                characters={characters}
+                characterId={characterId}
+                setCharacterId={setCharacterId}
+                onManageCast={() => setCastOpen(true)}
               />
             }
           />
@@ -446,6 +475,15 @@ export function Studio() {
       </main>
 
       <BrandKitModal open={brandKitOpen} onClose={() => setBrandKitOpen(false)} brand={brand} />
+      <CharacterModal
+        open={castOpen}
+        onClose={() => setCastOpen(false)}
+        characters={characters}
+        assets={assets}
+        onCreate={createCharacter}
+        onDelete={deleteCharacter}
+        onRefresh={loadCharacters}
+      />
       <KeysModal open={keysOpen} onClose={() => setKeysOpen(false)} onChanged={() => void refreshAvailability()} />
       <PerformancePanel open={perfOpen} onClose={() => setPerfOpen(false)} onAudit={auditAds} onOptimize={optimizeCreatives} />
     </div>

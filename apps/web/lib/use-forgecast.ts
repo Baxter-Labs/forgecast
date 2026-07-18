@@ -1,8 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import type { ShortVideoOptions, EditorTimeline } from '@forgecast/core';
+import type { ShortVideoOptions, EditorTimeline, Character } from '@forgecast/core';
 
-export type { ShortVideoOptions, EditorTimeline };
+export type { ShortVideoOptions, EditorTimeline, Character };
 
 export interface StudioAsset {
   id: string;
@@ -55,12 +55,13 @@ function normalizeAsset(a: RawAsset): StudioAsset {
   };
 }
 
-interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number; provider?: string }
-interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string; provider?: string }
+interface GenerateImageArgs { prompt: string; model?: string; aspectRatio?: string; width?: number; height?: number; provider?: string; characterId?: string }
+interface GenerateVideoArgs { prompt: string; aspectRatio?: string; model?: string; imageAssetId?: string; provider?: string; characterId?: string }
 interface GenerateMontageArgs { prompts: string[]; aspectRatio?: string; model?: string }
 interface GenerateVoiceoverArgs { text: string; voice?: string }
 interface NarrateVideoArgs { videoAssetId: string; text: string; voice?: string }
-interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string }
+interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?: string; audioUrl?: string; voice?: string; characterId?: string }
+interface CreateCharacterInput { name: string; description?: string; refAssetIds: string[] }
 interface ComposeVideoArgs { assetIds: string[]; aspectRatio?: string; durationSec?: number }
 interface AnimateAssetOpts { aspectRatio?: string; model?: string }
 
@@ -75,9 +76,44 @@ export function useForgecast() {
   const [availability, setAvailability] = useState<Availability>({ image: false, video: false, montage: false, short: false, voice: false, narrate: false, transcribe: false, presenter: false });
   const [pro, setPro] = useState(false);
   const [assets, setAssets] = useState<StudioAsset[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
   const [status, setStatus] = useState<'idle' | 'forging' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionInfo>({ enabled: false, user: null });
+
+  // ── Characters (the cast) — owner-scoped, reusable across projects ──────────
+  const loadCharacters = useCallback(async () => {
+    const body = await fetch('/api/characters').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    setCharacters(((body as { characters?: Character[] } | null)?.characters ?? []));
+  }, []);
+
+  const createCharacter = useCallback(async (input: CreateCharacterInput): Promise<{ character?: Character; error?: string }> => {
+    try {
+      const res = await fetch('/api/characters', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return { error: body?.error ?? `Create failed (${res.status})` };
+      const character = (body as { character?: Character } | null)?.character;
+      if (!character) return { error: 'Unexpected response' };
+      setCharacters((prev) => [...prev, character]);
+      return { character };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
+  const deleteCharacter = useCallback(async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`/api/characters/${id}`, { method: 'DELETE' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return { ok: false, error: body?.error ?? `Delete failed (${res.status})` };
+      setCharacters((prev) => prev.filter((c) => c.id !== id));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
 
   // Re-read provider availability (e.g. right after keys change in the Keys panel).
   const refreshAvailability = useCallback(async () => {
@@ -127,6 +163,7 @@ export function useForgecast() {
       setAvailability({ image: image.length > 0, video: video.length > 0, montage: montage.length > 0, short: short.length > 0, voice: voice.length > 0, narrate: narrate.length > 0, transcribe: transcribe.length > 0, presenter: presenter.length > 0 });
 
       await refreshPro();
+      void loadCharacters();
 
       const list = await fetch('/api/projects').then((r) => r.json()).catch(() => ({ projects: [] }));
       let id: string | undefined = list.projects?.[0]?.id;
@@ -141,7 +178,7 @@ export function useForgecast() {
       const a = await fetch(`/api/projects/${id}/assets`).then((r) => r.json()).catch(() => ({ assets: [] }));
       setAssets(((a.assets ?? []) as RawAsset[]).map(normalizeAsset).reverse());
     })();
-  }, [refreshPro]);
+  }, [refreshPro, loadCharacters]);
 
   const refreshAssets = useCallback(async (id?: string | null) => {
     const pid = id ?? projectId;
@@ -188,13 +225,14 @@ export function useForgecast() {
     }
   }, [projectId]);
 
-  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId, provider }: GenerateVideoArgs): Promise<string | null> => {
+  const generateVideo = useCallback(async ({ prompt, aspectRatio, model, imageAssetId, provider, characterId }: GenerateVideoArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
       const body: Record<string, unknown> = { prompt, aspectRatio, model };
       if (provider) body.provider = provider;
       if (imageAssetId) body.imageAssetId = imageAssetId;
+      if (characterId) body.characterId = characterId;
       const res = await fetch(`/api/projects/${projectId}/generate-clip`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -413,7 +451,7 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
-  const generatePresenter = useCallback(async ({ imagePrompt, imageUrl, text, audioUrl, voice }: GeneratePresenterArgs): Promise<string | null> => {
+  const generatePresenter = useCallback(async ({ imagePrompt, imageUrl, text, audioUrl, voice, characterId }: GeneratePresenterArgs): Promise<string | null> => {
     if (!projectId) return null;
     setStatus('forging'); setError(null);
     try {
@@ -423,6 +461,7 @@ export function useForgecast() {
       if (text) body.text = text;
       if (audioUrl) body.audioUrl = audioUrl;
       if (voice) body.voice = voice;
+      if (characterId) body.characterId = characterId;
       const res = await fetch(`/api/projects/${projectId}/generate-presenter`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -698,6 +737,7 @@ export function useForgecast() {
     projectId, providers, videoProviders, publishers, availability, pro, refreshPro, refreshAvailability,
     session, signOut,
     assets, status, error,
+    characters, loadCharacters, createCharacter, deleteCharacter,
     generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
     loadTimeline, saveTimeline, renderTimeline,
