@@ -149,6 +149,16 @@ export function useAssetEditor(assetId: string) {
   const enhance = useCallback(() => syncOp('enhance', `/api/projects/${pid}/assets/${assetId}/enhance`), [syncOp, pid, assetId]);
   const edit = useCallback((prompt: string) => syncOp('edit', `/api/projects/${pid}/assets/${assetId}/edit`, { prompt }), [syncOp, pid, assetId]);
   const cutout = useCallback(() => syncOp('cutout', `/api/projects/${pid}/assets/${assetId}/cutout`), [syncOp, pid, assetId]);
+  /** One-click camera re-angle: a preset chip id and/or a custom instruction. */
+  const reangle = useCallback(
+    (body: { preset?: string; instruction?: string }) => syncOp('reangle', `/api/projects/${pid}/assets/${assetId}/reangle`, body),
+    [syncOp, pid, assetId],
+  );
+  /** One-click scene relight: a preset chip id and/or a custom instruction. */
+  const relight = useCallback(
+    (body: { preset?: string; instruction?: string }) => syncOp('relight', `/api/projects/${pid}/assets/${assetId}/relight`, body),
+    [syncOp, pid, assetId],
+  );
   const animate = useCallback(
     () => asyncOp('animate', `/api/projects/${pid}/generate-clip`, {
       prompt: 'subtle natural cinematic motion, gentle camera move',
@@ -181,5 +191,5 @@ export function useAssetEditor(assetId: string) {
     }
   }, [pid, assetId]);
 
-  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, animate, narrate, makeVariations };
+  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, reangle, relight, animate, narrate, makeVariations };
 }

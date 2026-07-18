@@ -32,6 +32,10 @@ export class EditImageJobHandler implements JobHandler {
       prompt: string;
       model: string;
       sourceAssetId: string;
+      /** Provenance: which op produced this edit (e.g. 'reangle' | 'relight'). */
+      op: string;
+      /** Provenance: the preset id behind the instruction, when one was used. */
+      preset: string;
     }>;
 
     if (typeof params.imageUrl !== 'string' || params.imageUrl.length === 0) {
@@ -44,10 +48,18 @@ export class EditImageJobHandler implements JobHandler {
     const provider = this.deps.registry.get(job.provider);
     await report(0.1);
 
+    // The Qwen-Image-Edit-2509 family (incl. the multiple-angles LoRA endpoint)
+    // takes a plural `image_urls` array; Kontext-class editors take `image_url`.
+    // Mirrors the model-shaped ref mapping in the fal provider itself.
+    const model = params.model ?? DEFAULT_EDIT_MODEL;
+    const imageField: Record<string, unknown> = /qwen-image-edit-2509/i.test(model)
+      ? { image_urls: [params.imageUrl] }
+      : { image_url: params.imageUrl };
+
     const result = await provider.generateImage({
       prompt: params.prompt,
-      model: params.model ?? DEFAULT_EDIT_MODEL,
-      extra: { image_url: params.imageUrl },
+      model,
+      extra: imageField,
     });
     await report(0.6);
 
@@ -73,8 +85,10 @@ export class EditImageJobHandler implements JobHandler {
           params: {
             sourceAssetId: params.sourceAssetId,
             prompt: params.prompt,
-            model: params.model ?? DEFAULT_EDIT_MODEL,
+            model,
             edited: true,
+            ...(typeof params.op === 'string' && params.op ? { op: params.op } : {}),
+            ...(typeof params.preset === 'string' && params.preset ? { preset: params.preset } : {}),
           },
         },
         { id, now: this.deps.clock() },
