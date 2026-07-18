@@ -697,11 +697,26 @@ export async function generateVideo(services: Services, projectId: string, input
     model?: unknown;
     imageAssetId?: unknown;
     imageUrl?: unknown;
+    characterId?: unknown;
   };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
   }
   const blockedVideo = guardText(fields.prompt); if (blockedVideo) return blockedVideo;
+
+  // Optional cast member: identity holds by driving image-to-video from the
+  // character's portrait (unless the caller supplied an explicit source frame).
+  if (typeof fields.characterId === 'string' && fields.characterId.length > 0) {
+    const resolved = await ownedCharacter(services, project.ownerId, fields.characterId);
+    if ('status' in resolved) return resolved;
+    const cast = resolved.character;
+    if (!(typeof fields.imageUrl === 'string' && fields.imageUrl.length > 0) && !(typeof fields.imageAssetId === 'string' && fields.imageAssetId.length > 0)) {
+      const refs = await characterRefUrls(services, cast);
+      if (refs.length === 0) return { status: 400, body: { error: 'character has no stored reference images' } };
+      fields.imageUrl = refs[0];
+    }
+    fields.prompt = `${fields.prompt} — featuring ${cast.name}${cast.description ? ` (${cast.description})` : ''}; keep the person from the source image identical`;
+  }
 
   // Resolve the video provider: keyless Cloudflare by default, BYO fal/Replicate (or
   // an explicit `provider`) "on top". Each job records its provider so polling resolves
@@ -742,7 +757,7 @@ export async function generateVideo(services: Services, projectId: string, input
   }
 
   // Ground the video in the project's brand kit (no-op when none is set).
-  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt);
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt as string);
   const params: Record<string, unknown> = { prompt: brandedPrompt };
   if (typeof fields.aspectRatio === 'string') params.aspectRatio = fields.aspectRatio;
   if (typeof fields.duration === 'number') params.duration = fields.duration;
@@ -1057,7 +1072,19 @@ export async function generatePresenter(services: Services, projectId: string, i
     text?: unknown;
     audioUrl?: unknown;
     voice?: unknown;
+    characterId?: unknown;
   };
+
+  // Optional cast member: their portrait becomes the talking face.
+  if (typeof fields.characterId === 'string' && fields.characterId.length > 0) {
+    const resolved = await ownedCharacter(services, project.ownerId, fields.characterId);
+    if ('status' in resolved) return resolved;
+    if (!(typeof fields.imageUrl === 'string' && fields.imageUrl.length > 0)) {
+      const refs = await characterRefUrls(services, resolved.character);
+      if (refs.length === 0) return { status: 400, body: { error: 'character has no stored reference images' } };
+      fields.imageUrl = refs[0];
+    }
+  }
 
   const hasImage =
     (typeof fields.imagePrompt === 'string' && fields.imagePrompt.length > 0) ||

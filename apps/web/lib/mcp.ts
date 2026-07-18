@@ -7,7 +7,7 @@ import {
   searchFootage, listAssets, getAsset, getJob,
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
-  createCharacter, listCharacters, deleteCharacter,
+  createCharacter, listCharacters, deleteCharacter, generatePresenter,
 } from './api';
 
 /**
@@ -156,13 +156,14 @@ const TOOLS: McpTool[] = [
     name: 'forgecast_generate_video',
     description:
       'Start a text-to-video generation in a project (keyless by default). ASYNC — returns a job at status "running"; poll forgecast_get_job with the returned job.id until status is "done", then read resultAssetId. Args: projectId, prompt, aspectRatio?, duration?.',
-    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio, duration: { type: 'number', description: 'Clip length in seconds.' } }, ['projectId', 'prompt']),
+    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio, duration: { type: 'number', description: 'Clip length in seconds.' }, characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) — the clip is driven from their portrait so identity holds.' } }, ['projectId', 'prompt']),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
-      // Text-to-video only: forward only declared fields so an injected imageAssetId/imageUrl
-      // can't pull another user's asset as the i2v source frame.
-      return unwrap(await generateVideo(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio), duration: num(args.duration) }));
+      // Forward only declared fields so an injected imageAssetId/imageUrl can't
+      // pull another user's asset as the i2v source frame; characterId is
+      // ownership-checked inside generateVideo.
+      return unwrap(await generateVideo(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio), duration: num(args.duration), characterId: str(args.characterId) }));
     },
   },
   {
@@ -388,6 +389,23 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const asset = await ownedAsset(services, userId, args.assetId);
       return unwrap(await removeBackgroundAsset(services, asset.projectId, { assetId: asset.id }));
+    },
+  },
+  {
+    name: 'forgecast_generate_presenter',
+    description:
+      'Generate a TALKING-HEAD video: a presenter (or one of your characters) speaks a script to camera. ASYNC — poll forgecast_get_job. Args: projectId, text (the script), characterId? (the character talks) OR imagePrompt? (invent a presenter), voice?. Requires the presenter stack (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      text: { type: 'string', description: 'What the presenter says.' },
+      characterId: { type: 'string', description: 'Optional cast member — their portrait becomes the talking face.' },
+      imagePrompt: { type: 'string', description: 'Alternative: describe a presenter to invent.' },
+      voice: { type: 'string', description: 'Optional named voice.' },
+    }, ['projectId', 'text']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generatePresenter(services, pid, { text: str(args.text), characterId: str(args.characterId), imagePrompt: str(args.imagePrompt), voice: str(args.voice) }));
     },
   },
   {

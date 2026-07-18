@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { CatalogModel } from '@forgecast/catalog';
 import { imageModels } from '@forgecast/catalog';
 import { checkContent } from '@forgecast/core';
-import type { Availability, StudioAsset } from '@/lib/use-forgecast';
+import type { Availability, StudioAsset, Character } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
 
@@ -55,6 +55,11 @@ interface ForgePanelProps {
   activeCampaignId: string | null;
   setActiveCampaignId: (id: string | null) => void;
   onCreateCampaign: (name: string) => void;
+  /** The user's cast (persistent characters) for identity-consistent generations. */
+  characters: Character[];
+  characterId: string | null;
+  setCharacterId: (id: string | null) => void;
+  onManageCast: () => void;
 }
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
@@ -226,6 +231,64 @@ function ImageSourcePicker({
   );
 }
 
+function CastRow({
+  characters,
+  characterId,
+  setCharacterId,
+  onManageCast,
+}: {
+  characters: Character[];
+  characterId: string | null;
+  setCharacterId: (id: string | null) => void;
+  onManageCast: () => void;
+}) {
+  return (
+    <div>
+      <FieldHeading>Cast</FieldHeading>
+      {characters.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {[null, ...characters.map((c) => c.id)].map((id) => {
+            const selected = id === characterId;
+            const label = id === null ? 'none' : characters.find((c) => c.id === id)?.name ?? id;
+            return (
+              <button
+                key={id ?? 'none'}
+                type="button"
+                onClick={() => setCharacterId(id)}
+                aria-pressed={selected}
+                className="font-mono text-xs px-3 py-1.5 rounded border transition-all max-w-[160px] truncate"
+                style={selected ? {
+                  borderColor: 'var(--ember-2)',
+                  color: 'var(--ember-1)',
+                  boxShadow: '0 0 12px var(--ember-glow)',
+                  background: 'rgba(255,122,26,0.06)',
+                } : {
+                  borderColor: 'var(--forge-border)',
+                  color: 'var(--forge-faint)',
+                  background: 'transparent',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="font-mono text-[10px] text-[var(--forge-faint)]">
+          no cast yet — create a character from 1–4 portraits to keep the same face everywhere
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onManageCast}
+        className="font-mono text-[10px] text-[var(--forge-faint)] mt-2 transition-colors hover:text-[var(--ember-1)] cursor-pointer"
+      >
+        manage cast →
+      </button>
+    </div>
+  );
+}
+
 const IMAGE_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
 const VIDEO_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', replicate: 'Replicate', skyreels: 'Free · SkyReels (self-hosted)' };
 
@@ -236,6 +299,7 @@ export function ForgePanel({
   assets,
   montagePrompts, setMontagePrompts,
   campaigns, activeCampaignId, setActiveCampaignId, onCreateCampaign,
+  characters, characterId, setCharacterId, onManageCast,
 }: ForgePanelProps) {
   const [newCampaignMode, setNewCampaignMode] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
@@ -501,6 +565,8 @@ export function ForgePanel({
             </p>
           )}
 
+          <CastRow characters={characters} characterId={characterId} setCharacterId={setCharacterId} onManageCast={onManageCast} />
+
           <div>
             <FieldHeading>Ratio</FieldHeading>
             <RatioRow ratios={imageRatios} ratio={ratio} setRatio={setRatio} />
@@ -574,6 +640,8 @@ export function ForgePanel({
               )}
             </>
           )}
+
+          <CastRow characters={characters} characterId={characterId} setCharacterId={setCharacterId} onManageCast={onManageCast} />
 
           <div>
             <FieldHeading>Ratio</FieldHeading>
