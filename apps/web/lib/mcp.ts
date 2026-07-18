@@ -1,6 +1,8 @@
 import { ANGLE_PRESETS, LIGHT_PRESETS } from '@forgecast/core';
 import type { Services } from './forgecast';
 import type { ApiResult } from './api';
+/** Minimal LLM shape the ad-copy/storyboard ops need (owner-keyed when provided). */
+type LlmClient = { isAvailable(): boolean; complete(input: { system: string; user: string }): Promise<string> };
 import { LOCAL_OWNER } from './auth-guard';
 import {
   createProject, listProjects, generateImage, generateVideo, generateVoiceover,
@@ -42,7 +44,7 @@ export interface JsonRpcMessage {
 
 export interface McpReply { status: number; body: unknown }
 
-type ToolCtx = { services: Services; userId: string };
+type ToolCtx = { services: Services; userId: string; llm?: LlmClient };
 type ToolHandler = (ctx: ToolCtx, args: Record<string, unknown>) => Promise<unknown>;
 interface ToolAnnotations { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean }
 interface McpTool { name: string; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; handler: ToolHandler }
@@ -212,9 +214,9 @@ const TOOLS: McpTool[] = [
       'Write platform-aware, character-limited, A/B-tagged ad copy for a brief. Synchronous. Args: projectId, brief, platform? (instagram|linkedin|x|facebook|tiktok|youtube|google, default instagram), count? (1–5, default 3). Returns { platform, label, limit, variants[] }. Requires an agent LLM key (503 with guidance otherwise).',
     inputSchema: obj({ projectId: P.projectId, brief: { type: 'string', description: 'What the ad is about.' }, platform: { type: 'string' }, count: { type: 'number' } }, ['projectId', 'brief']),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    handler: async ({ services, userId }, args) => {
+    handler: async ({ services, userId, llm }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
-      return unwrap(await generateAdCopy(services, pid, { brief: str(args.brief), platform: str(args.platform), count: num(args.count) }));
+      return unwrap(await generateAdCopy(services, pid, { brief: str(args.brief), platform: str(args.platform), count: num(args.count) }, llm));
     },
   },
   {
@@ -574,10 +576,10 @@ TOOLS.push(
       aspectRatio: { type: 'string', enum: ['9:16', '16:9', '1:1', '4:5', '4:3', '3:4'], description: 'Output shape (default 9:16).' },
     }, ['projectId', 'brief']),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    handler: async ({ services, userId }, args) => {
+    handler: async ({ services, userId, llm }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       // characterId is ownership-checked inside generateStoryboard (via the project owner).
-      return unwrap(await generateStoryboard(services, pid, { brief: str(args.brief), shotCount: num(args.shotCount), characterId: str(args.characterId), aspectRatio: str(args.aspectRatio) }));
+      return unwrap(await generateStoryboard(services, pid, { brief: str(args.brief), shotCount: num(args.shotCount), characterId: str(args.characterId), aspectRatio: str(args.aspectRatio) }, llm));
     },
   },
   {

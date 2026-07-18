@@ -8,7 +8,7 @@ export interface GoogleAdsInsightsOptions {
   customerId?: string;
   /** Manager (MCC) id for login-customer-id header. Falls back to GOOGLE_ADS_LOGIN_CUSTOMER_ID. */
   loginCustomerId?: string;
-  /** API version, e.g. `v17`. Falls back to GOOGLE_ADS_API_VERSION. */
+  /** API version, e.g. `v21`. Falls back to GOOGLE_ADS_API_VERSION (bump as Google sunsets versions). */
   version?: string;
   baseUrl?: string;
   fetchFn?: typeof fetch;
@@ -51,7 +51,7 @@ export class GoogleAdsInsightsProvider implements AdsInsightsProvider {
     this.accessToken = opts.accessToken ?? process.env.GOOGLE_ADS_ACCESS_TOKEN;
     this.customerId = (opts.customerId ?? process.env.GOOGLE_ADS_CUSTOMER_ID)?.replace(/-/g, '');
     this.loginCustomerId = (opts.loginCustomerId ?? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID)?.replace(/-/g, '');
-    this.version = opts.version ?? process.env.GOOGLE_ADS_API_VERSION ?? 'v17';
+    this.version = opts.version ?? process.env.GOOGLE_ADS_API_VERSION ?? 'v21';
     this.baseUrl = (opts.baseUrl ?? 'https://googleads.googleapis.com').replace(/\/$/, '');
     this.fetchFn = opts.fetchFn ?? fetch;
   }

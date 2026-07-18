@@ -35,7 +35,7 @@ describe('LinkedInPublisher', () => {
     expect((init as RequestInit).method).toBe('POST');
     expect((init as RequestInit).headers).toMatchObject({
       'Authorization': 'Bearer tok',
-      'LinkedIn-Version': '202401',
+      'LinkedIn-Version': '202508',
       'X-Restli-Protocol-Version': '2.0.0',
     });
     const body = JSON.parse((init as RequestInit).body as string);

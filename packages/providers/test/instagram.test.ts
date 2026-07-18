@@ -41,7 +41,7 @@ describe('InstagramPublisher', () => {
 
     // Assert container creation call
     const [containerUrl, containerInit] = fetchFn.mock.calls[0]!;
-    expect(containerUrl).toBe('https://graph.facebook.com/v21.0/uid_123/media');
+    expect(containerUrl).toBe('https://graph.facebook.com/v23.0/uid_123/media');
     expect((containerInit as RequestInit).method).toBe('POST');
     const containerBody = (containerInit as RequestInit).body as string;
     expect(containerBody).toContain('image_url=');
@@ -50,7 +50,7 @@ describe('InstagramPublisher', () => {
 
     // Assert publish call
     const [publishUrl, publishInit] = fetchFn.mock.calls[1]!;
-    expect(publishUrl).toBe('https://graph.facebook.com/v21.0/uid_123/media_publish');
+    expect(publishUrl).toBe('https://graph.facebook.com/v23.0/uid_123/media_publish');
     expect((publishInit as RequestInit).method).toBe('POST');
     const publishBody = (publishInit as RequestInit).body as string;
     expect(publishBody).toContain('creation_id=container_1');

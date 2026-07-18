@@ -60,7 +60,7 @@ export class MetaAdsInsightsProvider implements AdsInsightsProvider {
     this.accessToken = opts.accessToken ?? process.env.META_ADS_ACCESS_TOKEN;
     const acct = opts.accountId ?? process.env.META_ADS_ACCOUNT_ID;
     this.accountId = acct ? (acct.startsWith('act_') ? acct : `act_${acct}`) : undefined;
-    this.version = opts.version ?? process.env.META_GRAPH_VERSION ?? 'v21.0';
+    this.version = opts.version ?? process.env.META_GRAPH_VERSION ?? 'v23.0';
     this.baseUrl = (opts.baseUrl ?? 'https://graph.facebook.com').replace(/\/$/, '');
     this.fetchFn = opts.fetchFn ?? fetch;
   }

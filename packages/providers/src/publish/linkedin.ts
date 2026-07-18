@@ -4,6 +4,8 @@ export interface LinkedInPublisherOptions {
   accessToken?: string;
   authorUrn?: string;
   baseUrl?: string;
+  /** LinkedIn versioned-API date (YYYYMM). Falls back to LINKEDIN_VERSION. Bump as versions sunset (~1yr). */
+  version?: string;
   fetchFn?: typeof fetch;
 }
 
@@ -12,12 +14,14 @@ export class LinkedInPublisher implements Publisher {
   private readonly accessToken: string | undefined;
   private readonly authorUrn: string | undefined;
   private readonly baseUrl: string;
+  private readonly version: string;
   private readonly fetchFn: typeof fetch;
 
   constructor(opts: LinkedInPublisherOptions = {}) {
     this.accessToken = opts.accessToken ?? process.env.LINKEDIN_ACCESS_TOKEN;
     this.authorUrn = opts.authorUrn ?? process.env.LINKEDIN_AUTHOR_URN;
     this.baseUrl = (opts.baseUrl ?? 'https://api.linkedin.com').replace(/\/$/, '');
+    this.version = opts.version ?? process.env.LINKEDIN_VERSION ?? '202508';
     this.fetchFn = opts.fetchFn ?? fetch;
   }
 
@@ -43,7 +47,7 @@ export class LinkedInPublisher implements Publisher {
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json',
-        'LinkedIn-Version': '202401',
+        'LinkedIn-Version': this.version,
         'X-Restli-Protocol-Version': '2.0.0',
       },
       body: JSON.stringify(body),
