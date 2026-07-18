@@ -23,7 +23,7 @@ export class InstagramPublisher implements Publisher {
   constructor(opts: InstagramPublisherOptions = {}) {
     this.accessToken = opts.accessToken ?? process.env.INSTAGRAM_ACCESS_TOKEN;
     this.igUserId = opts.igUserId ?? process.env.INSTAGRAM_IG_USER_ID;
-    this.baseUrl = (opts.baseUrl ?? 'https://graph.facebook.com/v21.0').replace(/\/$/, '');
+    this.baseUrl = (opts.baseUrl ?? `https://graph.facebook.com/${process.env.META_GRAPH_VERSION ?? 'v23.0'}`).replace(/\/$/, '');
     this.fetchFn = opts.fetchFn ?? fetch;
   }
 
