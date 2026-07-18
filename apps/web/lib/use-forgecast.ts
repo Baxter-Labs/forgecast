@@ -7,7 +7,7 @@ export type { ShortVideoOptions, EditorTimeline, Character, Storyboard, Storyboa
 export interface StudioAsset {
   id: string;
   type: 'image' | 'video' | 'audio';
-  params: { prompt?: string; text?: string; width?: number; height?: number; model?: string; aspectRatio?: string };
+  params: { prompt?: string; text?: string; width?: number; height?: number; model?: string; aspectRatio?: string; tags?: string[] };
   provider: string;
   createdAt: string;
 }

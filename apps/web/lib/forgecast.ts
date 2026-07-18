@@ -199,7 +199,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   } else {
     projects = new InMemoryProjectRepo();
-    assets = new InMemoryAssetRepo();
+    assets = new InMemoryAssetRepo(projects);
     jobs = new InMemoryJobRepo();
     users = new InMemoryUserRepo();
     keys = new InMemoryKeyRepo();
