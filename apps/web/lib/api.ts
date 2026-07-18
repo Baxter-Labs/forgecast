@@ -86,9 +86,11 @@ export async function generateImage(services: Services, projectId: string, input
     else return { status: 503, body: { error: `image provider '${requested}' not configured` } };
   }
   // Trained "Soul-ID" tier: when the character has a ready LoRA and the caller
-  // didn't pick a model, load the LoRA on a FLUX LoRA endpoint instead of
-  // conditioning on reference images — identity holds under bigger scene changes.
-  const explicitModel = typeof fields.model === 'string' && fields.model.length > 0;
+  // didn't pick a non-default model, load the LoRA on a FLUX LoRA endpoint instead
+  // of conditioning on reference images — identity holds under bigger scene changes.
+  // The Studio always sends its model picker's value, so the catalog default counts
+  // as "no explicit choice" (character routing already overrides it anyway).
+  const explicitModel = typeof fields.model === 'string' && fields.model.length > 0 && fields.model !== defaultImageModelId;
   const useLora = Boolean(character && character.loraStatus === 'ready' && character.loraUrl && !explicitModel);
 
   // Ground the generation in the project's brand kit (no-op when none is set).

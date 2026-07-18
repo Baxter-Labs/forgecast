@@ -161,7 +161,8 @@ describe('characters', () => {
     const cid = (made.body as { character: { id: string } }).character.id;
     await svc.characters.update(cid, { loraStatus: 'ready', loraUrl: 'https://cdn/nova-lora.safetensors' });
 
-    const r = await generateImage(svc, seeded.projectId, { prompt: 'keynote hero shot', aspectRatio: '9:16', characterId: cid });
+    // The Studio always sends its picker's value — the catalog default must still take the LoRA path.
+    const r = await generateImage(svc, seeded.projectId, { prompt: 'keynote hero shot', model: 'fal-ai/nano-banana', aspectRatio: '9:16', characterId: cid });
     expect(r.status).toBe(200);
     const call = (fetchFn as unknown as { mock: { calls: Array<[unknown, { body?: string }?]> } }).mock.calls
       .find((c) => String(c[0]).includes('fal.run'));
