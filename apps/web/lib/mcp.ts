@@ -7,6 +7,7 @@ import {
   searchFootage, listAssets, getAsset, getJob,
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
+  createCharacter, listCharacters, deleteCharacter,
 } from './api';
 
 /**
@@ -143,12 +144,12 @@ const TOOLS: McpTool[] = [
     name: 'forgecast_generate_image',
     description:
       'Generate an image in a project (keyless by default via Cloudflare Workers AI; a fal model is used when the fal provider is active). Synchronous — returns the finished asset. Args: projectId, prompt, aspectRatio?. Returns { job, asset }.',
-    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio }, ['projectId', 'prompt']),
+    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio, characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) — their identity stays consistent in the result.' } }, ['projectId', 'prompt']),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       // Forward only declared fields — never raw args (nothing validates args against the schema).
-      return unwrap(await generateImage(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio) }));
+      return unwrap(await generateImage(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio), characterId: str(args.characterId) }));
     },
   },
   {
@@ -388,6 +389,39 @@ TOOLS.push(
       const asset = await ownedAsset(services, userId, args.assetId);
       return unwrap(await removeBackgroundAsset(services, asset.projectId, { assetId: asset.id }));
     },
+  },
+  {
+    name: 'forgecast_create_character',
+    description:
+      'Create a persistent CHARACTER (consistent identity / avatar) from 1–4 already-uploaded image assets of the same person. The character is reusable across projects: pass its id as characterId to generation tools and the face/identity stays consistent. Reference-based only — references must be images you own. Args: name, refAssetIds (1–4 image asset ids), description? (persona notes woven into prompts).',
+    inputSchema: obj({
+      name: { type: 'string', description: 'Character name (1–80 chars).' },
+      refAssetIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4, description: 'Image asset ids of the SAME person (portraits work best).' },
+      description: { type: 'string', description: 'Optional persona notes (age, wardrobe, vibe).' },
+    }, ['name', 'refAssetIds']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const ids = Array.isArray(args.refAssetIds) ? args.refAssetIds.filter((x): x is string => typeof x === 'string') : [];
+      for (const id of ids) await ownedAsset(services, userId, id);
+      return unwrap(await createCharacter(services, userId, { name: str(args.name), description: str(args.description), refAssetIds: ids }));
+    },
+  },
+  {
+    name: 'forgecast_list_characters',
+    description: 'List your persistent characters (the cast) — id, name, description, reference count. Use a character id as characterId in generation tools for identity-consistent results.',
+    inputSchema: obj({}),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async ({ services, userId }) => {
+      const body = unwrap(await listCharacters(services, userId)) as { characters: Array<{ id: string; name: string; description?: string; refKeys: string[]; createdAt: string }> };
+      return { characters: body.characters.map((c) => ({ id: c.id, name: c.name, ...(c.description ? { description: c.description } : {}), refs: c.refKeys.length, createdAt: c.createdAt })), count: body.characters.length };
+    },
+  },
+  {
+    name: 'forgecast_delete_character',
+    description: 'Delete one of your characters by id. Existing generated assets are untouched.',
+    inputSchema: obj({ characterId: { type: 'string' } }, ['characterId']),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => unwrap(await deleteCharacter(services, userId, str(args.characterId) ?? '')),
   },
   {
     name: 'forgecast_import_footage',

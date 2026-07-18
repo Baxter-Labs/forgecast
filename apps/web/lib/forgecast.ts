@@ -5,6 +5,7 @@ import {
   InMemoryJobRepo,
   InMemoryUserRepo,
   InMemoryKeyRepo,
+  InMemoryCharacterRepo,
   InMemoryStorage,
   openStore,
   d1Store,
@@ -16,7 +17,7 @@ import {
   type R2BucketLike,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, CharacterRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding, getAiBinding, getMediaBucket } from './cf-env';
@@ -30,6 +31,8 @@ export interface Services {
   jobs: JobRepo;
   users: UserRepo;
   keys: KeyRepo;
+  /** Persistent cast: owner-scoped characters reusable across projects + modalities. */
+  characters: CharacterRepo;
   storage: StorageDriver;
   runner: JobRunner;
   ids: { randomId: () => string; nowIso: () => string };
@@ -91,7 +94,7 @@ export interface BuildServicesOptions {
   mediaBucket?: R2BucketLike;
   /** Reuse an existing instance's repos + storage (per-user provider overlays).
    *  Providers/handlers are rebuilt with the key overrides; state is shared. */
-  shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'storage'>;
+  shared?: Pick<Services, 'projects' | 'assets' | 'jobs' | 'users' | 'keys' | 'characters' | 'storage'>;
   /** Injectable fetch for the image handler's download step (tests). */
   fetchFn?: typeof fetch;
 }
@@ -165,10 +168,11 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   let jobs: JobRepo;
   let users: UserRepo;
   let keys: KeyRepo;
+  let characters: CharacterRepo;
   let storage: StorageDriver;
   if (opts.shared) {
     // Per-user provider overlay: same state, different keys.
-    ({ projects, assets, jobs, users, keys, storage } = opts.shared);
+    ({ projects, assets, jobs, users, keys, characters, storage } = opts.shared);
   } else if (opts.d1) {
     // Edge-durable metadata: D1 (SQLite at the edge), so projects/assets/jobs
     // persist across Worker isolates.
@@ -178,6 +182,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = store.jobs;
     users = store.users;
     keys = store.keys;
+    characters = store.characters;
     storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   } else if (dbPath) {
     const store = openStore(dbPath);
@@ -186,6 +191,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = store.jobs;
     users = store.users;
     keys = store.keys;
+    characters = store.characters;
     storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   } else {
     projects = new InMemoryProjectRepo();
@@ -193,6 +199,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
     jobs = new InMemoryJobRepo();
     users = new InMemoryUserRepo();
     keys = new InMemoryKeyRepo();
+    characters = new InMemoryCharacterRepo();
     storage = resolveStorage(opts.profile ?? process.env.FORGECAST_PROFILE ?? 'local', dataDir, opts.mediaBucket);
   }
 
@@ -354,7 +361,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, users, keys, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, narrateAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, keys, characters, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, narrateAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**
@@ -421,7 +428,7 @@ export async function getServicesForUser(ownerId: string, base: Services = getSe
     const opts: BuildServicesOptions = {
       shared: {
         projects: base.projects, assets: base.assets, jobs: base.jobs,
-        users: base.users, keys: base.keys, storage: base.storage,
+        users: base.users, keys: base.keys, characters: base.characters, storage: base.storage,
       },
       fetchFn: base.fetchFn,
       ai: getAiBinding() ?? undefined,
