@@ -10,7 +10,7 @@ import type { StoredCampaign } from './CampaignPanel';
 const FALLBACK_RATIOS = ['1:1', '16:9', '9:16', '4:3'];
 const VIDEO_RATIOS = ['9:16', '16:9', '1:1'];
 
-export type ForgeMode = 'image' | 'video' | 'montage' | 'voice' | 'short';
+export type ForgeMode = 'image' | 'video' | 'montage' | 'voice' | 'short' | 'story';
 
 /** UI knobs for the MoneyPrinterTurbo short-video tab. */
 export interface ShortControls {
@@ -87,6 +87,7 @@ const SEGMENTS: { id: ForgeMode; label: string }[] = [
   { id: 'montage', label: 'Montage' },
   { id: 'voice', label: 'Voice' },
   { id: 'short', label: 'Short' },
+  { id: 'story', label: 'Story' },
 ];
 
 function RatioRow({ ratios, ratio, setRatio }: { ratios: string[]; ratio: string; setRatio: (v: string) => void }) {
@@ -334,8 +335,8 @@ export function ForgePanel({
   const isI2V = false; // boost-quality toggle only exposes t2v models
 
   // Instant content-policy hint (the server enforces the full check incl. the operator blocklist).
-  // Montage has no prompt field, so a stale prompt must not block it.
-  const promptBlocked = mode !== 'montage' && prompt.trim().length > 0 && !checkContent(prompt).ok;
+  // Montage and story have no prompt field here, so a stale prompt must not block them.
+  const promptBlocked = mode !== 'montage' && mode !== 'story' && prompt.trim().length > 0 && !checkContent(prompt).ok;
 
   const canForge =
     !forging &&
@@ -449,7 +450,7 @@ export function ForgePanel({
 
       {/* MODE TOGGLE */}
       <div>
-        <div className="grid grid-cols-5 gap-1 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
+        <div className="grid grid-cols-6 gap-1 p-1 rounded-lg bg-[var(--forge-surface-2)] border border-[var(--forge-border)]">
           {SEGMENTS.map((seg) => {
             const active = seg.id === mode;
             const available = segmentAvailable(seg.id);
@@ -769,6 +770,20 @@ export function ForgePanel({
         </>
       )}
 
+      {/* STORY MODE — the Director. Controls + shot cards live on the storyboard (right). */}
+      {mode === 'story' && (
+        <div className="flex flex-col gap-3">
+          <FieldHeading>Director</FieldHeading>
+          <p className="text-xs text-[var(--forge-muted)] leading-relaxed">
+            Brief → shot list → identity-consistent frames → animated clips → timeline.
+            Direct it all on the <span className="text-[var(--ember-1)]">storyboard</span> to the right.
+          </p>
+          <p className="font-mono text-[10px] text-[var(--forge-faint)]">
+            plan shots with the agent · star your cast in every frame · assemble into the editor
+          </p>
+        </div>
+      )}
+
       {/* Content-policy hint */}
       {promptBlocked && (
         <p role="alert" className="font-mono text-[10px] text-red-300 -mb-2">
@@ -776,16 +791,18 @@ export function ForgePanel({
         </p>
       )}
 
-      {/* FORGE BUTTON */}
-      <button
-        type="button"
-        onClick={onForge}
-        disabled={!canForge}
-        aria-label={forgeAction}
-        className={`btn-forge w-full rounded-lg py-3 text-sm flex items-center justify-center gap-2 ${forging ? 'forging' : ''}`}
-      >
-        <span aria-hidden="true">{forgeLabel}</span>
-      </button>
+      {/* FORGE BUTTON — story mode forges from the storyboard itself */}
+      {mode !== 'story' && (
+        <button
+          type="button"
+          onClick={onForge}
+          disabled={!canForge}
+          aria-label={forgeAction}
+          className={`btn-forge w-full rounded-lg py-3 text-sm flex items-center justify-center gap-2 ${forging ? 'forging' : ''}`}
+        >
+          <span aria-hidden="true">{forgeLabel}</span>
+        </button>
+      )}
     </div>
   );
 }

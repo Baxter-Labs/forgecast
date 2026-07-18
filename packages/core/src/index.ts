@@ -21,6 +21,7 @@ export * from './adaudit';
 export * from './footage';
 export * from './contentguard';
 export * from './editor';
+export * from './storyboard';
 export * from './character';
 export * from './auth';
 export * from './secrets';

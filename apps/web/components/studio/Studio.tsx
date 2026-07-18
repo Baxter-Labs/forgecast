@@ -14,6 +14,7 @@ import { CreatePanel } from './CreatePanel';
 import { AgentChat } from './AgentChat';
 import { JobStatus } from './JobStatus';
 import { Gallery } from './Gallery';
+import { StoryboardBoard } from './StoryboardBoard';
 import { CampaignPanel, type StoredCampaign } from './CampaignPanel';
 import { PublishPanel } from './PublishPanel';
 import type { ContentPlan } from '@forgecast/agent';
@@ -104,6 +105,7 @@ export function Studio() {
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
     characters, loadCharacters, createCharacter, deleteCharacter,
+    loadStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot, animateStoryboardShot, storyboardToTimeline,
   } = useForgecast();
 
   const brand = useBrandKit(projectId);
@@ -253,6 +255,7 @@ export function Studio() {
   // Campaigns are optional organizers: forging always works; results land in the
   // Gallery, and additionally attach to the campaign active at forge time.
   function handleForge() {
+    if (mode === 'story') return; // the storyboard drives its own actions
     const campaignId = activeCampaignId;
     const attach = (assetId: string | null | undefined) => {
       if (assetId && campaignId) appendVideoAssets(campaignId, [assetId]);
@@ -411,6 +414,21 @@ export function Studio() {
           />
           <JobStatus status={status} error={error} />
 
+          {/* Story mode swaps the gallery/history panes for the Director's board */}
+          {mode === 'story' ? (
+            <StoryboardBoard
+              projectId={projectId}
+              characters={characters}
+              loadStoryboard={loadStoryboard}
+              saveStoryboard={saveStoryboard}
+              generateStoryboard={generateStoryboard}
+              renderStoryboardShot={renderStoryboardShot}
+              animateStoryboardShot={animateStoryboardShot}
+              storyboardToTimeline={storyboardToTimeline}
+              videoAvailable={availability.video}
+            />
+          ) : (
+          <>
           {/* View toggle */}
           <ViewToggle view={view} onChange={setView} />
 
@@ -458,6 +476,8 @@ export function Studio() {
               )}
             </div>
           </div>
+          </>
+          )}
 
           {/* Publish panel — slides in when user clicks Cast on an asset */}
           {publishingAsset && (

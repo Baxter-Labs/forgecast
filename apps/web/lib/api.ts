@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline } from '@forgecast/core';
-import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, Character } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard } from '@forgecast/core';
 import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
@@ -900,9 +900,10 @@ export async function buildTimelineSpec(services: Services, timeline: EditorTime
 /**
  * Synthesizes a narration script into an audio asset (via the active voice
  * provider, synchronously — same in-request pattern as image generation) and
- * returns its resolvable URL for a MontageSpec. Errors are returned as ApiResults.
+ * returns its resolvable URL (for a MontageSpec) plus the asset id (for a
+ * timeline's voiceoverAssetId). Errors are returned as ApiResults.
  */
-async function synthesizeVoiceoverUrl(services: Services, projectId: string, text: string): Promise<{ url: string } | ApiResult> {
+async function synthesizeVoiceoverUrl(services: Services, projectId: string, text: string): Promise<{ url: string; assetId: string } | ApiResult> {
   if (!services.voiceAvailable) {
     return { status: 503, body: { error: 'voiceoverText given but voice-over is not available — on Cloudflare it is keyless (AI binding); elsewhere set VOXCPM_URL or FAL_KEY_VOICE, or pass voiceoverAssetId instead' } };
   }
@@ -917,7 +918,7 @@ async function synthesizeVoiceoverUrl(services: Services, projectId: string, tex
   }
   const url = await resolveAssetUrl(services, finished.resultAssetId);
   if (!url) return { status: 502, body: { error: 'synthesized voice-over has no stored audio' } };
-  return { url };
+  return { url, assetId: finished.resultAssetId };
 }
 
 /** Kick off a montage job. The remote Remotion worker is submit-then-poll (the client
@@ -1524,4 +1525,267 @@ export async function deleteCharacter(services: Services, ownerId: string, chara
   if ('status' in resolved) return resolved;
   await services.characters.delete(characterId);
   return { status: 200, body: { ok: true } };
+}
+
+// ── Storyboard / Director — brief → LLM shot list → stills → clips → timeline ──
+// Persisted like the timeline: one JSON document per project in the storage
+// driver (no schema change). The board is drivable by the Studio UI and MCP.
+
+const storyboardKey = (projectId: string): string => `projects/${projectId}/storyboard.json`;
+
+/** Load a project's saved storyboard (or null if none). */
+export async function getStoryboard(services: Services, projectId: string): Promise<Storyboard | null> {
+  const stored = await services.storage.get(storyboardKey(projectId));
+  if (!stored) return null;
+  try {
+    return normalizeStoryboard(JSON.parse(new TextDecoder().decode(stored.data)), services.ids.randomId);
+  } catch {
+    return null;
+  }
+}
+
+async function putStoryboard(services: Services, projectId: string, storyboard: Storyboard): Promise<void> {
+  await services.storage.put(storyboardKey(projectId), new TextEncoder().encode(JSON.stringify(storyboard)), 'application/json');
+}
+
+/** Read the storyboard for the board UI (empty storyboard when none saved yet). */
+export async function readStoryboard(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  return { status: 200, body: { storyboard: (await getStoryboard(services, projectId)) ?? emptyStoryboard() } };
+}
+
+/**
+ * Cross-tenant guard (the storyboard sibling of foreignTimelineAsset): every
+ * EXISTING character or asset a storyboard references must belong to the same
+ * owner as the storyboard's project. Missing ids keep their skip-at-render
+ * behavior; a foreign id is rejected as not-found so nothing leaks about other
+ * tenants. Returns the rejection message, or null when the board is clean.
+ */
+async function foreignStoryboardRef(services: Services, projectOwner: string | undefined, storyboard: Storyboard): Promise<string | null> {
+  const owner = projectOwner ?? LOCAL_OWNER;
+  for (const shot of storyboard.shots) {
+    if (shot.characterId) {
+      const character = await services.characters.get(shot.characterId);
+      if (character && character.ownerId !== owner) return `character not found: ${shot.characterId}`;
+    }
+    for (const id of [shot.imageAssetId, shot.clipAssetId]) {
+      if (!id) continue;
+      const asset = await services.assets.get(id);
+      if (!asset) continue;
+      const assetOwner = (await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER;
+      if (assetOwner !== owner) return `asset not found: ${id}`;
+    }
+  }
+  return null;
+}
+
+/** Save (normalize + persist) a storyboard for a project. */
+export async function saveStoryboard(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const fields = (input ?? {}) as { storyboard?: unknown };
+  const storyboard = normalizeStoryboard(fields.storyboard ?? input, services.ids.randomId);
+  const foreign = await foreignStoryboardRef(services, project.ownerId, storyboard);
+  if (foreign) return { status: 400, body: { error: foreign } };
+  await putStoryboard(services, projectId, storyboard);
+  return { status: 200, body: { storyboard } };
+}
+
+/**
+ * The DIRECTOR: plan a storyboard from a brief with the agent LLM — a cinematic
+ * shot list (prompt/caption/shotType/duration) plus a voice-over script, saved
+ * as the project's storyboard. When a cast member is given, their id is stamped
+ * onto every shot so each rendered frame holds their identity.
+ */
+export async function generateStoryboard(
+  services: Services,
+  projectId: string,
+  input: unknown,
+  llm: AdCopyLlm = makeLlmClient(),
+): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+
+  const fields = (input ?? {}) as { brief?: unknown; shotCount?: unknown; characterId?: unknown; aspectRatio?: unknown };
+  if (typeof fields.brief !== 'string' || fields.brief.trim().length === 0) {
+    return { status: 400, body: { error: 'brief is required' } };
+  }
+  const blockedStoryboard = guardText(fields.brief); if (blockedStoryboard) return blockedStoryboard;
+  if (!llm.isAvailable()) {
+    return {
+      status: 503,
+      body: { error: 'agent LLM not configured (set OPENAI_API_KEY; or FORGECAST_AGENT_LLM=anthropic with ANTHROPIC_API_KEY for Claude)' },
+    };
+  }
+
+  // Optional cast member: resolved up-front (same owner as the project) so a
+  // foreign id fails fast, then stamped onto every planned shot.
+  let character: Character | null = null;
+  if (typeof fields.characterId === 'string' && fields.characterId.length > 0) {
+    const resolved = await ownedCharacter(services, project.ownerId, fields.characterId);
+    if ('status' in resolved) return resolved;
+    character = resolved.character;
+  }
+
+  const shotCount =
+    typeof fields.shotCount === 'number' && Number.isFinite(fields.shotCount)
+      ? Math.min(MAX_STORYBOARD_SHOTS, Math.max(1, Math.round(fields.shotCount)))
+      : 6;
+  const aspectRatio = typeof fields.aspectRatio === 'string' ? fields.aspectRatio : '9:16';
+  const brandKit = await getBrandKit(services, projectId);
+  const { system, user } = buildStoryboardPrompt({
+    brief: fields.brief, shotCount, aspectRatio, brandKit,
+    ...(character ? { characterName: character.name } : {}),
+  });
+
+  let raw: string;
+  try {
+    raw = await llm.complete({ system, user });
+  } catch (e) {
+    return { status: 502, body: { error: `storyboard planning failed: ${e instanceof Error ? e.message : String(e)}` } };
+  }
+
+  const plan = parseStoryboardPlan(raw);
+  const storyboard = normalizeStoryboard({
+    title: plan.title ?? fields.brief.trim().slice(0, 80),
+    brief: fields.brief,
+    aspectRatio,
+    ...(plan.voiceoverScript ? { voiceoverScript: plan.voiceoverScript } : {}),
+    shots: plan.shots,
+  }, services.ids.randomId);
+  if (storyboard.shots.length === 0) return { status: 502, body: { error: 'no storyboard shots returned' } };
+  if (character) for (const shot of storyboard.shots) shot.characterId = character.id;
+
+  await putStoryboard(services, projectId, storyboard);
+  return { status: 200, body: { storyboard } };
+}
+
+/** Look up the saved storyboard + one shot, or an ApiResult error. */
+async function ownedStoryboardShot(
+  services: Services,
+  projectId: string,
+  shotId: unknown,
+): Promise<{ storyboard: Storyboard; shot: Storyboard['shots'][number] } | ApiResult> {
+  if (typeof shotId !== 'string' || shotId.length === 0) return { status: 400, body: { error: 'shotId is required' } };
+  const storyboard = await getStoryboard(services, projectId);
+  if (!storyboard) return { status: 404, body: { error: 'no storyboard saved — generate or save one first' } };
+  const shot = storyboard.shots.find((s) => s.id === shotId);
+  if (!shot) return { status: 404, body: { error: `shot not found: ${shotId}` } };
+  return { storyboard, shot };
+}
+
+/**
+ * Render one shot's still frame: the shot's prompt (with shotType/cameraAngle
+ * folded in) → generateImage with the shot's cast member + the storyboard's
+ * aspect ratio. Synchronous; stamps the shot's imageAssetId on success.
+ */
+export async function renderStoryboardShot(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const found = await ownedStoryboardShot(services, projectId, (input as { shotId?: unknown } | null)?.shotId);
+  if ('status' in found) return found;
+  const { storyboard, shot } = found;
+
+  const r = await generateImage(services, projectId, {
+    prompt: storyboardShotPrompt(shot),
+    aspectRatio: storyboard.aspectRatio,
+    ...(shot.characterId ? { characterId: shot.characterId } : {}),
+  });
+  if (r.status !== 200) return r;
+  const body = r.body as { job?: { error?: string }; asset?: { id: string } | null };
+  if (!body.asset) return { status: 502, body: { error: body.job?.error ?? 'shot render produced no image' } };
+
+  shot.imageAssetId = body.asset.id;
+  await putStoryboard(services, projectId, storyboard);
+  return { status: 200, body: { shot, asset: body.asset } };
+}
+
+// The default image-to-video model for animating a storyboard still (the same
+// model the Studio's per-asset Animate action uses).
+const STORYBOARD_I2V_MODEL = 'fal-ai/wan-pro/image-to-video';
+
+/**
+ * Animate a rendered shot (image-to-video from its still). ASYNC — 202 + job;
+ * when the job completes, the caller stamps job.resultAssetId onto the shot via
+ * setStoryboardShotClip (UI route) / a storyboard update (MCP).
+ */
+export async function animateStoryboardShot(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const found = await ownedStoryboardShot(services, projectId, (input as { shotId?: unknown } | null)?.shotId);
+  if ('status' in found) return found;
+  const { storyboard, shot } = found;
+  if (!shot.imageAssetId) {
+    return { status: 400, body: { error: 'shot has no rendered frame yet — render the still first, then animate it' } };
+  }
+
+  return generateVideo(services, projectId, {
+    prompt: `${storyboardShotPrompt(shot)} — subtle natural cinematic motion, gentle camera move`,
+    model: STORYBOARD_I2V_MODEL,
+    imageAssetId: shot.imageAssetId,
+    aspectRatio: storyboard.aspectRatio,
+    ...(shot.characterId ? { characterId: shot.characterId } : {}),
+  });
+}
+
+/**
+ * Stamp a completed animate job's video asset onto a shot (clipAssetId). The
+ * asset must be a video owned by the project's owner.
+ */
+export async function setStoryboardShotClip(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const fields = (input ?? {}) as { shotId?: unknown; assetId?: unknown };
+  if (typeof fields.assetId !== 'string' || fields.assetId.length === 0) {
+    return { status: 400, body: { error: 'assetId is required (the finished animate job\'s resultAssetId)' } };
+  }
+  const found = await ownedStoryboardShot(services, projectId, fields.shotId);
+  if ('status' in found) return found;
+  const { storyboard, shot } = found;
+
+  const asset = await services.assets.get(fields.assetId);
+  const assetOwner = asset ? ((await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER) : undefined;
+  if (!asset || assetOwner !== (project.ownerId ?? LOCAL_OWNER)) {
+    return { status: 404, body: { error: `asset not found: ${fields.assetId}` } };
+  }
+  if (asset.type !== 'video') return { status: 400, body: { error: 'clip must be a video asset (the animate job result)' } };
+
+  shot.clipAssetId = asset.id;
+  await putStoryboard(services, projectId, storyboard);
+  return { status: 200, body: { shot } };
+}
+
+/**
+ * Assemble the storyboard onto the project's editor timeline: every shot with a
+ * rendered asset becomes a clip (animated clip preferred over the still; stills
+ * pick up the default gentle zoom-in at render time), captions carry over, and
+ * the voiceoverScript (when present and a voice provider is available) is
+ * synthesized onto the timeline's narration track. Saves + returns the timeline.
+ */
+export async function storyboardToTimeline(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const storyboard = await getStoryboard(services, projectId);
+  if (!storyboard) return { status: 404, body: { error: 'no storyboard saved — generate or save one first' } };
+
+  const clips: EditorClip[] = [];
+  for (const shot of storyboard.shots) {
+    const assetId = shot.clipAssetId ?? shot.imageAssetId;
+    if (!assetId) continue; // not rendered yet — skip
+    clips.push({ id: shot.id, assetId, durationSec: shot.durationSec, ...(shot.caption ? { caption: shot.caption } : {}) });
+  }
+  if (clips.length === 0) {
+    return { status: 400, body: { error: 'no shots have rendered assets yet — render each shot\'s frame (and optionally animate it) first' } };
+  }
+
+  const timeline: EditorTimeline = { aspectRatio: storyboard.aspectRatio, clips };
+  if (storyboard.voiceoverScript && services.voiceAvailable) {
+    const synthesized = await synthesizeVoiceoverUrl(services, projectId, storyboard.voiceoverScript);
+    if (!('url' in synthesized)) return synthesized;
+    timeline.voiceoverAssetId = synthesized.assetId;
+  }
+
+  // saveTimeline re-normalizes and runs the timeline's own cross-tenant guard.
+  return saveTimeline(services, projectId, { timeline });
 }
