@@ -245,6 +245,64 @@ export async function getAsset(services: Services, assetId: string): Promise<Api
   return { status: 200, body: { asset } };
 }
 
+// ── Global Library — every asset the owner has, across projects, with tags ────
+// Tags live on Asset.params.tags (freeform JSON, no schema change) so the library
+// can group/filter/search without a new column.
+const MAX_ASSET_TAGS = 24;
+const MAX_TAG_LEN = 40;
+
+/** The tags attached to an asset (defensive read of the freeform params blob). */
+export function assetTags(params: Record<string, unknown> | undefined): string[] {
+  const raw = (params as { tags?: unknown } | undefined)?.tags;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t): t is string => typeof t === 'string' && t.trim().length > 0).map((t) => t.trim());
+}
+
+/** Normalize an incoming tag list: trim, cap length, de-dupe (case-insensitive), cap count. */
+function sanitizeTags(input: unknown): string[] {
+  const arr = (input as { tags?: unknown } | null)?.tags;
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of arr) {
+    if (typeof t !== 'string') continue;
+    const norm = t.trim().slice(0, MAX_TAG_LEN);
+    const key = norm.toLowerCase();
+    if (norm.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    out.push(norm);
+    if (out.length >= MAX_ASSET_TAGS) break;
+  }
+  return out;
+}
+
+/**
+ * The owner's whole library: every asset across all their projects (newest first),
+ * each carrying its project name + tags, plus the distinct tag set for filter chips.
+ */
+export async function listLibrary(services: Services, ownerId?: string): Promise<ApiResult> {
+  const owner = ownerId ?? LOCAL_OWNER;
+  const [assets, projects] = await Promise.all([
+    services.assets.listByOwner(owner),
+    services.projects.list(owner),
+  ]);
+  const names = new Map(projects.map((p) => [p.id, p.name]));
+  const items = assets.map((a) => ({ ...a, projectName: names.get(a.projectId) ?? null, tags: assetTags(a.params) }));
+  const tags = [...new Set(items.flatMap((a) => a.tags))].sort((a, b) => a.localeCompare(b));
+  return { status: 200, body: { assets: items, tags, count: items.length } };
+}
+
+/** Replace an asset's library tags (owner-guarded; foreign/unknown assets read as 404). */
+export async function setAssetTags(services: Services, ownerId: string, assetId: string, input: unknown): Promise<ApiResult> {
+  const asset = await services.assets.get(assetId);
+  const owner = asset ? ((await services.projects.get(asset.projectId))?.ownerId ?? LOCAL_OWNER) : undefined;
+  if (!asset || owner !== (ownerId ?? LOCAL_OWNER)) return { status: 404, body: { error: 'asset not found' } };
+  const tags = sanitizeTags(input);
+  const params = { ...asset.params, tags };
+  const updated = await services.assets.update(assetId, { params });
+  return { status: 200, body: { asset: updated } };
+}
+
 // ── Brand Kit ───────────────────────────────────────────────────────────────
 // Stored per project as a JSON object in the storage driver (no schema change),
 // and folded into generation prompts so outputs come out on-brand.

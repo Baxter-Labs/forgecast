@@ -251,7 +251,7 @@ describe('storyboard over MCP', () => {
     return (JSON.parse(textOf(created)) as { project: { id: string } }).project.id;
   }
 
-  it('exposes the six storyboard tools (34 total)', async () => {
+  it('exposes the six storyboard tools (35 total)', async () => {
     const services = makeServices();
     const b = bodyOf(await handleMcpMessage({ services, userId: 'A' }, { jsonrpc: '2.0', id: 1, method: 'tools/list' }));
     const names = (b.result?.tools ?? []).map((t) => t.name);
@@ -259,7 +259,7 @@ describe('storyboard over MCP', () => {
       'forgecast_get_storyboard', 'forgecast_set_storyboard', 'forgecast_generate_storyboard',
       'forgecast_render_storyboard_shot', 'forgecast_animate_storyboard_shot', 'forgecast_storyboard_to_timeline',
     ]) expect(names).toContain(n);
-    expect(names).toHaveLength(37);
+    expect(names).toHaveLength(38);
   });
 
   it('set_storyboard round-trips through get_storyboard (normalized)', async () => {

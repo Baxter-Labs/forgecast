@@ -80,7 +80,7 @@ describe('reangle / relight ops', () => {
     expect(((denied.body as { error?: string }).error ?? '')).toMatch(/FAL_KEY/i);
   });
 
-  it('MCP: reangle/relight tools present (34), ownership enforced', async () => {
+  it('MCP: reangle/relight tools present (35), ownership enforced', async () => {
     const { svc } = falServices();
     const { id } = await seedImage(svc, 'A');
     const call = (userId: string, n: number, name: string, args: Record<string, unknown>) =>
@@ -94,6 +94,6 @@ describe('reangle / relight ops', () => {
     const tools = await handleMcpMessage({ services: svc, userId: 'A' }, { jsonrpc: '2.0', id: 3, method: 'tools/list' });
     const names = ((tools!.body as { result: { tools: Array<{ name: string }> } }).result.tools).map((t) => t.name);
     expect(names).toEqual(expect.arrayContaining(['forgecast_reangle_image', 'forgecast_relight_image']));
-    expect(names).toHaveLength(37);
+    expect(names).toHaveLength(38);
   });
 });

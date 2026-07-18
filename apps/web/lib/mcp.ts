@@ -7,7 +7,7 @@ import { LOCAL_OWNER } from './auth-guard';
 import {
   createProject, listProjects, generateImage, generateVideo, generateVoiceover,
   generateMontage, generateNarratedVideo, generateAdCopy, publishAsset,
-  searchFootage, listAssets, getAsset, getJob,
+  searchFootage, listAssets, getAsset, getJob, listLibrary,
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   reangleAsset, relightAsset,
@@ -248,6 +248,29 @@ const TOOLS: McpTool[] = [
       const pid = await ownedProjectId(services, userId, args.projectId);
       const body = unwrap(await listAssets(services, pid)) as { assets: Array<Parameters<typeof assetRow>[0]> };
       return { assets: body.assets.map(assetRow), count: body.assets.length };
+    },
+  },
+  {
+    name: 'forgecast_list_library',
+    description:
+      'List the user’s whole library — every asset across ALL their projects (newest first), each with its project name and tags — plus the distinct tag set. The cross-project version of forgecast_list_assets. Read-only, no args. Returns { assets[], tags[], count }.',
+    inputSchema: obj({}),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async ({ services, userId }) => {
+      const body = unwrap(await listLibrary(services, userId)) as {
+        assets: Array<Parameters<typeof assetRow>[0] & { projectId: string; projectName?: string | null; tags?: string[] }>;
+        tags: string[];
+      };
+      return {
+        assets: body.assets.map((a) => ({
+          ...assetRow(a),
+          projectId: a.projectId,
+          ...(a.projectName ? { projectName: a.projectName } : {}),
+          ...(a.tags && a.tags.length ? { tags: a.tags } : {}),
+        })),
+        tags: body.tags,
+        count: body.assets.length,
+      };
     },
   },
   {
