@@ -8,6 +8,8 @@ import {
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   createCharacter, listCharacters, deleteCharacter, generatePresenter,
+  readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
+  animateStoryboardShot, storyboardToTimeline,
 } from './api';
 
 /**
@@ -459,6 +461,124 @@ TOOLS.push(
       // https (the api layer also allows http for local/stdio use — not safe here).
       if (!url || !/^https:\/\//i.test(url)) throw new Error('url must be a public https:// video URL');
       return unwrap(await importFootage(services, pid, { url, query: str(args.query), source: str(args.source) }));
+    },
+  },
+);
+
+// ── Storyboard / Director (brief → shot list → stills → clips → timeline) ────
+
+/** JSON Schema for a storyboard document (matches @forgecast/core normalizeStoryboard). */
+const storyboardSchema = obj({
+  title: { type: 'string', description: 'Short human-readable title.' },
+  brief: { type: 'string', description: 'The creative brief the board was planned from.' },
+  aspectRatio: { type: 'string', enum: ['9:16', '16:9', '1:1', '4:5', '4:3', '3:4'], description: 'Output shape (default 9:16).' },
+  voiceoverScript: { type: 'string', description: 'Optional narration script — synthesized onto the timeline at assemble time.' },
+  shots: {
+    type: 'array',
+    description: 'Ordered shots (max 12); array order is play order.',
+    items: obj({
+      id: { type: 'string', description: 'Stable shot id (assigned when omitted).' },
+      prompt: { type: 'string', description: 'Self-contained visual description for the image model.' },
+      caption: { type: 'string', description: 'Optional overlay text, carried onto the timeline clip.' },
+      shotType: { type: 'string', enum: ['wide', 'medium', 'close-up', 'establishing', 'detail', 'pov'], description: 'Cinematic framing, folded into the render prompt.' },
+      cameraAngle: { type: 'string', description: 'Free-text camera direction (e.g. "low angle, slow push-in").' },
+      characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) starring in this shot — identity holds in the render.' },
+      durationSec: { type: 'number', description: 'Seconds on the assembled timeline (1–15, default 4).' },
+      imageAssetId: { type: 'string', description: 'The rendered still frame (set by forgecast_render_storyboard_shot).' },
+      clipAssetId: { type: 'string', description: 'The animated clip (set after a forgecast_animate_storyboard_shot job completes) — preferred over the still at assemble time.' },
+    }, ['prompt']),
+  },
+}, ['shots']);
+
+/** Ownership-check every character + asset a (raw, untrusted) storyboard references. */
+async function ownStoryboardRefs(services: Services, userId: string, storyboard: unknown): Promise<void> {
+  const rawShots = (storyboard as { shots?: unknown } | null)?.shots;
+  for (const s of Array.isArray(rawShots) ? rawShots : []) {
+    const shot = (s ?? {}) as { characterId?: unknown; imageAssetId?: unknown; clipAssetId?: unknown };
+    const characterId = str(shot.characterId);
+    if (characterId) {
+      const character = await services.characters.get(characterId);
+      if (!character || character.ownerId !== userId) throw new Error(`character not found: ${characterId}`);
+    }
+    for (const id of [shot.imageAssetId, shot.clipAssetId]) {
+      if (typeof id === 'string' && id.length > 0) await ownedAsset(services, userId, id);
+    }
+  }
+}
+
+TOOLS.push(
+  {
+    name: 'forgecast_get_storyboard',
+    description:
+      'Read a project’s storyboard — the director’s shot list (prompt + shotType + caption + duration + cast + rendered asset ids) plus the brief and voice-over script. Returns an empty storyboard when none is saved. Args: projectId.',
+    inputSchema: obj({ projectId: P.projectId }, ['projectId']),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await readStoryboard(services, pid));
+    },
+  },
+  {
+    name: 'forgecast_set_storyboard',
+    description:
+      'Create or edit a project’s storyboard — pass the FULL document (it replaces the saved one; read-modify-write via forgecast_get_storyboard). This is also how animate results are attached: set the shot’s clipAssetId to the finished job’s resultAssetId. Invalid shots are dropped, ids assigned, values clamped, max 12 shots. Every referenced character/asset must be yours. Args: projectId, storyboard.',
+    inputSchema: obj({ projectId: P.projectId, storyboard: storyboardSchema }, ['projectId', 'storyboard']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      await ownStoryboardRefs(services, userId, args.storyboard);
+      return unwrap(await saveStoryboard(services, pid, { storyboard: args.storyboard }));
+    },
+  },
+  {
+    name: 'forgecast_generate_storyboard',
+    description:
+      'DIRECTOR: plan a storyboard from a brief with the agent LLM — a cinematic shot list (prompt / caption / shotType / duration) plus a voice-over script, saved as the project’s storyboard. Pass characterId to star a cast member in every shot. Synchronous; then render each shot with forgecast_render_storyboard_shot. Args: projectId, brief, shotCount? (1–12, default 6), characterId?, aspectRatio?. Requires an agent LLM key (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      brief: { type: 'string', description: 'What the video is about, in natural language.' },
+      shotCount: { type: 'number', description: 'How many shots to plan (1–12, default 6).' },
+      characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) — stamped onto every shot.' },
+      aspectRatio: { type: 'string', enum: ['9:16', '16:9', '1:1', '4:5', '4:3', '3:4'], description: 'Output shape (default 9:16).' },
+    }, ['projectId', 'brief']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      // characterId is ownership-checked inside generateStoryboard (via the project owner).
+      return unwrap(await generateStoryboard(services, pid, { brief: str(args.brief), shotCount: num(args.shotCount), characterId: str(args.characterId), aspectRatio: str(args.aspectRatio) }));
+    },
+  },
+  {
+    name: 'forgecast_render_storyboard_shot',
+    description:
+      'Render one storyboard shot into its still frame (identity-consistent when the shot has a characterId). Synchronous — stamps the shot’s imageAssetId and returns { shot, asset }. Args: projectId, shotId (from the storyboard’s shots[].id).',
+    inputSchema: obj({ projectId: P.projectId, shotId: { type: 'string', description: 'A shot id from forgecast_get_storyboard.' } }, ['projectId', 'shotId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await renderStoryboardShot(services, pid, { shotId: str(args.shotId) }));
+    },
+  },
+  {
+    name: 'forgecast_animate_storyboard_shot',
+    description:
+      'Animate a rendered shot (image-to-video from its still frame). ASYNC — returns a job; poll forgecast_get_job until status is "done", then attach the clip by setting that shot’s clipAssetId = job.resultAssetId via forgecast_set_storyboard (full-document update). Requires the shot to have an imageAssetId (render it first). Args: projectId, shotId.',
+    inputSchema: obj({ projectId: P.projectId, shotId: { type: 'string', description: 'A shot id from forgecast_get_storyboard (must have imageAssetId).' } }, ['projectId', 'shotId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await animateStoryboardShot(services, pid, { shotId: str(args.shotId) }));
+    },
+  },
+  {
+    name: 'forgecast_storyboard_to_timeline',
+    description:
+      'Assemble the storyboard onto the project’s editor timeline: every shot with a rendered asset becomes a clip (animated clip preferred over the still; stills get a gentle zoom-in), captions carry over, and the voice-over script is synthesized onto the narration track when a voice provider is available. Synchronous — saves + returns the timeline; then call forgecast_render_timeline. Args: projectId.',
+    inputSchema: obj({ projectId: P.projectId }, ['projectId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await storyboardToTimeline(services, pid));
     },
   },
 );

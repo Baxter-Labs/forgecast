@@ -1,8 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import type { ShortVideoOptions, EditorTimeline, Character } from '@forgecast/core';
+import type { ShortVideoOptions, EditorTimeline, Character, Storyboard, StoryboardShot } from '@forgecast/core';
 
-export type { ShortVideoOptions, EditorTimeline, Character };
+export type { ShortVideoOptions, EditorTimeline, Character, Storyboard, StoryboardShot };
 
 export interface StudioAsset {
   id: string;
@@ -64,6 +64,7 @@ interface GeneratePresenterArgs { imagePrompt?: string; imageUrl?: string; text?
 interface CreateCharacterInput { name: string; description?: string; refAssetIds: string[] }
 interface ComposeVideoArgs { assetIds: string[]; aspectRatio?: string; durationSec?: number }
 interface AnimateAssetOpts { aspectRatio?: string; model?: string }
+interface GenerateStoryboardArgs { brief: string; shotCount?: number; characterId?: string; aspectRatio?: string }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_TRIES = 200;
@@ -673,6 +674,95 @@ export function useForgecast() {
     }
   }, [projectId, pollJob]);
 
+  // ── Storyboard / Director (plan shots → render stills → animate → assemble) ──
+  const loadStoryboard = useCallback(async (): Promise<Storyboard | null> => {
+    if (!projectId) return null;
+    const body = await fetch(`/api/projects/${projectId}/storyboard`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    return (body?.storyboard as Storyboard | undefined) ?? null;
+  }, [projectId]);
+
+  const saveStoryboard = useCallback(async (storyboard: Storyboard): Promise<Storyboard | null> => {
+    if (!projectId) return null;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/storyboard`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storyboard }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Failed to save storyboard'); return null; }
+      return (body?.storyboard as Storyboard) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); return null;
+    }
+  }, [projectId]);
+
+  const generateStoryboard = useCallback(async (args: GenerateStoryboardArgs): Promise<Storyboard | null> => {
+    if (!projectId) return null;
+    setStatus('forging'); setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/storyboard/generate`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Failed to plan shots'); setStatus('error'); return null; }
+      setStatus('idle');
+      return (body?.storyboard as Storyboard) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); setStatus('error'); return null;
+    }
+  }, [projectId]);
+
+  // Render one shot's still frame (synchronous). Returns the updated shot.
+  const renderStoryboardShot = useCallback(async (shotId: string): Promise<StoryboardShot | null> => {
+    if (!projectId) return null;
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/storyboard/shots/${shotId}/render`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Failed to render shot'); return null; }
+      await refreshAssets();
+      return (body?.shot as StoryboardShot) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); return null;
+    }
+  }, [projectId, refreshAssets]);
+
+  // Animate a rendered shot: 202 + job → poll → stamp the clip onto the shot.
+  // Returns the clip asset id.
+  const animateStoryboardShot = useCallback(async (shotId: string): Promise<string | null> => {
+    if (!projectId) return null;
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/storyboard/shots/${shotId}/animate`, { method: 'POST' });
+      if (res.status !== 202) { setError(await readError(res, 'Failed to start shot animation')); return null; }
+      const { job } = await res.json();
+      const { outcome, assetId } = await pollJob(job.id);
+      if (outcome !== 'done' || !assetId) return null;
+      const clipRes = await fetch(`/api/projects/${projectId}/storyboard/shots/${shotId}/clip`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assetId }),
+      });
+      if (!clipRes.ok) { setError(await readError(clipRes, 'Failed to attach the clip')); return null; }
+      return assetId;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); return null;
+    }
+  }, [projectId, pollJob]);
+
+  const storyboardToTimeline = useCallback(async (): Promise<EditorTimeline | null> => {
+    if (!projectId) return null;
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/storyboard/to-timeline`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) { setError(body?.error ?? 'Failed to assemble the timeline'); return null; }
+      return (body?.timeline as EditorTimeline) ?? null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error'); return null;
+    }
+  }, [projectId]);
+
   const agentPlan = useCallback(async (brief: string, platforms: string[]) => {
     try {
       const res = await fetch('/api/agent', {
@@ -741,6 +831,7 @@ export function useForgecast() {
     generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
     loadTimeline, saveTimeline, renderTimeline,
+    loadStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot, animateStoryboardShot, storyboardToTimeline,
     generateVoiceover, narrateVideo, generatePresenter,
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite, enhanceAsset, editAsset, cutoutAsset,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
