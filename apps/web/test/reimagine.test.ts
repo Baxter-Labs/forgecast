@@ -30,13 +30,16 @@ const falBody = (fetchFn: unknown) =>
     .find((c) => String(c[0]).includes('fal.run')));
 
 describe('reangle / relight ops', () => {
-  it('reangle with a preset routes to the Qwen multi-angle model with image_urls', async () => {
+  it('reangle with a preset routes to the prompt-driven Qwen editor (image_urls)', async () => {
     const { svc, fetchFn } = falServices();
     const { projectId, id } = await seedImage(svc, 'A');
     const r = await reangleAsset(svc, projectId, { assetId: id, preset: 'low-angle' });
     expect(r.status).toBe(200);
     const call = falBody(fetchFn)!;
-    expect(String(call[0])).toContain('qwen-image-edit-2509-lora-gallery/multiple-angles');
+    expect(String(call[0])).toContain('fal-ai/qwen-image-edit-2509');
+    // NOT the multiple-angles LoRA endpoint — that one has no prompt field, so the preset
+    // instruction would be ignored and the angle would never change.
+    expect(String(call[0])).not.toContain('multiple-angles');
     const body = JSON.parse(call[1]!.body!) as { image_urls?: string[]; prompt: string };
     expect(body.image_urls).toHaveLength(1);
     expect(body.prompt).toMatch(/low angle/i);

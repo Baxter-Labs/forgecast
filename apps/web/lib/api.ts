@@ -1375,7 +1375,12 @@ export async function editAsset(
 // routing differs per op.
 
 /** Camera re-angling: a LoRA endpoint purpose-trained for multi-angle re-shots. */
-const REANGLE_MODEL = 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles';
+// The base Qwen-Image-Edit-2509 is INSTRUCTION-driven (required: prompt + image_urls),
+// so our natural-language angle presets actually apply. The .../multiple-angles LoRA
+// endpoint has NO prompt field (angle is set by discrete params) — it would ignore the
+// preset instruction entirely. The /qwen-image-edit-2509/ regex in editImage still
+// matches this id, keeping the plural image_urls mapping.
+const REANGLE_MODEL = 'fal-ai/qwen-image-edit-2509';
 /** Scene relighting: IC-Light v2 (prompt + image_url → relit image). */
 const RELIGHT_MODEL = 'fal-ai/iclight-v2';
 
