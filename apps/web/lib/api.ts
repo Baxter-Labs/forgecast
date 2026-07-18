@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction } from '@forgecast/core';
-import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction, composeCinemaPrompt, resolveCinemaSelection } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset, CinemaSelection } from '@forgecast/core';
 import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
@@ -698,6 +698,7 @@ export async function generateVideo(services: Services, projectId: string, input
     imageAssetId?: unknown;
     imageUrl?: unknown;
     characterId?: unknown;
+    cinema?: unknown;
   };
   if (typeof fields.prompt !== 'string' || fields.prompt.trim().length === 0) {
     return { status: 400, body: { error: 'prompt is required' } };
@@ -756,9 +757,22 @@ export async function generateVideo(services: Services, projectId: string, input
     }
   }
 
+  // Cinematic direction — prompt-modifier chips (SHOT/LENS/MOVE/LOOK) folded into
+  // the prompt so they steer EVERY provider, including the free/keyless ones. Only
+  // whitelisted preset ids survive; unknown ids are dropped (composeCinemaPrompt).
+  const cinemaRaw = (fields.cinema ?? {}) as { shot?: unknown; lens?: unknown; move?: unknown; look?: unknown };
+  const cinemaSel: CinemaSelection = resolveCinemaSelection({
+    shot: typeof cinemaRaw.shot === 'string' ? cinemaRaw.shot : undefined,
+    lens: typeof cinemaRaw.lens === 'string' ? cinemaRaw.lens : undefined,
+    move: typeof cinemaRaw.move === 'string' ? cinemaRaw.move : undefined,
+    look: typeof cinemaRaw.look === 'string' ? cinemaRaw.look : undefined,
+  });
+  const directedPrompt = composeCinemaPrompt(fields.prompt as string, cinemaSel);
+
   // Ground the video in the project's brand kit (no-op when none is set).
-  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), fields.prompt as string);
+  const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), directedPrompt);
   const params: Record<string, unknown> = { prompt: brandedPrompt };
+  if (Object.keys(cinemaSel).length > 0) params.cinema = cinemaSel; // provenance
   if (typeof fields.aspectRatio === 'string') params.aspectRatio = fields.aspectRatio;
   if (typeof fields.duration === 'number') params.duration = fields.duration;
   if (typeof fields.quality === 'string') params.quality = fields.quality;

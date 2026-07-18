@@ -18,6 +18,7 @@ import { StoryboardBoard } from './StoryboardBoard';
 import { CampaignPanel, type StoredCampaign } from './CampaignPanel';
 import { PublishPanel } from './PublishPanel';
 import type { ContentPlan } from '@forgecast/agent';
+import type { CinemaSelection } from '@forgecast/core';
 import type { StudioAsset } from '@/lib/use-forgecast';
 
 // ─── Persistence keys ────────────────────────────────────────────────────────
@@ -139,6 +140,7 @@ export function Studio() {
   const videoModel = boostQuality ? 'fal-ai/veo3.1/fast' : 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video';
   const [videoImageAssetId, setVideoImageAssetId] = useState<string | null>(null);
   const [characterId, setCharacterId] = useState<string | null>(null);
+  const [cinema, setCinema] = useState<CinemaSelection>({});
   // Keep the picked cast member valid as the cast changes (e.g. after a delete).
   useEffect(() => {
     if (characterId && !characters.some((c) => c.id === characterId)) setCharacterId(null);
@@ -264,7 +266,7 @@ export function Studio() {
       const { width, height } = ratioToDimensions(ratio);
       void generateImage({ prompt, model, aspectRatio: ratio, width, height, provider: imageProvider, characterId: characterId ?? undefined }).then(attach);
     } else if (mode === 'video') {
-      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined, provider: videoProvider, characterId: characterId ?? undefined }).then(attach);
+      void generateVideo({ prompt, aspectRatio: ratio, model: videoModel, imageAssetId: videoImageAssetId ?? undefined, provider: videoProvider, characterId: characterId ?? undefined, cinema: Object.keys(cinema).length > 0 ? cinema : undefined }).then(attach);
     } else if (mode === 'voice') {
       void generateVoiceover({ text: prompt, voice: voiceName.trim() || undefined }).then(attach);
     } else if (mode === 'short') {
@@ -384,6 +386,8 @@ export function Studio() {
                 characterId={characterId}
                 setCharacterId={setCharacterId}
                 onManageCast={() => setCastOpen(true)}
+                cinema={cinema}
+                setCinema={setCinema}
               />
             }
           />

@@ -1,8 +1,10 @@
 'use client';
 import { useState } from 'react';
+import { Clapperboard } from 'lucide-react';
 import type { CatalogModel } from '@forgecast/catalog';
 import { imageModels } from '@forgecast/catalog';
-import { checkContent } from '@forgecast/core';
+import { checkContent, CINEMA_GROUPS } from '@forgecast/core';
+import type { CinemaSelection, CinemaGroup } from '@forgecast/core';
 import type { Availability, StudioAsset, Character } from '@/lib/use-forgecast';
 import { MontageBuilder } from './MontageBuilder';
 import type { StoredCampaign } from './CampaignPanel';
@@ -60,6 +62,9 @@ interface ForgePanelProps {
   characterId: string | null;
   setCharacterId: (id: string | null) => void;
   onManageCast: () => void;
+  /** Cinematic direction (SHOT/LENS/MOVE/LOOK) folded into the video prompt. */
+  cinema: CinemaSelection;
+  setCinema: (c: CinemaSelection) => void;
 }
 
 function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
@@ -290,6 +295,96 @@ function CastRow({
   );
 }
 
+function CinemaChip({ label, selected, onClick, ariaLabel }: { label: string; selected: boolean; onClick: () => void; ariaLabel: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      aria-label={ariaLabel}
+      className="inline-flex items-center justify-center min-h-[44px] font-mono text-xs px-3 py-2 rounded border transition-all"
+      style={selected ? {
+        borderColor: 'var(--ember-2)',
+        color: 'var(--ember-1)',
+        boxShadow: '0 0 12px var(--ember-glow)',
+        background: 'rgba(255,122,26,0.06)',
+      } : {
+        borderColor: 'var(--forge-border)',
+        color: 'var(--forge-faint)',
+        background: 'transparent',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * CINEMA — collapsible rack of single-select prompt-modifier chips that give the
+ * clip cinematic direction (SHOT / LENS / MOVE / LOOK). Modifiers fold into the
+ * prompt, so they steer every provider including the free ones.
+ */
+function CinemaRack({ cinema, setCinema }: { cinema: CinemaSelection; setCinema: (c: CinemaSelection) => void }) {
+  const [open, setOpen] = useState(false);
+  const activeCount = CINEMA_GROUPS.reduce((n, g) => n + (cinema[g.id] ? 1 : 0), 0);
+
+  const select = (group: CinemaGroup, id: string | null) => {
+    const next: CinemaSelection = { ...cinema };
+    if (id === null) delete next[group];
+    else next[group] = id;
+    setCinema(next);
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label="Toggle cinematic direction"
+        className="flex items-center justify-between w-full font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] transition-colors hover:text-[var(--ember-1)] cursor-pointer"
+      >
+        <span className="flex items-center gap-1.5">
+          <Clapperboard size={12} aria-hidden="true" className="text-[var(--ember-1)]" />
+          Cinema
+          {activeCount > 0 && <span className="text-[var(--ember-1)]">· {activeCount}</span>}
+        </span>
+        <span aria-hidden="true">{open ? '−' : '+'}</span>
+      </button>
+
+      {open && (
+        <div className="mt-3 flex flex-col gap-4">
+          {CINEMA_GROUPS.map((g) => {
+            const current = cinema[g.id];
+            return (
+              <div key={g.id}>
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--forge-faint)] mb-2">{g.label}</p>
+                <div className="flex flex-wrap gap-2">
+                  <CinemaChip
+                    label="none"
+                    selected={!current}
+                    onClick={() => select(g.id, null)}
+                    ariaLabel={`${g.label}: none`}
+                  />
+                  {g.presets.map((p) => (
+                    <CinemaChip
+                      key={p.id}
+                      label={p.label}
+                      selected={current === p.id}
+                      onClick={() => select(g.id, current === p.id ? null : p.id)}
+                      ariaLabel={`${g.label}: ${p.label}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const IMAGE_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', openai: 'OpenAI', stablediffusion: 'Stable Diffusion' };
 const VIDEO_PROVIDER_LABELS: Record<string, string> = { cloudflare: 'Free · Cloudflare', fal: 'fal', replicate: 'Replicate', skyreels: 'Free · SkyReels (self-hosted)' };
 
@@ -301,6 +396,7 @@ export function ForgePanel({
   montagePrompts, setMontagePrompts,
   campaigns, activeCampaignId, setActiveCampaignId, onCreateCampaign,
   characters, characterId, setCharacterId, onManageCast,
+  cinema, setCinema,
 }: ForgePanelProps) {
   const [newCampaignMode, setNewCampaignMode] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
@@ -645,6 +741,8 @@ export function ForgePanel({
           )}
 
           <CastRow characters={characters} characterId={characterId} setCharacterId={setCharacterId} onManageCast={onManageCast} />
+
+          <CinemaRack cinema={cinema} setCinema={setCinema} />
 
           <div>
             <FieldHeading>Ratio</FieldHeading>

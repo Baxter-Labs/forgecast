@@ -1,4 +1,4 @@
-import { ANGLE_PRESETS, LIGHT_PRESETS } from '@forgecast/core';
+import { ANGLE_PRESETS, LIGHT_PRESETS, SHOT_PRESETS, LENS_PRESETS, MOVE_PRESETS, LOOK_PRESETS } from '@forgecast/core';
 import type { Services } from './forgecast';
 import type { ApiResult } from './api';
 /** Minimal LLM shape the ad-copy/storyboard ops need (owner-keyed when provided). */
@@ -161,15 +161,15 @@ const TOOLS: McpTool[] = [
   {
     name: 'forgecast_generate_video',
     description:
-      'Start a text-to-video generation in a project (keyless by default). ASYNC — returns a job at status "running"; poll forgecast_get_job with the returned job.id until status is "done", then read resultAssetId. Args: projectId, prompt, aspectRatio?, duration?.',
-    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio, duration: { type: 'number', description: 'Clip length in seconds.' }, characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) — the clip is driven from their portrait so identity holds.' } }, ['projectId', 'prompt']),
+      'Start a text-to-video generation in a project (keyless by default). Optionally add cinematic direction via prompt-modifier presets — shot (framing), lens, move (camera motion), look (color grade) — which work on every provider. ASYNC — returns a job at status "running"; poll forgecast_get_job with the returned job.id until status is "done", then read resultAssetId. Args: projectId, prompt, aspectRatio?, duration?, shot?, lens?, move?, look?.',
+    inputSchema: obj({ projectId: P.projectId, prompt: P.prompt, aspectRatio: P.aspectRatio, duration: { type: 'number', description: 'Clip length in seconds.' }, characterId: { type: 'string', description: 'Optional cast member (forgecast_list_characters) — the clip is driven from their portrait so identity holds.' }, shot: { type: 'string', enum: SHOT_PRESETS.map((p) => p.id), description: 'Cinematic shot framing.' }, lens: { type: 'string', enum: LENS_PRESETS.map((p) => p.id), description: 'Cinematic lens.' }, move: { type: 'string', enum: MOVE_PRESETS.map((p) => p.id), description: 'Cinematic camera move.' }, look: { type: 'string', enum: LOOK_PRESETS.map((p) => p.id), description: 'Cinematic color grade / look.' } }, ['projectId', 'prompt']),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       // Forward only declared fields so an injected imageAssetId/imageUrl can't
       // pull another user's asset as the i2v source frame; characterId is
-      // ownership-checked inside generateVideo.
-      return unwrap(await generateVideo(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio), duration: num(args.duration), characterId: str(args.characterId) }));
+      // ownership-checked inside generateVideo. cinema ids are whitelisted in the api layer.
+      return unwrap(await generateVideo(services, pid, { prompt: str(args.prompt), aspectRatio: str(args.aspectRatio), duration: num(args.duration), characterId: str(args.characterId), cinema: { shot: str(args.shot), lens: str(args.lens), move: str(args.move), look: str(args.look) } }));
     },
   },
   {
