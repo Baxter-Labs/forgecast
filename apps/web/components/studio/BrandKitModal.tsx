@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Globe, Plus, Check, AlertCircle, Palette } from 'lucide-react';
 import type { BrandKit, useBrandKit } from '@/lib/use-brand-kit';
@@ -27,6 +27,7 @@ export function BrandKitModal({ open, onClose, brand }: Props) {
   const [url, setUrl] = useState('');
   const [colorInput, setColorInput] = useState('#FF7A1A');
   const [messageInput, setMessageInput] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Sync the editable draft from the loaded kit whenever the modal opens or the
   // kit changes underneath (e.g. after a derive-from-website).
@@ -37,6 +38,7 @@ export function BrandKitModal({ open, onClose, brand }: Props) {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open, onClose]);
 
@@ -70,14 +72,17 @@ export function BrandKitModal({ open, onClose, brand }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
-        className="panel w-full max-w-[560px] max-h-[88vh] overflow-y-auto rise"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="panel w-full max-w-[560px] max-h-[88vh] overflow-y-auto rise outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label="Brand Kit editor"
       >
         {/* Header */}
@@ -89,7 +94,7 @@ export function BrandKitModal({ open, onClose, brand }: Props) {
               <p className="font-mono text-[10px] text-[var(--forge-faint)]">Everything you generate uses this.</p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-white/5 transition-colors cursor-pointer">
+          <button onClick={onClose} aria-label="Close" className="tap-target rounded-full text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-white/5 transition-colors cursor-pointer">
             <X size={18} />
           </button>
         </div>

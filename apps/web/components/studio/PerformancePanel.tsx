@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Activity, RefreshCw, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 
@@ -40,12 +40,14 @@ export function PerformancePanel({ open, onClose, onAudit, onOptimize }: Props) 
   const [opt, setOpt] = useState<{ regenerated?: Array<{ creativeId: string; newAssetId: string }>; optimizations?: Optimization[]; note?: string } | null>(null);
   const [loading, setLoading] = useState<'audit' | 'optimize' | null>(null);
   const [error, setError] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open, onClose]);
 
@@ -87,15 +89,15 @@ export function PerformancePanel({ open, onClose, onAudit, onOptimize }: Props) 
   const fatiguedCount = audit?.fatigue.filter((f) => f.status === 'fatigued').length ?? 0;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 sm:p-8" onClick={onClose}>
-      <div className="panel w-full max-w-2xl my-auto p-5 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 sm:p-8" onClick={onClose}>
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Ad Performance" className="panel w-full max-w-2xl my-auto p-5 flex flex-col gap-4 outline-none" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity size={15} className="text-[var(--ember-1)]" />
             <h3 className="font-mono text-[11px] uppercase tracking-[0.15em] text-[var(--forge-text)]">Ad Performance</h3>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-[var(--forge-surface-2)] transition-colors">
+          <button onClick={onClose} aria-label="Close" className="tap-target rounded text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-[var(--forge-surface-2)] transition-colors">
             <X size={14} />
           </button>
         </div>
@@ -214,7 +216,7 @@ export function PerformancePanel({ open, onClose, onAudit, onOptimize }: Props) 
                 {opt.regenerated!.map((g) => (
                   <div key={g.newAssetId} className="w-20 h-20 rounded-lg overflow-hidden border border-[var(--ember-2)]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/assets/${g.newAssetId}/raw`} alt={`Refresh for ${g.creativeId}`} className="w-full h-full object-cover" />
+                    <img src={`/api/assets/${g.newAssetId}/raw`} alt={`Refresh for ${g.creativeId}`} className="w-full h-full object-cover" loading="lazy" />
                   </div>
                 ))}
               </div>

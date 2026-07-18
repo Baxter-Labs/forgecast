@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X, Download } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { StudioAsset } from '@/lib/use-forgecast';
@@ -13,11 +13,14 @@ export function Lightbox({ asset, onClose }: LightboxProps) {
   const isVideo = asset.type === 'video';
   const prompt = asset.params.prompt ?? '';
   const videoTag = asset.provider === 'remotion' ? 'MONTAGE' : 'VIDEO';
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    // Move focus into the lightbox so Escape / tabbing work without a stray click.
+    dialogRef.current?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
@@ -26,7 +29,12 @@ export function Lightbox({ asset, onClose }: LightboxProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={prompt ? `Asset preview: ${prompt}` : 'Asset preview'}
+      className="fixed inset-0 z-lightbox flex items-center justify-center outline-none"
       style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
@@ -43,7 +51,8 @@ export function Lightbox({ asset, onClose }: LightboxProps) {
       </a>
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+        aria-label="Close preview"
+        className="tap-target absolute top-4 right-4 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
       >
         <X size={22} />
       </button>

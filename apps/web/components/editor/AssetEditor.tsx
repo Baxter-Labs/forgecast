@@ -140,7 +140,7 @@ export function AssetEditor({ assetId }: Props) {
                 <button
                   onClick={() => setResult(null)}
                   aria-label="Dismiss result"
-                  className="px-2.5 py-1.5 rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer"
+                  className="tap-target rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer"
                 >
                   <X size={13} />
                 </button>
@@ -265,10 +265,10 @@ function InlinePrompt({
         className="flex-1 font-mono text-[10px] px-2.5 py-2 rounded-lg border bg-transparent outline-none min-w-0"
         style={{ borderColor: 'var(--ember-2)', color: 'var(--forge-text)', caretColor: 'var(--ember-1)' }}
       />
-      <button onClick={onSubmit} disabled={disabled || !value.trim()} aria-label="Apply" className="p-2 rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)' }}>
+      <button onClick={onSubmit} disabled={disabled || !value.trim()} aria-label="Apply" className="tap-target rounded-lg border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" style={{ borderColor: 'var(--ember-2)', color: 'var(--ember-1)' }}>
         <Check size={13} />
       </button>
-      <button onClick={onCancel} aria-label="Cancel" className="p-2 rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer">
+      <button onClick={onCancel} aria-label="Cancel" className="tap-target rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer">
         <X size={13} />
       </button>
     </div>

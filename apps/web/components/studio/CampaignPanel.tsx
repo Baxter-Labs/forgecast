@@ -54,7 +54,8 @@ export function CampaignPanel({ campaign, assets, onRemove }: CampaignPanelProps
         <button
           onClick={() => setConfirming(true)}
           title="Delete campaign"
-          className="ml-3 p-1.5 rounded text-[var(--forge-faint)] hover:text-[var(--ember-3)] hover:bg-[var(--forge-surface-2)] transition-colors shrink-0"
+          aria-label="Delete campaign"
+          className="tap-target ml-3 rounded text-[var(--forge-faint)] hover:text-[var(--ember-3)] hover:bg-[var(--forge-surface-2)] transition-colors shrink-0"
         >
           <Trash2 size={13} />
         </button>

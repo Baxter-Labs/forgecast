@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
 import { useKeys, type KeyStatus } from '@/lib/use-keys';
@@ -90,26 +90,28 @@ function KeyRow({ k, busy, onSave, onClear }: {
 
 export function KeysModal({ open, onClose, onChanged }: Props) {
   const { keys, sealed, loading, busyId, error, save, clear } = useKeys(open);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Provider keys">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Provider keys">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: 'rgba(10,8,6,0.75)', backdropFilter: 'blur(2px)' }} />
-      <div className="panel relative w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 flex flex-col gap-4 rise">
+      <div ref={dialogRef} tabIndex={-1} className="panel relative w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 flex flex-col gap-4 rise outline-none">
         <div className="flex items-center gap-2">
           <KeyRound size={15} className="text-[var(--ember-1)]" aria-hidden="true" />
           <h2 className="font-mono text-sm uppercase tracking-[0.15em] text-[var(--forge-text)]">Provider keys</h2>
           <span className="flex-1" />
-          <button type="button" onClick={onClose} aria-label="Close keys" className="w-7 h-7 rounded border flex items-center justify-center" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}>
+          <button type="button" onClick={onClose} aria-label="Close keys" className="tap-target rounded border" style={{ borderColor: 'var(--forge-border)', color: 'var(--forge-faint)' }}>
             <X size={13} aria-hidden="true" />
           </button>
         </div>

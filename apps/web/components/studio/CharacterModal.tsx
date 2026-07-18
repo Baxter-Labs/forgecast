@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Users, Check, AlertCircle, Trash2 } from 'lucide-react';
 import type { Character, StudioAsset } from '@/lib/use-forgecast';
@@ -36,6 +36,7 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Re-sync the cast whenever the modal opens (mirrors BrandKitModal's open sync).
   useEffect(() => { if (open) { setError(null); setConfirmId(null); onRefresh(); } }, [open, onRefresh]);
@@ -45,6 +46,7 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open, onClose]);
 
@@ -78,14 +80,17 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
-        className="panel w-full max-w-[560px] max-h-[88vh] overflow-y-auto rise"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="panel w-full max-w-[560px] max-h-[88vh] overflow-y-auto rise outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label="Cast manager"
       >
         {/* Header */}
@@ -97,7 +102,7 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
               <p className="font-mono text-[10px] text-[var(--forge-faint)]">The same faces, in everything you forge.</p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-full text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-white/5 transition-colors cursor-pointer">
+          <button onClick={onClose} aria-label="Close" className="tap-target rounded-full text-[var(--forge-faint)] hover:text-[var(--forge-text)] hover:bg-white/5 transition-colors cursor-pointer">
             <X size={18} />
           </button>
         </div>
@@ -154,7 +159,7 @@ export function CharacterModal({ open, onClose, characters, assets, onCreate, on
                     <button
                       onClick={() => setConfirmId(c.id)}
                       aria-label={`Delete ${c.name}`}
-                      className="p-1.5 rounded text-[var(--forge-faint)] hover:text-[var(--ember-1)] hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+                      className="tap-target rounded text-[var(--forge-faint)] hover:text-[var(--ember-1)] hover:bg-white/5 transition-colors cursor-pointer shrink-0"
                     >
                       <Trash2 size={14} />
                     </button>
