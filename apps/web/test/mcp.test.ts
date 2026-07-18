@@ -148,7 +148,7 @@ describe('editing + asset-op MCP parity', () => {
       'forgecast_import_footage', 'forgecast_generate_presenter',
       'forgecast_generate_storyboard', 'forgecast_storyboard_to_timeline',
     ]) expect(names).toContain(n);
-    expect((b.result?.tools ?? []).length).toBe(34);
+    expect((b.result?.tools ?? []).length).toBe(37);
   });
 
   it('health reports every modality for capability discovery', async () => {
