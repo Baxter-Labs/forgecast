@@ -18,6 +18,7 @@ export async function GET(req: Request) {
       narrate: svc.narrateAvailable ? ['ffmpeg'] : [],
       transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
       presenter: svc.presenterAvailable ? [svc.presenterProvider.name] : [],
+      lipsync: svc.lipsyncAvailable ? [svc.lipsyncProvider.name] : [],
       footage: svc.footageAvailable,
     },
     publishers: svc.publishers.available(),

@@ -11,7 +11,7 @@ import {
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   reangleAsset, relightAsset,
-  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter,
+  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter, generateLipsync,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
   listBrainstormBoards, saveBrainstormBoard, generateBrainstormIdea,
@@ -466,6 +466,23 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       return unwrap(await generatePresenter(services, pid, { text: str(args.text), characterId: str(args.characterId), imagePrompt: str(args.imagePrompt), voice: str(args.voice) }));
+    },
+  },
+  {
+    name: 'forgecast_lipsync_video',
+    description:
+      'LIP-SYNC new speech onto an EXISTING video: the mouth is re-animated to match the new audio. ASYNC — poll forgecast_get_job; the result is a new video asset. Args: projectId, videoAssetId (a video you own), then EITHER text (a script voiced on the fly, voice? optional) OR audioAssetId (an existing audio asset). Requires a fal key (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      videoAssetId: { type: 'string', description: 'The video asset to re-animate.' },
+      text: { type: 'string', description: 'New speech to voice and sync.' },
+      audioAssetId: { type: 'string', description: 'Alternative: an existing audio asset to sync to.' },
+      voice: { type: 'string', description: 'Optional named voice (with text).' },
+    }, ['projectId', 'videoAssetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generateLipsync(services, pid, { videoAssetId: str(args.videoAssetId), text: str(args.text), audioAssetId: str(args.audioAssetId), voice: str(args.voice) }));
     },
   },
   {

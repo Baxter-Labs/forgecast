@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Download, Sparkles, Pencil, Scissors, Film, Layers, Mic,
+  ArrowLeft, Download, Sparkles, Pencil, Scissors, Film, Layers, Mic, AudioLines,
   ExternalLink, Check, X, AlertCircle, Camera, Sun,
 } from 'lucide-react';
 import { ANGLE_PRESETS, LIGHT_PRESETS, type ReimaginePreset } from '@forgecast/core';
@@ -25,6 +25,8 @@ export function AssetEditor({ assetId }: Props) {
   const [editPrompt, setEditPrompt] = useState('');
   const [narrateOpen, setNarrateOpen] = useState(false);
   const [narrateText, setNarrateText] = useState('');
+  const [lipsyncOpen, setLipsyncOpen] = useState(false);
+  const [lipsyncText, setLipsyncText] = useState('');
   const [anglePreset, setAnglePreset] = useState<string | null>(null);
   const [angleCustom, setAngleCustom] = useState('');
   const [lightPreset, setLightPreset] = useState<string | null>(null);
@@ -237,6 +239,20 @@ export function AssetEditor({ assetId }: Props) {
                   setValue={setNarrateText}
                   onSubmit={async () => { const t = narrateText.trim(); if (!t) return; setNarrateOpen(false); setNarrateText(''); await run(() => ed.narrate(t), 'video'); }}
                   onCancel={() => { setNarrateOpen(false); setNarrateText(''); }}
+                  disabled={!!busy}
+                />
+              )}
+
+              <button onClick={() => setLipsyncOpen((v) => !v)} disabled={!!busy || !availability.lipsync} className={RAIL} style={railStyle()} aria-label="Lip-sync new speech" aria-expanded={lipsyncOpen} title={!availability.lipsync ? 'Lip-sync needs a fal key (FAL_KEY_VIDEO or FAL_KEY)' : 'Re-animate the mouth to speak a new script'}>
+                <AudioLines size={15} className="text-[var(--ember-1)]" /> Lip-sync (new speech)
+              </button>
+              {lipsyncOpen && (
+                <InlinePrompt
+                  placeholder="new speech — what should they say?"
+                  value={lipsyncText}
+                  setValue={setLipsyncText}
+                  onSubmit={async () => { const t = lipsyncText.trim(); if (!t) return; setLipsyncOpen(false); setLipsyncText(''); await run(() => ed.lipsync(t), 'video'); }}
+                  onCancel={() => { setLipsyncOpen(false); setLipsyncText(''); }}
                   disabled={!!busy}
                 />
               )}
