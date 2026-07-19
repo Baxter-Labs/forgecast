@@ -1211,6 +1211,69 @@ export async function generatePresenter(services: Services, projectId: string, i
   return { status: 202, body: { job } };
 }
 
+/**
+ * Lip-sync new speech onto EXISTING footage: re-animates the mouth of a stored
+ * video asset to match a new audio track (an existing audio asset, or a script
+ * voiced on the fly). The result lands in the gallery as a new video asset.
+ */
+export async function generateLipsync(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.lipsyncAvailable) {
+    return { status: 503, body: { error: 'lip-sync not configured — add a fal key (FAL_KEY_VIDEO or FAL_KEY)' } };
+  }
+
+  const fields = (input ?? {}) as {
+    videoAssetId?: unknown;
+    audioAssetId?: unknown;
+    text?: unknown;
+    voice?: unknown;
+  };
+
+  if (!(typeof fields.videoAssetId === 'string' && fields.videoAssetId.length > 0)) {
+    return { status: 400, body: { error: 'videoAssetId is required' } };
+  }
+  const videoAsset = await services.assets.get(fields.videoAssetId);
+  if (!videoAsset || videoAsset.projectId !== projectId) return { status: 404, body: { error: 'video asset not found' } };
+  if (videoAsset.type !== 'video') return { status: 400, body: { error: 'videoAssetId must reference a video asset' } };
+  const videoUrl = await resolveAssetUrl(services, videoAsset.id);
+  if (!videoUrl) return { status: 404, body: { error: 'video asset has no stored bytes' } };
+
+  const text = typeof fields.text === 'string' && fields.text.length > 0 ? fields.text : undefined;
+  const audioAssetId = typeof fields.audioAssetId === 'string' && fields.audioAssetId.length > 0 ? fields.audioAssetId : undefined;
+  if (!text && !audioAssetId) return { status: 400, body: { error: 'text or audioAssetId is required' } };
+  if (text) {
+    const b = guardText(text);
+    if (b) return b;
+    if (!audioAssetId && !services.voiceAvailable) {
+      return { status: 503, body: { error: 'voicing a script needs a voice provider — pass audioAssetId instead, or add a voice key' } };
+    }
+  }
+
+  const params: Record<string, unknown> = { videoAssetId: videoAsset.id, videoUrl };
+  if (audioAssetId) {
+    const audioAsset = await services.assets.get(audioAssetId);
+    if (!audioAsset || audioAsset.projectId !== projectId) return { status: 404, body: { error: 'audio asset not found' } };
+    if (audioAsset.type !== 'audio') return { status: 400, body: { error: 'audioAssetId must reference an audio asset' } };
+    const audioUrl = await resolveAssetUrl(services, audioAsset.id);
+    if (!audioUrl) return { status: 404, body: { error: 'audio asset has no stored bytes' } };
+    params.audioAssetId = audioAsset.id;
+    params.audioUrl = audioUrl;
+  } else {
+    params.text = text;
+    if (typeof fields.voice === 'string') params.voice = fields.voice;
+  }
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'lipsync', provider: services.lipsyncProvider.name, params },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  runBackground(services.runner.run(job.id));
+  return { status: 202, body: { job } };
+}
+
 export async function uploadAsset(
   services: Services,
   projectId: string,
@@ -1220,13 +1283,15 @@ export async function uploadAsset(
   if (!project) return { status: 404, body: { error: 'project not found' } };
   if (input.bytes.length === 0) return { status: 400, body: { error: 'file is empty' } };
 
-  let type: 'image' | 'video';
+  let type: 'image' | 'video' | 'audio';
   if (input.contentType.startsWith('image/')) {
     type = 'image';
   } else if (input.contentType.startsWith('video/')) {
     type = 'video';
+  } else if (input.contentType.startsWith('audio/')) {
+    type = 'audio';
   } else {
-    return { status: 400, body: { error: 'only image or video uploads are supported' } };
+    return { status: 400, body: { error: 'only image, video, or audio uploads are supported' } };
   }
 
   const extMap: Record<string, string> = {
@@ -1238,8 +1303,13 @@ export async function uploadAsset(
     'video/mp4': 'mp4',
     'video/webm': 'webm',
     'video/quicktime': 'mov',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg',
   };
-  const defaultExt = type === 'video' ? 'mp4' : 'png';
+  const defaultExt = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : 'png';
   const ext = extMap[input.contentType] ?? defaultExt;
 
   const id = services.ids.randomId();

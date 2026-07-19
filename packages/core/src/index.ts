@@ -12,6 +12,7 @@ export * from './voicegen';
 export * from './montage';
 export * from './transcribe';
 export * from './presenter';
+export * from './lipsync';
 export * from './website';
 export * from './brandkit';
 export * from './adcopy';

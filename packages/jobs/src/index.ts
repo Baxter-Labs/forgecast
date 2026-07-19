@@ -10,3 +10,4 @@ export * from './handlers/localMontage';
 export * from './handlers/voiceover';
 export * from './handlers/narrate';
 export * from './handlers/presenter';
+export * from './handlers/lipsync';

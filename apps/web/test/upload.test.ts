@@ -42,7 +42,16 @@ describe('api: uploadAsset', () => {
     const r = await uploadAsset(svc, pid, { bytes, contentType: 'application/pdf' });
     expect(r.status).toBe(400);
     const body = r.body as { error: string };
-    expect(body.error).toBe('only image or video uploads are supported');
+    expect(body.error).toBe('only image, video, or audio uploads are supported');
+  });
+
+  it('stores audio uploads as audio assets', async () => {
+    const { svc, pid } = await projectId();
+    const r = await uploadAsset(svc, pid, { bytes: new Uint8Array([1, 2, 3]), contentType: 'audio/mpeg', filename: 'speech.mp3' });
+    expect(r.status).toBe(201);
+    const asset = (r.body as { asset: { type: string; storageKey: string } }).asset;
+    expect(asset.type).toBe('audio');
+    expect(asset.storageKey).toMatch(/\.mp3$/);
   });
 
   it('returns 404 for missing project', async () => {
