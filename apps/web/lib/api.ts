@@ -1274,6 +1274,49 @@ export async function generateLipsync(services: Services, projectId: string, inp
   return { status: 202, body: { job } };
 }
 
+export async function generateSfx(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.sfxAvailable) {
+    return { status: 503, body: { error: 'SFX not configured — add a fal key (FAL_KEY_VIDEO or FAL_KEY)' } };
+  }
+
+  const fields = (input ?? {}) as {
+    videoAssetId?: unknown;
+    prompt?: unknown;
+    negativePrompt?: unknown;
+  };
+
+  if (!(typeof fields.videoAssetId === 'string' && fields.videoAssetId.length > 0)) {
+    return { status: 400, body: { error: 'videoAssetId is required' } };
+  }
+  const videoAsset = await services.assets.get(fields.videoAssetId);
+  if (!videoAsset || videoAsset.projectId !== projectId) return { status: 404, body: { error: 'video asset not found' } };
+  if (videoAsset.type !== 'video') return { status: 400, body: { error: 'videoAssetId must reference a video asset' } };
+  const videoUrl = await resolveAssetUrl(services, videoAsset.id);
+  if (!videoUrl) return { status: 404, body: { error: 'video asset has no stored bytes' } };
+
+  if (!(typeof fields.prompt === 'string' && fields.prompt.length > 0)) {
+    return { status: 400, body: { error: 'prompt is required — describe the sound to generate' } };
+  }
+  const bad = guardText(fields.prompt);
+  if (bad) return bad;
+
+  const params: Record<string, unknown> = { videoAssetId: videoAsset.id, videoUrl, prompt: fields.prompt };
+  if (typeof fields.negativePrompt === 'string' && fields.negativePrompt.length > 0) {
+    params.negativePrompt = fields.negativePrompt;
+  }
+
+  const job = await services.jobs.create(
+    newJob(
+      { projectId, kind: 'sfx', provider: services.sfxProvider.name, params },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  runBackground(services.runner.run(job.id));
+  return { status: 202, body: { job } };
+}
+
 export async function uploadAsset(
   services: Services,
   projectId: string,

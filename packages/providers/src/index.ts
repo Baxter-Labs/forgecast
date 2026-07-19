@@ -23,6 +23,7 @@ export * from './voice/voxcpm';
 export * from './transcribe/wisprflow';
 export * from './presenter/omnihuman';
 export * from './video/falLipsync';
+export * from './video/falMmaudio';
 export * from './website/http';
 export * from './insights/registry';
 export * from './insights/meta';

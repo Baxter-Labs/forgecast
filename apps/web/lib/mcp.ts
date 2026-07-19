@@ -11,7 +11,7 @@ import {
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   reangleAsset, relightAsset,
-  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter, generateLipsync,
+  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter, generateLipsync, generateSfx,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
   listBrainstormBoards, saveBrainstormBoard, generateBrainstormIdea,
@@ -483,6 +483,22 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       return unwrap(await generateLipsync(services, pid, { videoAssetId: str(args.videoAssetId), text: str(args.text), audioAssetId: str(args.audioAssetId), voice: str(args.voice) }));
+    },
+  },
+  {
+    name: 'forgecast_add_sfx',
+    description:
+      'SFX: generate synchronized SOUND EFFECTS / ambience for an EXISTING video (fal mmaudio-v2) — the sound is composed to match the visuals, and the result is the video with the audio track merged in. ASYNC — poll forgecast_get_job; the result is a new video asset. Args: projectId, videoAssetId (a video you own), prompt (describe the sound, e.g. "rain on a tin roof, distant thunder"), negativePrompt? (sounds to avoid, e.g. "music, speech"). Requires a fal key (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      videoAssetId: { type: 'string', description: 'The video asset to score.' },
+      prompt: { type: 'string', description: 'Describes the desired sound.' },
+      negativePrompt: { type: 'string', description: 'Sounds to avoid.' },
+    }, ['projectId', 'videoAssetId', 'prompt']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generateSfx(services, pid, { videoAssetId: str(args.videoAssetId), prompt: str(args.prompt), negativePrompt: str(args.negativePrompt) }));
     },
   },
   {
