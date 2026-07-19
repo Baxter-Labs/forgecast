@@ -13,6 +13,7 @@ export * from './montage';
 export * from './transcribe';
 export * from './presenter';
 export * from './lipsync';
+export * from './retarget';
 export * from './website';
 export * from './brandkit';
 export * from './adcopy';

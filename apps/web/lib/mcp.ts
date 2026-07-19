@@ -11,7 +11,7 @@ import {
   readTimeline, saveTimeline, renderTimeline, generateShortVideo,
   enhanceAsset, editAsset, removeBackgroundAsset, importFootage,
   reangleAsset, relightAsset,
-  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter, generateLipsync,
+  createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter, generateLipsync, generateRetarget,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
   listBrainstormBoards, saveBrainstormBoard, generateBrainstormIdea,
@@ -483,6 +483,21 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       return unwrap(await generateLipsync(services, pid, { videoAssetId: str(args.videoAssetId), text: str(args.text), audioAssetId: str(args.audioAssetId), voice: str(args.voice) }));
+    },
+  },
+  {
+    name: 'forgecast_retarget_motion',
+    description:
+      'MOTION RETARGET: drive a character IMAGE with the performance (body + face motion) of a reference VIDEO (fal wan-animate). ASYNC — poll forgecast_get_job; the result is a new video asset. Args: projectId, imageAssetId (the character still you own), videoAssetId (a video in the same project whose motion is retargeted). Requires a fal key (503 with guidance otherwise).',
+    inputSchema: obj({
+      projectId: P.projectId,
+      imageAssetId: { type: 'string', description: 'The character image to animate.' },
+      videoAssetId: { type: 'string', description: 'The reference performance video.' },
+    }, ['projectId', 'imageAssetId', 'videoAssetId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generateRetarget(services, pid, { imageAssetId: str(args.imageAssetId), videoAssetId: str(args.videoAssetId) }));
     },
   },
   {

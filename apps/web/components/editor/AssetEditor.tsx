@@ -1,13 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Download, Sparkles, Pencil, Scissors, Film, Layers, Mic, AudioLines,
-  ExternalLink, Check, X, AlertCircle, Camera, Sun,
+  ExternalLink, Check, X, AlertCircle, Camera, Sun, PersonStanding,
 } from 'lucide-react';
 import { ANGLE_PRESETS, LIGHT_PRESETS, type ReimaginePreset } from '@forgecast/core';
-import { useAssetEditor } from '@/lib/use-asset-editor';
+import { useAssetEditor, type EditorAsset } from '@/lib/use-asset-editor';
 import { BeforeAfter } from './BeforeAfter';
 
 interface Props {
@@ -27,6 +27,7 @@ export function AssetEditor({ assetId }: Props) {
   const [narrateText, setNarrateText] = useState('');
   const [lipsyncOpen, setLipsyncOpen] = useState(false);
   const [lipsyncText, setLipsyncText] = useState('');
+  const [retargetOpen, setRetargetOpen] = useState(false);
   const [anglePreset, setAnglePreset] = useState<string | null>(null);
   const [angleCustom, setAngleCustom] = useState('');
   const [lightPreset, setLightPreset] = useState<string | null>(null);
@@ -221,6 +222,18 @@ export function AssetEditor({ assetId }: Props) {
                 <Film size={15} className="text-[var(--ember-1)]" /> Animate → video
               </button>
 
+              <button onClick={() => setRetargetOpen((v) => !v)} disabled={!!busy || !availability.retarget} className={RAIL} style={railStyle()} aria-label="Motion retarget from a reference video" aria-expanded={retargetOpen} title={!availability.retarget ? 'Motion retarget needs a fal key (FAL_KEY_VIDEO or FAL_KEY)' : 'Drive this character with the performance of a project video'}>
+                <PersonStanding size={15} className="text-[var(--ember-1)]" /> Motion retarget
+              </button>
+              {retargetOpen && (
+                <RetargetPicker
+                  listVideos={ed.listProjectVideos}
+                  disabled={!!busy}
+                  onPick={async (videoId) => { setRetargetOpen(false); await run(() => ed.retarget(videoId), 'video'); }}
+                  onCancel={() => setRetargetOpen(false)}
+                />
+              )}
+
               <button onClick={() => void ed.makeVariations(3)} disabled={!!busy || !availability.image} className={RAIL} style={railStyle()} aria-label="Generate variations">
                 <Layers size={15} className="text-[var(--ember-1)]" /> Variations ×3
               </button>
@@ -379,6 +392,58 @@ function PresetSection({
           <Check size={13} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Reference-video picker for motion retarget: lists the project's videos as
+ * small previews; picking one fires the op immediately.
+ */
+function RetargetPicker({
+  listVideos, disabled, onPick, onCancel,
+}: {
+  listVideos: () => Promise<EditorAsset[]>;
+  disabled: boolean;
+  onPick: (videoAssetId: string) => void;
+  onCancel: () => void;
+}) {
+  const [videos, setVideos] = useState<EditorAsset[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listVideos().then((v) => { if (!cancelled) setVideos(v); });
+    return () => { cancelled = true; };
+  }, [listVideos]);
+
+  return (
+    <div className="panel p-3 flex flex-col gap-2 -mt-1 mb-1" style={{ borderColor: 'var(--ember-2)' }}>
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--forge-faint)] m-0">Reference video</p>
+        <button onClick={onCancel} aria-label="Close reference video picker" className="tap-target rounded-lg border border-[var(--forge-border)] text-[var(--forge-faint)] hover:text-[var(--forge-text)] transition-colors cursor-pointer">
+          <X size={13} />
+        </button>
+      </div>
+      {videos === null ? (
+        <div className="h-16 rounded-lg shimmer" />
+      ) : videos.length === 0 ? (
+        <p className="font-mono text-[10px] text-[var(--forge-faint)] m-0">No videos in this project yet — generate or upload one to use as the performance reference.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {videos.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => onPick(v.id)}
+              disabled={disabled}
+              title={v.params.prompt ?? v.provider}
+              aria-label="Use this video as the performance reference"
+              className="panel overflow-hidden cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:border-[var(--ember-2)] transition-colors"
+            >
+              <video src={`/api/assets/${v.id}/raw`} muted playsInline preload="metadata" className="w-full aspect-square object-cover block" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

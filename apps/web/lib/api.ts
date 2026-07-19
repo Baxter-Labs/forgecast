@@ -1274,6 +1274,48 @@ export async function generateLipsync(services: Services, projectId: string, inp
   return { status: 202, body: { job } };
 }
 
+export async function generateRetarget(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  if (!services.retargetAvailable) {
+    return { status: 503, body: { error: 'motion retarget not configured — add a fal key (FAL_KEY_VIDEO or FAL_KEY)' } };
+  }
+
+  const fields = (input ?? {}) as { imageAssetId?: unknown; videoAssetId?: unknown };
+
+  if (!(typeof fields.imageAssetId === 'string' && fields.imageAssetId.length > 0)) {
+    return { status: 400, body: { error: 'imageAssetId is required' } };
+  }
+  const imageAsset = await services.assets.get(fields.imageAssetId);
+  if (!imageAsset || imageAsset.projectId !== projectId) return { status: 404, body: { error: 'image asset not found' } };
+  if (imageAsset.type !== 'image') return { status: 400, body: { error: 'imageAssetId must reference an image asset' } };
+  const imageUrl = await resolveAssetUrl(services, imageAsset.id);
+  if (!imageUrl) return { status: 404, body: { error: 'image asset has no stored bytes' } };
+
+  if (!(typeof fields.videoAssetId === 'string' && fields.videoAssetId.length > 0)) {
+    return { status: 400, body: { error: 'videoAssetId is required' } };
+  }
+  const videoAsset = await services.assets.get(fields.videoAssetId);
+  if (!videoAsset || videoAsset.projectId !== projectId) return { status: 404, body: { error: 'video asset not found' } };
+  if (videoAsset.type !== 'video') return { status: 400, body: { error: 'videoAssetId must reference a video asset' } };
+  const videoUrl = await resolveAssetUrl(services, videoAsset.id);
+  if (!videoUrl) return { status: 404, body: { error: 'video asset has no stored bytes' } };
+
+  const job = await services.jobs.create(
+    newJob(
+      {
+        projectId,
+        kind: 'retarget',
+        provider: services.retargetProvider.name,
+        params: { imageAssetId: imageAsset.id, imageUrl, videoAssetId: videoAsset.id, videoUrl },
+      },
+      { id: services.ids.randomId(), now: services.ids.nowIso() },
+    ),
+  );
+  runBackground(services.runner.run(job.id));
+  return { status: 202, body: { job } };
+}
+
 export async function uploadAsset(
   services: Services,
   projectId: string,
