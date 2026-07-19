@@ -18,6 +18,8 @@ export interface EditorAvailability {
   narrate: boolean;
   /** Lip-sync new speech onto existing footage (fal sync-lipsync). */
   lipsync: boolean;
+  /** Motion retarget: drive a character image with a reference video (fal wan-animate). */
+  retarget: boolean;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -54,7 +56,7 @@ export function useAssetEditor(assetId: string) {
   const [error, setError] = useState<string | null>(null);
   /** Name of the op currently running (for spinners), or null. */
   const [busy, setBusy] = useState<string | null>(null);
-  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false, narrate: false, lipsync: false });
+  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false, narrate: false, lipsync: false, retarget: false });
   const [variations, setVariations] = useState<EditorAsset[]>([]);
 
   const load = useCallback(async () => {
@@ -75,6 +77,7 @@ export function useAssetEditor(assetId: string) {
           voice: (health.providers.voice ?? []).length > 0,
           narrate: (health.providers.narrate ?? []).length > 0,
           lipsync: (health.providers.lipsync ?? []).length > 0,
+          retarget: (health.providers.retarget ?? []).length > 0,
         });
       }
     } catch (e) {
@@ -173,6 +176,15 @@ export function useAssetEditor(assetId: string) {
   );
   const narrate = useCallback((text: string) => asyncOp('narrate', `/api/projects/${pid}/narrate`, { videoAssetId: assetId, text }), [asyncOp, pid, assetId]);
   const lipsync = useCallback((text: string) => asyncOp('lipsync', `/api/projects/${pid}/lipsync`, { videoAssetId: assetId, text }), [asyncOp, pid, assetId]);
+  /** Motion retarget: drive this character image with the performance of a project video. */
+  const retarget = useCallback((videoAssetId: string) => asyncOp('retarget', `/api/projects/${pid}/retarget`, { imageAssetId: assetId, videoAssetId }), [asyncOp, pid, assetId]);
+
+  /** Videos in the same project (retarget reference picker). */
+  const listProjectVideos = useCallback(async (): Promise<EditorAsset[]> => {
+    if (!pid) return [];
+    const data = (await fetch(`/api/projects/${pid}/assets`).then((r) => r.json()).catch(() => null)) as { assets?: RawEditorAsset[] } | null;
+    return (data?.assets ?? []).map(normalize).filter((a) => a.type === 'video');
+  }, [pid]);
 
   const makeVariations = useCallback(async (count = 3): Promise<EditorAsset[]> => {
     if (!pid) return [];
@@ -195,5 +207,5 @@ export function useAssetEditor(assetId: string) {
     }
   }, [pid, assetId]);
 
-  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, reangle, relight, animate, narrate, lipsync, makeVariations };
+  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, reangle, relight, animate, narrate, lipsync, retarget, listProjectVideos, makeVariations };
 }
