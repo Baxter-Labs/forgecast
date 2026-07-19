@@ -1,4 +1,4 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction, composeCinemaPrompt, resolveCinemaSelection, normalizeBrainstormBoard, normalizeBrainstormBoards, MAX_BRAINSTORM_BOARDS } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction, composeCinemaPrompt, resolveCinemaSelection, normalizeBrainstormBoard, normalizeBrainstormBoards, MAX_BRAINSTORM_BOARDS, zipStore } from '@forgecast/core';
 import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset, CinemaSelection, BrainstormBoard } from '@forgecast/core';
 import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
@@ -85,9 +85,19 @@ export async function generateImage(services: Services, projectId: string, input
     if (requested === defaultProvider && availableImage.length > 0) providerName = availableImage[0]!;
     else return { status: 503, body: { error: `image provider '${requested}' not configured` } };
   }
+  // Trained "Soul-ID" tier: when the character has a ready LoRA and the caller
+  // didn't pick a non-default model, load the LoRA on a FLUX LoRA endpoint instead
+  // of conditioning on reference images — identity holds under bigger scene changes.
+  // The Studio always sends its model picker's value, so the catalog default counts
+  // as "no explicit choice" (character routing already overrides it anyway).
+  const explicitModel = typeof fields.model === 'string' && fields.model.length > 0 && fields.model !== defaultImageModelId;
+  const useLora = Boolean(character && character.loraStatus === 'ready' && character.loraUrl && !explicitModel);
+
   // Ground the generation in the project's brand kit (no-op when none is set).
   const promptWithCast = character
-    ? `${fields.prompt} — featuring ${character.name}${character.description ? ` (${character.description})` : ''}, the exact person in the reference images; keep their face and identity perfectly consistent`
+    ? useLora
+      ? `${fields.prompt} — featuring ${character.name}${character.description ? ` (${character.description})` : ''}; keep their face and identity perfectly consistent`
+      : `${fields.prompt} — featuring ${character.name}${character.description ? ` (${character.description})` : ''}, the exact person in the reference images; keep their face and identity perfectly consistent`
     : fields.prompt;
   const brandedPrompt = applyBrandKit(await getBrandKit(services, projectId), promptWithCast);
 
@@ -96,7 +106,7 @@ export async function generateImage(services: Services, projectId: string, input
     if (providerName !== 'fal') {
       return { status: 503, body: { error: 'characters need an edit-capable image provider — add a fal key (Settings → keys), then generate with this character' } };
     }
-    params.refImageUrls = await characterRefUrls(services, character);
+    if (!useLora) params.refImageUrls = await characterRefUrls(services, character);
     params.characterId = character.id;
   }
   if (providerName === 'fal') {
@@ -125,9 +135,21 @@ export async function generateImage(services: Services, projectId: string, input
   }
 
   // Character refs need an edit-capable endpoint: when the user didn't pick a
-  // model explicitly, route the default onto the multi-reference editor.
-  if (character && providerName === 'fal' && !(typeof fields.model === 'string' && fields.model.length > 0)) {
-    params.model = 'fal-ai/nano-banana/edit';
+  // model explicitly, route the default onto the LoRA-loading FLUX endpoint
+  // (trained identity) or the multi-reference editor (reference conditioning).
+  if (character && providerName === 'fal' && !explicitModel) {
+    if (useLora) {
+      params.model = 'fal-ai/flux-lora';
+      const extra = (params.extra ?? {}) as Record<string, unknown>;
+      delete extra.aspect_ratio; // FLUX LoRA sizes via image_size, not aspect_ratio
+      params.extra = {
+        ...extra,
+        image_size: loraImageSize(typeof fields.aspectRatio === 'string' ? fields.aspectRatio : undefined),
+        loras: [{ path: character.loraUrl }],
+      };
+    } else {
+      params.model = 'fal-ai/nano-banana/edit';
+    }
   }
 
   const job = await services.jobs.create(
@@ -1619,6 +1641,15 @@ export async function publishAsset(services: Services, assetId: string, input: u
 
 // ── Characters — persistent cast, reusable across projects + modalities ──────
 
+/** Map a UI aspect ratio onto the image_size enum FLUX LoRA endpoints expect. */
+function loraImageSize(aspectRatio: string | undefined): string {
+  const sizes: Record<string, string> = {
+    '1:1': 'square_hd', '16:9': 'landscape_16_9', '9:16': 'portrait_16_9',
+    '4:3': 'landscape_4_3', '3:4': 'portrait_4_3',
+  };
+  return sizes[aspectRatio ?? ''] ?? 'square_hd';
+}
+
 /** Resolve a character the given owner can use, or an ApiResult error. */
 async function ownedCharacter(services: Services, projectOwner: string | undefined, characterId: string): Promise<{ character: Character } | ApiResult> {
   const character = await services.characters.get(characterId);
@@ -1689,13 +1720,73 @@ export async function createCharacter(services: Services, ownerId: string, input
 
 export async function listCharacters(services: Services, ownerId: string): Promise<ApiResult> {
   const characters = await services.characters.listByOwner(ownerId ?? LOCAL_OWNER);
-  return { status: 200, body: { characters, count: characters.length } };
+  const advanced = await Promise.all(characters.map((c) => advanceCharacterLora(services, c)));
+  return { status: 200, body: { characters: advanced, count: advanced.length } };
 }
 
 export async function getCharacter(services: Services, ownerId: string, characterId: string): Promise<ApiResult> {
   const resolved = await ownedCharacter(services, ownerId, characterId);
   if ('status' in resolved) return resolved;
-  return { status: 200, body: { character: resolved.character } };
+  return { status: 200, body: { character: await advanceCharacterLora(services, resolved.character) } };
+}
+
+// ── Character LoRA training — the trained-identity "Soul-ID" tier ────────────
+// Submit-then-poll, like video jobs: training runs on the provider's queue and
+// each client read (GET character / list) advances it by one short poll — the
+// right model for Cloudflare Workers. Status lives on the character itself.
+
+/** Advance an in-flight LoRA training by one provider poll (no-op otherwise). */
+async function advanceCharacterLora(services: Services, character: Character): Promise<Character> {
+  if (character.loraStatus !== 'training' || !character.loraTaskId) return character;
+  try {
+    const task = await services.loraTrainer.getTask(character.loraTaskId);
+    if (task.state === 'processing') return character;
+    const patch = task.state === 'complete' && task.loraUrl
+      ? { loraUrl: task.loraUrl, loraStatus: 'ready' as const, loraTaskId: undefined }
+      : { loraStatus: 'error' as const, loraTaskId: undefined };
+    return (await services.characters.update(character.id, patch)) ?? character;
+  } catch {
+    // Transient poll failure — stay in 'training' and let a later read retry.
+    return character;
+  }
+}
+
+/**
+ * Start LoRA training for a character from its stored reference portraits.
+ * The refs are bundled into a ZIP (the archive format LoRA trainers expect)
+ * and submitted async; poll by re-reading the character.
+ */
+export async function trainCharacter(services: Services, ownerId: string, characterId: string): Promise<ApiResult> {
+  const resolved = await ownedCharacter(services, ownerId, characterId);
+  if ('status' in resolved) return resolved;
+  const character = await advanceCharacterLora(services, resolved.character);
+  if (character.loraStatus === 'training') {
+    return { status: 409, body: { error: 'training is already in progress — poll the character for status' } };
+  }
+  if (!services.loraTrainer.isAvailable()) {
+    return { status: 503, body: { error: 'LoRA training needs a fal key — add one (Settings → keys), then train again' } };
+  }
+
+  const entries: { name: string; data: Uint8Array }[] = [];
+  for (const key of character.refKeys) {
+    const got = await services.storage.get(key);
+    if (!got) continue;
+    const ext = got.contentType.includes('jpeg') || got.contentType.includes('jpg') ? 'jpg' : 'png';
+    entries.push({ name: `ref-${entries.length}.${ext}`, data: got.data });
+  }
+  if (entries.length === 0) return { status: 400, body: { error: 'character has no stored reference images' } };
+
+  // fal accepts data URIs anywhere a URL is expected, so the small ref archive
+  // never needs a publicly reachable URL.
+  const imagesDataUrl = `data:application/zip;base64,${toBase64(zipStore(entries))}`;
+  let taskId: string;
+  try {
+    ({ taskId } = await services.loraTrainer.create({ imagesDataUrl, triggerWord: character.name }));
+  } catch (err) {
+    return { status: 502, body: { error: `LoRA training submit failed: ${err instanceof Error ? err.message : String(err)}` } };
+  }
+  const updated = await services.characters.update(character.id, { loraStatus: 'training', loraTaskId: taskId, loraUrl: undefined });
+  return { status: 200, body: { character: updated ?? character } };
 }
 
 export async function deleteCharacter(services: Services, ownerId: string, characterId: string): Promise<ApiResult> {

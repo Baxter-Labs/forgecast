@@ -138,7 +138,7 @@ describe('editing + asset-op MCP parity', () => {
     return (JSON.parse(textOf(created)) as { project: { id: string } }).project.id;
   }
 
-  it('exposes the editing/short/image-op/import/storyboard/library tools (35 total)', async () => {
+  it('exposes the editing/short/image-op/import/storyboard/library tools (39 total)', async () => {
     const b = bodyOf(await handleMcpMessage(ctx(), { jsonrpc: '2.0', id: 40, method: 'tools/list' }));
     const names = (b.result?.tools ?? []).map((t) => t.name);
     for (const n of [
@@ -149,7 +149,7 @@ describe('editing + asset-op MCP parity', () => {
       'forgecast_generate_storyboard', 'forgecast_storyboard_to_timeline',
       'forgecast_list_library',
     ]) expect(names).toContain(n);
-    expect((b.result?.tools ?? []).length).toBe(38);
+    expect((b.result?.tools ?? []).length).toBe(39);
   });
 
   it('health reports every modality for capability discovery', async () => {

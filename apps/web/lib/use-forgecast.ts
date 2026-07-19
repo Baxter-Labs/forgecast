@@ -104,6 +104,20 @@ export function useForgecast() {
     }
   }, []);
 
+  const trainCharacter = useCallback(async (id: string): Promise<{ character?: Character; error?: string }> => {
+    try {
+      const res = await fetch(`/api/characters/${id}/train`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return { error: body?.error ?? `Train failed (${res.status})` };
+      const character = (body as { character?: Character } | null)?.character;
+      if (!character) return { error: 'Unexpected response' };
+      setCharacters((prev) => prev.map((c) => (c.id === id ? character : c)));
+      return { character };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Network error' };
+    }
+  }, []);
+
   const deleteCharacter = useCallback(async (id: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const res = await fetch(`/api/characters/${id}`, { method: 'DELETE' });
@@ -828,7 +842,7 @@ export function useForgecast() {
     projectId, providers, videoProviders, publishers, availability, pro, refreshPro, refreshAvailability,
     session, signOut,
     assets, status, error,
-    characters, loadCharacters, createCharacter, deleteCharacter,
+    characters, loadCharacters, createCharacter, trainCharacter, deleteCharacter,
     generateImage, generateVideo, generateMontage, generateShortVideo,
     composeVideo, animateAsset,
     loadTimeline, saveTimeline, renderTimeline,
