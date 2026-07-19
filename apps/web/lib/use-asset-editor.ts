@@ -18,6 +18,8 @@ export interface EditorAvailability {
   narrate: boolean;
   /** Lip-sync new speech onto existing footage (fal sync-lipsync). */
   lipsync: boolean;
+  /** AI sound effects / ambience for a video (fal mmaudio-v2). */
+  sfx: boolean;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -54,7 +56,7 @@ export function useAssetEditor(assetId: string) {
   const [error, setError] = useState<string | null>(null);
   /** Name of the op currently running (for spinners), or null. */
   const [busy, setBusy] = useState<string | null>(null);
-  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false, narrate: false, lipsync: false });
+  const [availability, setAvailability] = useState<EditorAvailability>({ image: false, video: false, voice: false, narrate: false, lipsync: false, sfx: false });
   const [variations, setVariations] = useState<EditorAsset[]>([]);
 
   const load = useCallback(async () => {
@@ -75,6 +77,7 @@ export function useAssetEditor(assetId: string) {
           voice: (health.providers.voice ?? []).length > 0,
           narrate: (health.providers.narrate ?? []).length > 0,
           lipsync: (health.providers.lipsync ?? []).length > 0,
+          sfx: (health.providers.sfx ?? []).length > 0,
         });
       }
     } catch (e) {
@@ -173,6 +176,7 @@ export function useAssetEditor(assetId: string) {
   );
   const narrate = useCallback((text: string) => asyncOp('narrate', `/api/projects/${pid}/narrate`, { videoAssetId: assetId, text }), [asyncOp, pid, assetId]);
   const lipsync = useCallback((text: string) => asyncOp('lipsync', `/api/projects/${pid}/lipsync`, { videoAssetId: assetId, text }), [asyncOp, pid, assetId]);
+  const sfx = useCallback((prompt: string) => asyncOp('sfx', `/api/projects/${pid}/sfx`, { videoAssetId: assetId, prompt }), [asyncOp, pid, assetId]);
 
   const makeVariations = useCallback(async (count = 3): Promise<EditorAsset[]> => {
     if (!pid) return [];
@@ -195,5 +199,5 @@ export function useAssetEditor(assetId: string) {
     }
   }, [pid, assetId]);
 
-  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, reangle, relight, animate, narrate, lipsync, makeVariations };
+  return { asset, loading, error, busy, availability, variations, reload: load, enhance, edit, cutout, reangle, relight, animate, narrate, lipsync, sfx, makeVariations };
 }

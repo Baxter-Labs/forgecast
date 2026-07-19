@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Download, Sparkles, Pencil, Scissors, Film, Layers, Mic, AudioLines,
-  ExternalLink, Check, X, AlertCircle, Camera, Sun,
+  ExternalLink, Check, X, AlertCircle, Camera, Sun, Volume2,
 } from 'lucide-react';
 import { ANGLE_PRESETS, LIGHT_PRESETS, type ReimaginePreset } from '@forgecast/core';
 import { useAssetEditor } from '@/lib/use-asset-editor';
@@ -27,6 +27,8 @@ export function AssetEditor({ assetId }: Props) {
   const [narrateText, setNarrateText] = useState('');
   const [lipsyncOpen, setLipsyncOpen] = useState(false);
   const [lipsyncText, setLipsyncText] = useState('');
+  const [sfxOpen, setSfxOpen] = useState(false);
+  const [sfxPrompt, setSfxPrompt] = useState('');
   const [anglePreset, setAnglePreset] = useState<string | null>(null);
   const [angleCustom, setAngleCustom] = useState('');
   const [lightPreset, setLightPreset] = useState<string | null>(null);
@@ -253,6 +255,20 @@ export function AssetEditor({ assetId }: Props) {
                   setValue={setLipsyncText}
                   onSubmit={async () => { const t = lipsyncText.trim(); if (!t) return; setLipsyncOpen(false); setLipsyncText(''); await run(() => ed.lipsync(t), 'video'); }}
                   onCancel={() => { setLipsyncOpen(false); setLipsyncText(''); }}
+                  disabled={!!busy}
+                />
+              )}
+
+              <button onClick={() => setSfxOpen((v) => !v)} disabled={!!busy || !availability.sfx} className={RAIL} style={railStyle()} aria-label="Add AI sound effects" aria-expanded={sfxOpen} title={!availability.sfx ? 'SFX needs a fal key (FAL_KEY_VIDEO or FAL_KEY)' : 'Generate synchronized sound effects / ambience for this video'}>
+                <Volume2 size={15} className="text-[var(--ember-1)]" /> Add SFX (AI audio)
+              </button>
+              {sfxOpen && (
+                <InlinePrompt
+                  placeholder="describe the sound — e.g. 'rain on a tin roof, distant thunder'"
+                  value={sfxPrompt}
+                  setValue={setSfxPrompt}
+                  onSubmit={async () => { const t = sfxPrompt.trim(); if (!t) return; setSfxOpen(false); setSfxPrompt(''); await run(() => ed.sfx(t), 'video'); }}
+                  onCancel={() => { setSfxOpen(false); setSfxPrompt(''); }}
                   disabled={!!busy}
                 />
               )}

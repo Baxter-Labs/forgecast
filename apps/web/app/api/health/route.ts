@@ -19,6 +19,7 @@ export async function GET(req: Request) {
       transcribe: svc.transcribeAvailable ? [svc.transcriber.name] : [],
       presenter: svc.presenterAvailable ? [svc.presenterProvider.name] : [],
       lipsync: svc.lipsyncAvailable ? [svc.lipsyncProvider.name] : [],
+      sfx: svc.sfxAvailable ? [svc.sfxProvider.name] : [],
       footage: svc.footageAvailable,
     },
     publishers: svc.publishers.available(),

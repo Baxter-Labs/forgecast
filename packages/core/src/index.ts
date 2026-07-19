@@ -13,6 +13,7 @@ export * from './montage';
 export * from './transcribe';
 export * from './presenter';
 export * from './lipsync';
+export * from './sfx';
 export * from './website';
 export * from './brandkit';
 export * from './adcopy';

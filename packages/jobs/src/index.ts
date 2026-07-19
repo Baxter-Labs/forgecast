@@ -11,3 +11,4 @@ export * from './handlers/voiceover';
 export * from './handlers/narrate';
 export * from './handlers/presenter';
 export * from './handlers/lipsync';
+export * from './handlers/sfx';
