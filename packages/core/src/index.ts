@@ -22,6 +22,7 @@ export * from './footage';
 export * from './contentguard';
 export * from './editor';
 export * from './storyboard';
+export * from './brainstorm';
 export * from './reimagine';
 export * from './cinema';
 export * from './character';

@@ -259,7 +259,7 @@ describe('storyboard over MCP', () => {
       'forgecast_get_storyboard', 'forgecast_set_storyboard', 'forgecast_generate_storyboard',
       'forgecast_render_storyboard_shot', 'forgecast_animate_storyboard_shot', 'forgecast_storyboard_to_timeline',
     ]) expect(names).toContain(n);
-    expect(names).toHaveLength(36);
+    expect(names).toHaveLength(39);
   });
 
   it('set_storyboard round-trips through get_storyboard (normalized)', async () => {

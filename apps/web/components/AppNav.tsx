@@ -1,19 +1,21 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Hammer, Clapperboard, LibraryBig } from 'lucide-react';
+import { Hammer, Clapperboard, LibraryBig, Lightbulb } from 'lucide-react';
 
 const TABS = [
   { href: '/', label: 'Studio', Icon: Hammer, match: (p: string) => p === '/' },
   { href: '/editor', label: 'Editor', Icon: Clapperboard, match: (p: string) => p.startsWith('/editor') },
   { href: '/library', label: 'Library', Icon: LibraryBig, match: (p: string) => p.startsWith('/library') },
+  { href: '/brainstorm', label: 'Brainstorm', Icon: Lightbulb, match: (p: string) => p.startsWith('/brainstorm') },
 ] as const;
 
 /**
- * Top-level navigation between the phases of the product: the Studio (forge new
- * assets), the Editor (cut them into a video, with the agent), and the Library
- * (every asset across all projects). A single segmented control, shared by every
- * page, so each surface is a first-class tab rather than a buried link.
+ * Top-level navigation across the phases of the product: the Studio (forge new
+ * assets), the Editor (cut them into a video, with the agent), the Library
+ * (every asset across all projects), and Brainstorm (revisitable idea boards).
+ * A single segmented control, shared by every page, so each surface is a
+ * first-class tab rather than a buried link.
  */
 export function AppNav() {
   const pathname = usePathname() ?? '/';

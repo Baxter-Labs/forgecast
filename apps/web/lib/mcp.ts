@@ -14,6 +14,7 @@ import {
   createCharacter, listCharacters, trainCharacter, deleteCharacter, generatePresenter,
   readStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot,
   animateStoryboardShot, storyboardToTimeline,
+  listBrainstormBoards, saveBrainstormBoard, generateBrainstormIdea,
 } from './api';
 
 /**
@@ -647,6 +648,71 @@ TOOLS.push(
     handler: async ({ services, userId }, args) => {
       const pid = await ownedProjectId(services, userId, args.projectId);
       return unwrap(await storyboardToTimeline(services, pid));
+    },
+  },
+);
+
+// ── Brainstorm boards (persist the planning agent's ideas as revisitable boards) ──
+
+/** JSON Schema for a brainstorm board document (matches @forgecast/core normalizeBrainstormBoard). */
+const brainstormBoardSchema = obj({
+  id: { type: 'string', description: 'Stable board id (assigned when omitted; pass it to update an existing board).' },
+  title: { type: 'string', description: 'Short human-readable title (falls back to the concept).' },
+  brief: { type: 'string', description: 'The brief the board was planned from.' },
+  platforms: { type: 'array', items: { type: 'string' }, description: 'Target platforms this board is aimed at.' },
+  concept: { type: 'string', description: 'One-line creative concept.' },
+  trendingNotes: { type: 'string', description: 'Optional on-trend context.' },
+  ideas: {
+    type: 'array',
+    description: 'Idea prompts (max 24). Each can later be forged with forgecast_generate_brainstorm_idea.',
+    items: obj({
+      id: { type: 'string', description: 'Stable idea id (assigned when omitted).' },
+      kind: { type: 'string', enum: ['image', 'video'], description: 'Whether this idea forges an image or a video (default image).' },
+      prompt: { type: 'string', description: 'Self-contained generation prompt.' },
+      aspectRatio: { type: 'string', description: 'Output shape hint, applied when the idea is forged.' },
+      model: { type: 'string', description: 'Optional model override (mainly video ideas).' },
+      assetId: { type: 'string', description: 'The forged asset (set once this idea has been generated).' },
+    }, ['prompt']),
+  },
+  captions: {
+    type: 'array',
+    description: 'Ready-to-post platform captions.',
+    items: obj({ platform: { type: 'string' }, caption: { type: 'string' } }, ['platform', 'caption']),
+  },
+}, ['ideas']);
+
+TOOLS.push(
+  {
+    name: 'forgecast_list_brainstorm',
+    description:
+      'List a project’s brainstorm boards — saved content ideas (concept + image/video idea prompts + platform captions), newest-first. Each idea carries an assetId once forged. Turns throwaway planning into a revisitable surface. Args: projectId. Returns { boards[], count }.',
+    inputSchema: obj({ projectId: P.projectId }, ['projectId']),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await listBrainstormBoards(services, pid));
+    },
+  },
+  {
+    name: 'forgecast_save_brainstorm',
+    description:
+      'Create or update a brainstorm board on a project — pass the FULL board (it upserts by id; omit id to create, include an existing id to replace). Invalid ideas are dropped, ids assigned, values clamped (max 24 ideas). Idea prompts are content-guarded. Use this to persist a plan so it can be revisited and forged idea-by-idea. Args: projectId, board. Returns { board }.',
+    inputSchema: obj({ projectId: P.projectId, board: brainstormBoardSchema }, ['projectId', 'board']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await saveBrainstormBoard(services, pid, { board: args.board }));
+    },
+  },
+  {
+    name: 'forgecast_generate_brainstorm_idea',
+    description:
+      'Forge one board idea into a gallery asset. Image ideas run synchronously and the idea’s assetId is stamped onto the board (returns { asset, board }); video ideas start an ASYNC job (poll forgecast_get_job, then set the idea’s assetId via forgecast_save_brainstorm). Args: projectId, boardId (from forgecast_list_brainstorm), ideaId.',
+    inputSchema: obj({ projectId: P.projectId, boardId: { type: 'string', description: 'A board id from forgecast_list_brainstorm.' }, ideaId: { type: 'string', description: 'An idea id from the board’s ideas[].id.' } }, ['projectId', 'boardId', 'ideaId']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async ({ services, userId }, args) => {
+      const pid = await ownedProjectId(services, userId, args.projectId);
+      return unwrap(await generateBrainstormIdea(services, pid, str(args.boardId) ?? '', str(args.ideaId) ?? ''));
     },
   },
 );

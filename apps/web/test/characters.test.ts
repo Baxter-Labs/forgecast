@@ -206,6 +206,6 @@ describe('characters', () => {
     const tools = await handleMcpMessage({ services, userId: 'A' }, { jsonrpc: '2.0', id: 5, method: 'tools/list' });
     const names = ((tools!.body as { result: { tools: Array<{ name: string }> } }).result.tools).map((t) => t.name);
     expect(names).toEqual(expect.arrayContaining(['forgecast_create_character', 'forgecast_list_characters', 'forgecast_train_character', 'forgecast_delete_character', 'forgecast_generate_presenter']));
-    expect(names).toHaveLength(36);
+    expect(names).toHaveLength(39);
   });
 });

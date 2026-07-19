@@ -1,5 +1,5 @@
-import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction, composeCinemaPrompt, resolveCinemaSelection, zipStore } from '@forgecast/core';
-import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset, CinemaSelection } from '@forgecast/core';
+import { newProject, newJob, newAsset, applyBrandKit, platformCopySpec, buildAdCopyPrompt, parseAdCopyVariants, auditAds, isAdCreativeMetrics, checkContent, normalizeTimeline, emptyTimeline, normalizeStoryboard, emptyStoryboard, buildStoryboardPrompt, parseStoryboardPlan, storyboardShotPrompt, MAX_STORYBOARD_SHOTS, ANGLE_PRESETS, LIGHT_PRESETS, composeReimagineInstruction, composeCinemaPrompt, resolveCinemaSelection, normalizeBrainstormBoard, normalizeBrainstormBoards, MAX_BRAINSTORM_BOARDS, zipStore } from '@forgecast/core';
+import type { MontageSpec, MontageScene, Job, VideoGenTask, BrandKit, AdCreativeMetrics, ShortVideoOptions, EditorTimeline, EditorClip, Character, Storyboard, ReimaginePreset, CinemaSelection, BrainstormBoard } from '@forgecast/core';
 import { MAX_CHARACTER_REFS } from '@forgecast/core';
 import { videoModelById, imageModelById, defaultImageModelId } from '@forgecast/catalog';
 import type { Services } from './forgecast';
@@ -2057,4 +2057,158 @@ export async function storyboardToTimeline(services: Services, projectId: string
 
   // saveTimeline re-normalizes and runs the timeline's own cross-tenant guard.
   return saveTimeline(services, projectId, { timeline });
+}
+
+// ── Brainstorm boards — persist the planning agent's ideas as revisitable boards ──
+// Persisted like the storyboard/timeline: one JSON document per project in the
+// storage driver (no schema change), holding the project's boards. Each board is
+// a saved content PLAN (concept + idea prompts + captions); an idea can be picked
+// and forged into a gallery asset. Drivable by the Studio UI and by MCP agents.
+
+const brainstormKey = (projectId: string): string => `projects/${projectId}/brainstorm.json`;
+
+/** Load a project's saved boards (newest-first; empty when none). */
+async function getBrainstormBoards(services: Services, projectId: string): Promise<BrainstormBoard[]> {
+  const stored = await services.storage.get(brainstormKey(projectId));
+  if (!stored) return [];
+  try {
+    return normalizeBrainstormBoards(JSON.parse(new TextDecoder().decode(stored.data)), services.ids.randomId);
+  } catch {
+    return [];
+  }
+}
+
+async function putBrainstormBoards(services: Services, projectId: string, boards: BrainstormBoard[]): Promise<void> {
+  await services.storage.put(brainstormKey(projectId), new TextEncoder().encode(JSON.stringify({ boards })), 'application/json');
+}
+
+/** A ContentPlan-shaped object, structurally typed so this layer stays decoupled from @forgecast/agent. */
+interface PlanLike {
+  concept?: unknown;
+  trendingNotes?: unknown;
+  assets?: unknown;
+  posts?: unknown;
+  montage?: { scenes?: unknown; model?: unknown; aspectRatio?: unknown } | null;
+}
+
+/** Convert a planning agent's ContentPlan into a raw (un-normalized) board object. */
+function boardFromPlan(plan: PlanLike, meta: { brief?: unknown; platforms?: unknown; title?: unknown }): Record<string, unknown> {
+  const ideas: Array<Record<string, unknown>> = [];
+  for (const a of Array.isArray(plan.assets) ? plan.assets : []) {
+    const item = a as Record<string, unknown>;
+    if (typeof item?.prompt !== 'string' || item.prompt.trim().length === 0) continue;
+    ideas.push({ kind: item.kind === 'video' ? 'video' : 'image', prompt: item.prompt, aspectRatio: item.aspectRatio, model: item.model });
+  }
+  // Montage clips are video ideas too — surface them so they can be forged individually.
+  const montageScenes = plan.montage && Array.isArray(plan.montage.scenes) ? plan.montage.scenes : [];
+  for (const s of montageScenes) {
+    const scene = s as Record<string, unknown>;
+    if (typeof scene?.prompt !== 'string' || scene.prompt.trim().length === 0) continue;
+    ideas.push({ kind: 'video', prompt: scene.prompt, aspectRatio: scene.aspectRatio ?? plan.montage?.aspectRatio, model: scene.model ?? plan.montage?.model });
+  }
+  const captions = (Array.isArray(plan.posts) ? plan.posts : []).map((p) => p as Record<string, unknown>);
+  return {
+    title: meta.title,
+    brief: meta.brief,
+    platforms: meta.platforms,
+    concept: plan.concept,
+    trendingNotes: plan.trendingNotes,
+    ideas,
+    captions,
+  };
+}
+
+/** List every board saved on a project (newest-first). */
+export async function listBrainstormBoards(services: Services, projectId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const boards = await getBrainstormBoards(services, projectId);
+  return { status: 200, body: { boards, count: boards.length } };
+}
+
+/**
+ * Create or update a board. Accepts either a board object (`{ board }` or the
+ * board fields at top level) or a planning result (`{ plan, brief?, platforms? }`)
+ * which is converted first. Upserts by id: a matching id is replaced in place,
+ * otherwise the new board is prepended. Idea prompts are content-guarded.
+ */
+export async function saveBrainstormBoard(services: Services, projectId: string, input: unknown): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const fields = (input ?? {}) as { board?: unknown; plan?: unknown; brief?: unknown; platforms?: unknown; title?: unknown };
+
+  const raw = fields.plan
+    ? boardFromPlan(fields.plan as PlanLike, { brief: fields.brief, platforms: fields.platforms, title: fields.title })
+    : (fields.board ?? input);
+
+  const board = normalizeBrainstormBoard(raw, services.ids.randomId, services.ids.nowIso());
+  // Guard every idea prompt (and the brief) before persisting anything.
+  for (const text of [board.brief, ...board.ideas.map((i) => i.prompt)]) {
+    if (text.length === 0) continue;
+    const blocked = guardText(text);
+    if (blocked) return blocked;
+  }
+
+  const boards = await getBrainstormBoards(services, projectId);
+  const idx = boards.findIndex((b) => b.id === board.id);
+  let next: BrainstormBoard[];
+  if (idx >= 0) {
+    // Preserve the original creation time on update.
+    const merged: BrainstormBoard = { ...board, createdAt: boards[idx]!.createdAt };
+    next = [...boards];
+    next[idx] = merged;
+    await putBrainstormBoards(services, projectId, next);
+    return { status: 200, body: { board: merged } };
+  }
+  next = [board, ...boards].slice(0, MAX_BRAINSTORM_BOARDS);
+  await putBrainstormBoards(services, projectId, next);
+  return { status: 200, body: { board } };
+}
+
+/** Delete a board by id. Returns the remaining boards. */
+export async function deleteBrainstormBoard(services: Services, projectId: string, boardId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const boards = await getBrainstormBoards(services, projectId);
+  const next = boards.filter((b) => b.id !== boardId);
+  if (next.length === boards.length) return { status: 404, body: { error: 'board not found' } };
+  await putBrainstormBoards(services, projectId, next);
+  return { status: 200, body: { boards: next, count: next.length } };
+}
+
+/**
+ * Forge a board idea into a gallery asset. Image ideas run synchronously and the
+ * resulting `assetId` is stamped back onto the board; video ideas start an async
+ * job (poll it, then re-save the board to stamp the clip). Reuses the same
+ * generation ops (brand kit, provider fallbacks, 503-with-guidance) as the Studio.
+ */
+export async function generateBrainstormIdea(services: Services, projectId: string, boardId: string, ideaId: string): Promise<ApiResult> {
+  const project = await services.projects.get(projectId);
+  if (!project) return { status: 404, body: { error: 'project not found' } };
+  const boards = await getBrainstormBoards(services, projectId);
+  const boardIdx = boards.findIndex((b) => b.id === boardId);
+  if (boardIdx < 0) return { status: 404, body: { error: 'board not found' } };
+  const board = boards[boardIdx]!;
+  const idea = board.ideas.find((i) => i.id === ideaId);
+  if (!idea) return { status: 404, body: { error: 'idea not found' } };
+
+  if (idea.kind === 'video') {
+    // Async: return the job as-is; the client stamps the clip via saveBrainstormBoard on completion.
+    return generateVideo(services, projectId, { prompt: idea.prompt, aspectRatio: idea.aspectRatio, model: idea.model });
+  }
+
+  const result = await generateImage(services, projectId, { prompt: idea.prompt, aspectRatio: idea.aspectRatio, model: idea.model });
+  if (result.status !== 200) return result;
+  const asset = (result.body as { asset?: { id?: string } }).asset;
+  if (asset?.id) {
+    const updated: BrainstormBoard = {
+      ...board,
+      ideas: board.ideas.map((i) => (i.id === ideaId ? { ...i, assetId: asset.id } : i)),
+    };
+    const next = [...boards];
+    next[boardIdx] = updated;
+    await putBrainstormBoards(services, projectId, next);
+    return { status: 200, body: { ...(result.body as Record<string, unknown>), board: updated } };
+  }
+  return result;
 }
