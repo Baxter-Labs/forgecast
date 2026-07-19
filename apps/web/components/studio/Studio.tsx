@@ -105,7 +105,7 @@ export function Studio() {
     publishAsset, generateAdCopy, auditAds, optimizeCreatives, uploadAsset, createFromWebsite,
     agentPlan, agentExecute, agentRun, refreshAssets, awaitAgentJobs, awaitAgenticJobs,
     transcribeAudio,
-    characters, loadCharacters, createCharacter, deleteCharacter,
+    characters, loadCharacters, createCharacter, trainCharacter, deleteCharacter,
     loadStoryboard, saveStoryboard, generateStoryboard, renderStoryboardShot, animateStoryboardShot, storyboardToTimeline,
   } = useForgecast();
 
@@ -505,6 +505,7 @@ export function Studio() {
         characters={characters}
         assets={assets}
         onCreate={createCharacter}
+        onTrain={trainCharacter}
         onDelete={deleteCharacter}
         onRefresh={loadCharacters}
       />

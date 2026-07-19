@@ -1,4 +1,4 @@
-import { ImageProviderRegistry, FalImageProvider, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, CloudflareTtsProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, HfSpacesVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
+import { ImageProviderRegistry, FalImageProvider, FalLoraTrainer, StableDiffusionImageProvider, OpenAiImageProvider, MoneyPrinterWorker, FalVideoProvider, ReplicateVideoProvider, CloudflareTtsProvider, FalTtsProvider, VoxCpmVoiceProvider, PublisherRegistry, WebhookPublisher, OmnisocialsPublisher, InstagramPublisher, LinkedInPublisher, YouTubePublisher, RemotionMontageWorker, WisprFlowTranscriber, OmniHumanPresenterProvider, HttpWebsiteReader, AdsInsightsRegistry, MetaAdsInsightsProvider, GoogleAdsInsightsProvider, FootageRegistry, PexelsFootageProvider, CloudflareImageProvider, CloudflareVideoProvider, SkyReelsVideoProvider, HfSpacesVideoProvider, VideoProviderRegistry, type WorkersAiRunner } from '@forgecast/providers';
 import {
   InMemoryProjectRepo,
   InMemoryAssetRepo,
@@ -17,7 +17,7 @@ import {
   type R2BucketLike,
 } from '@forgecast/store';
 import { JobRunner, ImageJobHandler, EnhanceJobHandler, EditImageJobHandler, CutoutJobHandler, ShortVideoJobHandler, VideoJobHandler, MontageJobHandler, LocalMontageJobHandler, VoiceoverJobHandler, NarrateJobHandler, PresenterJobHandler } from '@forgecast/jobs';
-import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, CharacterRepo, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
+import type { ProjectRepo, AssetRepo, JobRepo, UserRepo, KeyRepo, CharacterRepo, LoraTrainer, StorageDriver, ShortVideoWorker, JobHandler, VideoProvider, VoiceProvider, MontageWorker, Transcriber, PresenterProvider, WebsiteReader } from '@forgecast/core';
 import ffmpegStatic from 'ffmpeg-static';
 import { randomId, nowIso } from './ids';
 import { getD1Binding, getAiBinding, getMediaBucket } from './cf-env';
@@ -33,6 +33,8 @@ export interface Services {
   keys: KeyRepo;
   /** Persistent cast: owner-scoped characters reusable across projects + modalities. */
   characters: CharacterRepo;
+  /** Character LoRA training (the trained-identity "Soul-ID" tier). */
+  loraTrainer: LoraTrainer;
   storage: StorageDriver;
   runner: JobRunner;
   ids: { randomId: () => string; nowIso: () => string };
@@ -130,6 +132,8 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
   const imageRegistry = new ImageProviderRegistry();
   const falImageProvider = new FalImageProvider({ apiKey: falKey, fetchFn: opts.fetchFn });
   imageRegistry.register(falImageProvider);
+  // Character LoRA training rides the image key (same fal account/billing).
+  const loraTrainer = new FalLoraTrainer({ apiKey: falKey, fetchFn: opts.fetchFn });
   // Self-hosted, free image generation via a local Stable Diffusion WebUI. Available
   // only when SD_WEBUI_URL is set (the registry filters by isAvailable()).
   imageRegistry.register(new StableDiffusionImageProvider({ fetchFn: opts.fetchFn }));
@@ -361,7 +365,7 @@ export function buildServices(opts: BuildServicesOptions = {}): Services {
 
   const runner = new JobRunner(jobs, handlers);
 
-  return { imageRegistry, publishers, projects, assets, jobs, users, keys, characters, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, narrateAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
+  return { imageRegistry, publishers, projects, assets, jobs, users, keys, characters, loraTrainer, storage, runner, ids: { randomId, nowIso }, videoWorker, videoProvider, videoRegistry, videoProviders, montageWorker, montageAvailable, voiceProvider, voiceAvailable, narrateAvailable, transcriber, transcribeAvailable, presenterProvider, presenterAvailable, websiteReader, insights, insightsAvailable, footage, footageAvailable, fetchFn: opts.fetchFn ?? fetch };
 }
 
 /**

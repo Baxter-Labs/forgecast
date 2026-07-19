@@ -25,5 +25,6 @@ export * from './storyboard';
 export * from './reimagine';
 export * from './cinema';
 export * from './character';
+export * from './zip';
 export * from './auth';
 export * from './secrets';

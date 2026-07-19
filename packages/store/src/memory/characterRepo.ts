@@ -1,4 +1,4 @@
-import type { Character, CharacterRepo } from '@forgecast/core';
+import type { Character, CharacterRepo, CharacterLoraPatch } from '@forgecast/core';
 
 export class InMemoryCharacterRepo implements CharacterRepo {
   private readonly items = new Map<string, Character>();
@@ -16,6 +16,17 @@ export class InMemoryCharacterRepo implements CharacterRepo {
     return [...this.items.values()]
       .filter((c) => c.ownerId === ownerId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async update(id: string, patch: CharacterLoraPatch): Promise<Character | null> {
+    const existing = this.items.get(id);
+    if (!existing) return null;
+    const next: Character = { ...existing };
+    if ('loraUrl' in patch) { if (patch.loraUrl === undefined) delete next.loraUrl; else next.loraUrl = patch.loraUrl; }
+    if ('loraStatus' in patch) { if (patch.loraStatus === undefined) delete next.loraStatus; else next.loraStatus = patch.loraStatus; }
+    if ('loraTaskId' in patch) { if (patch.loraTaskId === undefined) delete next.loraTaskId; else next.loraTaskId = patch.loraTaskId; }
+    this.items.set(id, next);
+    return next;
   }
 
   async delete(id: string): Promise<void> {
